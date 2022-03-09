@@ -1,0 +1,7 @@
+zig-cache/*
+!zig-cache/vk.zig
+zig-out/
+/release/
+/debug/
+/build/
+/build-*/
