@@ -53,7 +53,7 @@ pub fn main() !void {
 
     const allocator = std.heap.page_allocator;
 
-    const gc = try GraphicsContext.init(allocator, app_name, window);
+    const gc = try GraphicsContext.init(allocator, app_name, window, true);
     defer gc.deinit();
 
     std.debug.print("Using device: {s}\n", .{gc.deviceName()});
