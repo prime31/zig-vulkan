@@ -76,8 +76,10 @@ const DeviceDispatch = vk.DeviceWrapper(.{
     .cmdDraw = true,
     .cmdSetViewport = true,
     .cmdSetScissor = true,
+    .cmdClearColorImage = true,
     .cmdBindVertexBuffers = true,
     .cmdCopyBuffer = true,
+    .resetCommandBuffer = true,
 });
 
 pub const GraphicsContext = struct {

@@ -94,6 +94,7 @@ pub fn main() !void {
         .p_queue_family_indices = undefined,
     }, null);
     defer gc.vkd.destroyBuffer(gc.dev, buffer, null);
+
     const mem_reqs = gc.vkd.getBufferMemoryRequirements(gc.dev, buffer);
     const memory = try gc.allocate(mem_reqs, .{ .device_local_bit = true });
     defer gc.vkd.freeMemory(gc.dev, memory, null);
@@ -159,6 +160,7 @@ fn uploadVertices(gc: *const GraphicsContext, pool: vk.CommandPool, buffer: vk.B
         .p_queue_family_indices = undefined,
     }, null);
     defer gc.vkd.destroyBuffer(gc.dev, staging_buffer, null);
+
     const mem_reqs = gc.vkd.getBufferMemoryRequirements(gc.dev, staging_buffer);
     const staging_memory = try gc.allocate(mem_reqs, .{ .host_visible_bit = true, .host_coherent_bit = true });
     defer gc.vkd.freeMemory(gc.dev, staging_memory, null);

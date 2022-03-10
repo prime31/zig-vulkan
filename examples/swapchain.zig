@@ -249,6 +249,7 @@ const SwapImage = struct {
 fn initSwapchainImages(gc: *const GraphicsContext, swapchain: vk.SwapchainKHR, format: vk.Format, allocator: Allocator) ![]SwapImage {
     var count: u32 = undefined;
     _ = try gc.vkd.getSwapchainImagesKHR(gc.dev, swapchain, &count, null);
+
     const images = try allocator.alloc(vk.Image, count);
     defer allocator.free(images);
     _ = try gc.vkd.getSwapchainImagesKHR(gc.dev, swapchain, &count, images.ptr);
