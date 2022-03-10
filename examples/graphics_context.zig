@@ -3,10 +3,12 @@ const vk = @import("vulkan");
 const glfw = @import("glfw");
 const Allocator = std.mem.Allocator;
 
-const required_device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name};
+const required_device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name} ++ if (@import("builtin").os.tag == .macos) [_][*:0]const u8{vk.extension_info.khr_portability_subset.name};
+const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 
 const BaseDispatch = vk.BaseWrapper(.{
     .createInstance = true,
+    .enumerateInstanceLayerProperties = true,
 });
 
 const InstanceDispatch = vk.InstanceWrapper(.{
@@ -93,11 +95,12 @@ pub const GraphicsContext = struct {
     graphics_queue: Queue,
     present_queue: Queue,
 
-    pub fn init(allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window) !GraphicsContext {
+    pub fn init(allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window, enableValidationLayers: bool) !GraphicsContext {
         var self: GraphicsContext = undefined;
         const vk_proc = @ptrCast(fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, glfw.getInstanceProcAddress);
         self.vkb = try BaseDispatch.load(vk_proc);
 
+        if (enableValidationLayers and !try checkValidationLayerSupport(self.vkb, allocator)) return error.Fooked;
         const glfw_exts = try glfw.getRequiredInstanceExtensions();
 
         const app_info = vk.ApplicationInfo{
@@ -105,14 +108,14 @@ pub const GraphicsContext = struct {
             .application_version = vk.makeApiVersion(0, 0, 0, 0),
             .p_engine_name = app_name,
             .engine_version = vk.makeApiVersion(0, 0, 0, 0),
-            .api_version = vk.API_VERSION_1_3,
+            .api_version = vk.API_VERSION_1_1,
         };
 
         self.instance = try self.vkb.createInstance(&.{
             .flags = .{},
             .p_application_info = &app_info,
-            .enabled_layer_count = 0,
-            .pp_enabled_layer_names = undefined,
+            .enabled_layer_count = if (enableValidationLayers) validation_layers.len else 0,
+            .pp_enabled_layer_names = if (enableValidationLayers) &validation_layers else undefined,
             .enabled_extension_count = @intCast(u32, glfw_exts.len),
             .pp_enabled_extension_names = @ptrCast([*]const [*:0]const u8, &glfw_exts[0]),
         }, null);
@@ -349,6 +352,31 @@ fn checkExtensionSupport(
         } else {
             return false;
         }
+    }
+
+    return true;
+}
+
+fn checkValidationLayerSupport(vkb: BaseDispatch, allocator: Allocator) !bool {
+    var layerCount: u32 = undefined;
+    _ = try vkb.enumerateInstanceLayerProperties(&layerCount, null);
+
+    const availableLayers = try allocator.alloc(vk.LayerProperties, layerCount);
+    defer allocator.free(availableLayers);
+
+    _ = try vkb.enumerateInstanceLayerProperties(&layerCount, availableLayers.ptr);
+
+    for (validation_layers) |layerName| {
+        var layerFound = false;
+
+        for (availableLayers) |layerProperties| {
+            if (std.cstr.cmp(layerName, @ptrCast([*:0]const u8, &layerProperties.layer_name)) == 0) {
+                layerFound = true;
+                break;
+            }
+        }
+
+        if (!layerFound) return false;
     }
 
     return true;
