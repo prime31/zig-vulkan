@@ -119,29 +119,6 @@ pub const Engine = struct {
     }
 };
 
-fn createFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, swapchain: Swapchain) ![]vk.Framebuffer {
-    const framebuffers = try allocator.alloc(vk.Framebuffer, swapchain.swap_images.len);
-    errdefer allocator.free(framebuffers);
-
-    var i: usize = 0;
-    errdefer for (framebuffers[0..i]) |fb| gc.vkd.destroyFramebuffer(gc.dev, fb, null);
-
-    for (framebuffers) |*fb| {
-        fb.* = try gc.vkd.createFramebuffer(gc.dev, &.{
-            .flags = .{},
-            .render_pass = render_pass,
-            .attachment_count = 1,
-            .p_attachments = @ptrCast([*]const vk.ImageView, &swapchain.swap_images[i].view),
-            .width = swapchain.extent.width,
-            .height = swapchain.extent.height,
-            .layers = 1,
-        }, null);
-        i += 1;
-    }
-
-    return framebuffers;
-}
-
 fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.RenderPass {
     const color_attachment = vk.AttachmentDescription{
         .flags = .{},
@@ -200,6 +177,29 @@ fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Render
     }, null);
 }
 
+fn createFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, swapchain: Swapchain) ![]vk.Framebuffer {
+    const framebuffers = try allocator.alloc(vk.Framebuffer, swapchain.swap_images.len);
+    errdefer allocator.free(framebuffers);
+
+    var i: usize = 0;
+    errdefer for (framebuffers[0..i]) |fb| gc.vkd.destroyFramebuffer(gc.dev, fb, null);
+
+    for (framebuffers) |*fb| {
+        fb.* = try gc.vkd.createFramebuffer(gc.dev, &.{
+            .flags = .{},
+            .render_pass = render_pass,
+            .attachment_count = 1,
+            .p_attachments = @ptrCast([*]const vk.ImageView, &swapchain.swap_images[i].view),
+            .width = swapchain.extent.width,
+            .height = swapchain.extent.height,
+            .layers = 1,
+        }, null);
+        i += 1;
+    }
+
+    return framebuffers;
+}
+
 fn createShaderModule(gc: *const GraphicsContext, data: [*]const u32, len: usize) !vk.ShaderModule {
     return try gc.vkd.createShaderModule(gc.dev, &.{
         .flags = .{},
@@ -208,11 +208,11 @@ fn createShaderModule(gc: *const GraphicsContext, data: [*]const u32, len: usize
     }, null);
 }
 
-fn createShaderStageCreateInfo(shaderModule: vk.ShaderModule, stage: vk.ShaderStageFlags) vk.PipelineShaderStageCreateInfo {
+fn createShaderStageCreateInfo(shader_module: vk.ShaderModule, stage: vk.ShaderStageFlags) vk.PipelineShaderStageCreateInfo {
     return .{
         .flags = .{},
         .stage = stage,
-        .module = shaderModule,
+        .module = shader_module,
         .p_name = "main",
         .p_specialization_info = null,
     };
