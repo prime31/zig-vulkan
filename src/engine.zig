@@ -93,8 +93,25 @@ pub const Engine = struct {
         glfw.terminate();
     }
 
-    pub fn run(self: Engine) !void {
-        _ = self;
+    pub fn run(self: *Engine) !void {
+        while (!self.window.shouldClose()) {
+            // const state = self.swapchain.present(self.main_cmd_buffer) catch |err| switch (err) {
+            //     error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
+            //     else => |narrow| return narrow,
+            // };
+
+            // if (state == .suboptimal) {
+            //     const size = try self.window.getSize();
+            //     var extent = vk.Extent2D{ .width = @intCast(u32, size.width), .height = @intCast(u32, size.height) };
+            //     try self.swapchain.recreate(extent);
+
+            //     for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
+            //     self.allocator.free(self.framebuffers);
+            //     self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain);
+            // }
+
+            try glfw.pollEvents();
+        }
     }
 };
 

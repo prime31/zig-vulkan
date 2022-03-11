@@ -2,12 +2,9 @@ const std = @import("std");
 const glfw = @import("glfw");
 const Engine = @import("vengine").Engine;
 
+// https://vkguide.dev/docs/chapter-2/triangle_walkthrough/
 pub fn main() !void {
     var engine = try Engine.init("chapter 2");
     defer engine.deinit();
-
-    while (!engine.window.shouldClose()) {
-        // _ = try engine.swapchain.present(engine.main_cmd_buffer);
-        try glfw.pollEvents();
-    }
+    try engine.run();
 }
