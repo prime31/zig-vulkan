@@ -8,12 +8,10 @@ const Swapchain = @import("swapchain.zig").Swapchain;
 const PipelineBuilder = @import("pipeline_builder.zig").PipelineBuilder;
 const Allocator = std.mem.Allocator;
 
-var gc: GraphicsContext = undefined;
-
 pub const Engine = struct {
     allocator: Allocator,
     window: glfw.Window,
-    // gc: GraphicsContext,
+    gc: *GraphicsContext,
     swapchain: Swapchain,
     render_pass: vk.RenderPass,
     framebuffers: []vk.Framebuffer,
@@ -31,11 +29,12 @@ pub const Engine = struct {
             .client_api = .no_api,
         });
 
-        gc = try GraphicsContext.init(allocator, app_name, window, true);
+        var gc = try allocator.create(GraphicsContext);
+        gc.* = try GraphicsContext.init(allocator, app_name, window, true);
 
-        var swapchain = try Swapchain.init(&gc, allocator, extent);
-        const render_pass = try createRenderPass(&gc, swapchain);
-        const framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
+        var swapchain = try Swapchain.init(gc, allocator, extent);
+        const render_pass = try createRenderPass(gc, swapchain);
+        const framebuffers = try createFramebuffers(gc, allocator, render_pass, swapchain);
 
         const pool = try gc.vkd.createCommandPool(gc.dev, &.{
             .flags = .{ .reset_command_buffer_bit = true },
@@ -56,12 +55,12 @@ pub const Engine = struct {
             .push_constant_range_count = 0,
             .p_push_constant_ranges = undefined,
         }, null);
-        const pipeline = try createPipeline(&gc, allocator, swapchain.extent, render_pass, pipeline_layout);
+        const pipeline = try createPipeline(gc, allocator, swapchain.extent, render_pass, pipeline_layout);
 
         return Engine{
             .allocator = allocator,
             .window = window,
-            // .gc = gc,
+            .gc = gc,
             .swapchain = swapchain,
             .render_pass = render_pass,
             .framebuffers = framebuffers,
@@ -75,19 +74,21 @@ pub const Engine = struct {
     pub fn deinit(self: *Engine) void {
         try self.swapchain.waitForAllFences();
 
-        gc.vkd.freeCommandBuffers(gc.dev, self.pool, 1, @ptrCast([*]vk.CommandBuffer, &self.main_cmd_buffer));
-        gc.vkd.destroyCommandPool(gc.dev, self.pool, null);
+        self.gc.vkd.freeCommandBuffers(self.gc.dev, self.pool, 1, @ptrCast([*]vk.CommandBuffer, &self.main_cmd_buffer));
+        self.gc.vkd.destroyCommandPool(self.gc.dev, self.pool, null);
 
-        for (self.framebuffers) |fb| gc.vkd.destroyFramebuffer(gc.dev, fb, null);
+        for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
         self.allocator.free(self.framebuffers);
 
-        gc.vkd.destroyPipeline(gc.dev, self.pipeline, null);
-        gc.vkd.destroyRenderPass(gc.dev, self.render_pass, null);
-        gc.vkd.destroyPipelineLayout(gc.dev, self.pipeline_layout, null);
+        self.gc.vkd.destroyPipeline(self.gc.dev, self.pipeline, null);
+        self.gc.vkd.destroyRenderPass(self.gc.dev, self.render_pass, null);
+        self.gc.vkd.destroyPipelineLayout(self.gc.dev, self.pipeline_layout, null);
 
         self.swapchain.deinit();
 
-        gc.deinit();
+        self.gc.deinit();
+        self.allocator.destroy(self.gc);
+
         self.window.destroy();
         glfw.terminate();
     }
@@ -97,7 +98,7 @@ pub const Engine = struct {
     }
 };
 
-fn createFramebuffers(_: *const GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, swapchain: Swapchain) ![]vk.Framebuffer {
+fn createFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, swapchain: Swapchain) ![]vk.Framebuffer {
     const framebuffers = try allocator.alloc(vk.Framebuffer, swapchain.swap_images.len);
     errdefer allocator.free(framebuffers);
 
@@ -120,7 +121,7 @@ fn createFramebuffers(_: *const GraphicsContext, allocator: Allocator, render_pa
     return framebuffers;
 }
 
-fn createRenderPass(_: *const GraphicsContext, swapchain: Swapchain) !vk.RenderPass {
+fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.RenderPass {
     const color_attachment = vk.AttachmentDescription{
         .flags = .{},
         .format = swapchain.surface_format.format,
@@ -178,7 +179,7 @@ fn createRenderPass(_: *const GraphicsContext, swapchain: Swapchain) !vk.RenderP
     }, null);
 }
 
-fn createShaderModule(_: *const GraphicsContext, data: [*]const u32, len: usize) !vk.ShaderModule {
+fn createShaderModule(gc: *const GraphicsContext, data: [*]const u32, len: usize) !vk.ShaderModule {
     return try gc.vkd.createShaderModule(gc.dev, &.{
         .flags = .{},
         .code_size = len,
@@ -197,14 +198,14 @@ fn createShaderStageCreateInfo(shaderModule: vk.ShaderModule, stage: vk.ShaderSt
 }
 
 fn createPipeline(
-    _: *const GraphicsContext,
+    gc: *const GraphicsContext,
     allocator: std.mem.Allocator,
     extent: vk.Extent2D,
     render_pass: vk.RenderPass,
     pipeline_layout: vk.PipelineLayout,
 ) !vk.Pipeline {
-    const vert = try createShaderModule(&gc, @ptrCast([*]const u32, resources.tri_vert), resources.tri_vert.len);
-    const frag = try createShaderModule(&gc, @ptrCast([*]const u32, resources.tri_frag), resources.tri_frag.len);
+    const vert = try createShaderModule(gc, @ptrCast([*]const u32, resources.tri_vert), resources.tri_vert.len);
+    const frag = try createShaderModule(gc, @ptrCast([*]const u32, resources.tri_frag), resources.tri_frag.len);
 
     defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
     defer gc.vkd.destroyShaderModule(gc.dev, frag, null);
@@ -212,5 +213,5 @@ fn createPipeline(
     var builder = PipelineBuilder.init(allocator, extent, pipeline_layout);
     try builder.shader_stages.append(createShaderStageCreateInfo(vert, .{ .vertex_bit = true }));
     try builder.shader_stages.append(createShaderStageCreateInfo(frag, .{ .fragment_bit = true }));
-    return try builder.build(&gc, render_pass);
+    return try builder.build(gc, render_pass);
 }
