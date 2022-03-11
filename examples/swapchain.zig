@@ -146,7 +146,6 @@ pub const Swapchain = struct {
 
         // Step 1: Make sure the current frame has finished rendering
         const current = self.currentSwapImage();
-        try current.waitForFence(self.gc);
         try self.gc.vkd.resetFences(self.gc.dev, 1, @ptrCast([*]const vk.Fence, &current.frame_fence));
 
         // Step 2: Submit the command buffer
@@ -182,6 +181,10 @@ pub const Swapchain = struct {
 
         std.mem.swap(vk.Semaphore, &self.swap_images[result.image_index].image_acquired, &self.next_image_acquired);
         self.image_index = result.image_index;
+
+        // wait on the next image fence so that any command buffers/framebuffers used for it are clear for use
+        const next = self.currentSwapImage();
+        try next.waitForFence(self.gc);
 
         return switch (result.result) {
             .success => .optimal,

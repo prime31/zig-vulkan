@@ -47,10 +47,9 @@ pub fn main() !void {
     );
     defer destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
 
-    // try recordCommandBuffers(&gc, cmdbufs, swapchain.extent, render_pass, framebuffers);
-
     while (!window.shouldClose()) {
         const cmdbuf = cmdbufs[swapchain.image_index];
+        // std.debug.print("-------- index: {d}, buf: {d}\n", .{ swapchain.image_index, cmdbuf });
         try recordCommandBuffer(cmdbuf, &gc, swapchain.extent, render_pass, framebuffers[swapchain.image_index]);
 
         const state = swapchain.present(cmdbuf) catch |err| switch (err) {
@@ -66,14 +65,6 @@ pub fn main() !void {
 
             destroyFramebuffers(&gc, allocator, framebuffers);
             framebuffers = try createFramebuffers(&gc, allocator, render_pass, swapchain);
-
-            destroyCommandBuffers(&gc, pool, allocator, cmdbufs);
-            cmdbufs = try createCommandBuffers(
-                &gc,
-                pool,
-                allocator,
-                framebuffers,
-            );
         }
 
         try glfw.pollEvents();
@@ -83,44 +74,7 @@ pub fn main() !void {
 }
 
 var clear_r: f32 = 0.0;
-
-fn recordCommandBuffers(
-    gc: *const GraphicsContext,
-    cmdbufs: []vk.CommandBuffer,
-    extent: vk.Extent2D,
-    render_pass: vk.RenderPass,
-    framebuffers: []vk.Framebuffer,
-) !void {
-    clear_r += 0.1;
-    if (clear_r > 1) clear_r = 0;
-    const clear = vk.ClearValue{
-        .color = .{ .float_32 = .{ clear_r, 0, 0, 1 } },
-    };
-
-    for (cmdbufs) |cmdbuf, i| {
-        try gc.vkd.beginCommandBuffer(cmdbuf, &.{
-            .flags = .{},
-            .p_inheritance_info = null,
-        });
-
-        // This needs to be a separate definition - see https://github.com/ziglang/zig/issues/7627.
-        const render_area = vk.Rect2D{
-            .offset = .{ .x = 0, .y = 0 },
-            .extent = extent,
-        };
-
-        gc.vkd.cmdBeginRenderPass(cmdbuf, &.{
-            .render_pass = render_pass,
-            .framebuffer = framebuffers[i],
-            .render_area = render_area,
-            .clear_value_count = 1,
-            .p_clear_values = @ptrCast([*]const vk.ClearValue, &clear),
-        }, .@"inline");
-
-        gc.vkd.cmdEndRenderPass(cmdbuf);
-        try gc.vkd.endCommandBuffer(cmdbuf);
-    }
-}
+var clear_g: f32 = 0.5;
 
 fn recordCommandBuffer(
     cmdbuf: vk.CommandBuffer,
@@ -129,13 +83,16 @@ fn recordCommandBuffer(
     render_pass: vk.RenderPass,
     framebuffer: vk.Framebuffer,
 ) !void {
-    clear_r += 0.01;
+    clear_r += 0.001;
     if (clear_r > 1) clear_r = 0;
+    clear_g += 0.008;
+    if (clear_g > 1) clear_g = 0;
+
     const clear = vk.ClearValue{
-        .color = .{ .float_32 = .{ clear_r, 0, 0, 1 } },
+        .color = .{ .float_32 = .{ clear_r, clear_g, 0, 1 } },
     };
 
-    // try gc.vkd.resetCommandBuffer(cmdbuf, .{});
+    try gc.vkd.resetCommandBuffer(cmdbuf, .{});
     try gc.vkd.beginCommandBuffer(cmdbuf, &.{
         .flags = .{},
         .p_inheritance_info = null,
