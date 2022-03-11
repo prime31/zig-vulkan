@@ -1,6 +1,6 @@
 # Vulkan + GLFW
 
-<img width="1071" alt="image" src="https://cdn.wccftech.com/wp-content/uploads/2019/05/DX-mmbxWkAAGbA4.jpg">
+<p align="center"><img height="300" src="https://developer.nvidia.com/sites/default/files/akamai/Vulcan-1-3.png" /></p>
 
 ## Getting started
 
