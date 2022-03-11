@@ -2,8 +2,8 @@ const std = @import("std");
 const vk = @import("vulkan");
 const glfw = @import("glfw");
 const resources = @import("resources");
-const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
-const Swapchain = @import("swapchain.zig").Swapchain;
+const GraphicsContext = @import("vengine").GraphicsContext;
+const Swapchain = @import("vengine").Swapchain;
 const Allocator = std.mem.Allocator;
 
 const app_name = "clear";
@@ -49,7 +49,6 @@ pub fn main() !void {
 
     while (!window.shouldClose()) {
         const cmdbuf = cmdbufs[swapchain.image_index];
-        // std.debug.print("-------- index: {d}, buf: {d}\n", .{ swapchain.image_index, cmdbuf });
         try recordCommandBuffer(cmdbuf, &gc, swapchain.extent, render_pass, framebuffers[swapchain.image_index]);
 
         const state = swapchain.present(cmdbuf) catch |err| switch (err) {

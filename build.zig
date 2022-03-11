@@ -21,7 +21,8 @@ pub fn build(b: *std.build.Builder) void {
         exe.setBuildMode(mode);
         exe.install();
 
-        exe.addPackage(.{
+        // packages
+        const vulkan_pkg = std.build.Pkg{
             .name = "vulkan",
             .path = .{
                 .path = std.fs.path.join(b.allocator, &[_][]const u8{
@@ -30,10 +31,21 @@ pub fn build(b: *std.build.Builder) void {
                     "vk.zig",
                 }) catch unreachable,
             },
+        };
+        const glfw_pkg = std.build.Pkg{
+            .name = "glfw",
+            .path = .{ .path = "libs/mach-glfw/src/main.zig" },
+        };
+
+        exe.addPackage(vulkan_pkg);
+        exe.addPackage(.{
+            .name = "vengine",
+            .path = .{ .path = "src/v.zig" },
+            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg },
         });
 
         // mach-glfw
-        exe.addPackagePath("glfw", "libs/mach-glfw/src/main.zig");
+        exe.addPackage(glfw_pkg);
         glfw.link(b, exe, .{});
 
         // shader resources, to be compiled using glslc

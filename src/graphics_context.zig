@@ -125,7 +125,7 @@ pub const GraphicsContext = struct {
         self.vki = try InstanceDispatch.load(self.instance, vk_proc);
         errdefer self.vki.destroyInstance(self.instance, null);
 
-        self.surface = try createSurface(self.instance, window);
+        self.surface = try createSurfaceGlfw(self.instance, window);
         errdefer self.vki.destroySurfaceKHR(self.instance, self.surface, null);
 
         const candidate = try pickPhysicalDevice(self.vki, self.instance, allocator, self.surface);
@@ -184,7 +184,7 @@ pub const Queue = struct {
     }
 };
 
-fn createSurface(instance: vk.Instance, window: glfw.Window) !vk.SurfaceKHR {
+fn createSurfaceGlfw(instance: vk.Instance, window: glfw.Window) !vk.SurfaceKHR {
     var surface: vk.SurfaceKHR = undefined;
     if ((try glfw.createWindowSurface(instance, window, null, &surface)) != @enumToInt(vk.Result.success)) {
         return error.SurfaceInitFailed;
@@ -192,6 +192,15 @@ fn createSurface(instance: vk.Instance, window: glfw.Window) !vk.SurfaceKHR {
 
     return surface;
 }
+
+// fn createSurfaceSdl(instance: vk.Instance, window: sdl.SDL_Window) !vk.SurfaceKHR {
+//     var surface: vk.SurfaceKHR = undefined;
+//     if (sdl.SDL_Vulkan_CreateSurface(instance, window, &surface)) {
+//         return error.SurfaceInitFailed;
+//     }
+
+//     return surface;
+// }
 
 fn initializeCandidate(vki: InstanceDispatch, candidate: DeviceCandidate) !vk.Device {
     const priority = [_]f32{1};

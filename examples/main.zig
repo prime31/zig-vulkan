@@ -2,11 +2,11 @@ const std = @import("std");
 const vk = @import("vulkan");
 const glfw = @import("glfw");
 const resources = @import("resources");
-const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
-const Swapchain = @import("swapchain.zig").Swapchain;
+const GraphicsContext = @import("vengine").GraphicsContext;
+const Swapchain = @import("vengine").Swapchain;
 const Allocator = std.mem.Allocator;
 
-const app_name = "vulkan-zig triangle";
+const app_name = "triangle";
 
 const Vertex = struct {
     const binding_description = vk.VertexInputBindingDescription{
