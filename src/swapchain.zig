@@ -144,7 +144,7 @@ pub const Swapchain = struct {
         // One problem that arises is that we can't know beforehand which semaphore to signal,
         // so we keep an extra auxilery semaphore that is swapped around
 
-        // Step 1: Make sure the current frame has finished rendering
+        // Step 1: Make sure the current frame has finished rendering. We waited after last present so we are all clear
         const current = self.currentSwapImage();
         try self.gc.vkd.resetFences(self.gc.dev, 1, @ptrCast([*]const vk.Fence, &current.frame_fence));
 
@@ -300,8 +300,8 @@ fn findPresentMode(gc: *const GraphicsContext, allocator: Allocator) !vk.Present
     _ = try gc.vki.getPhysicalDeviceSurfacePresentModesKHR(gc.pdev, gc.surface, &count, present_modes.ptr);
 
     const preferred = [_]vk.PresentModeKHR{
+        .fifo_khr,
         .mailbox_khr,
-        .immediate_khr,
     };
 
     for (preferred) |mode| {
