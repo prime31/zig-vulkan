@@ -10,8 +10,6 @@ pub fn build(b: *std.build.Builder) void {
 
     const examples = getAllExamples(b, "examples");
     for (examples) |example| {
-        if (std.mem.endsWith(u8, example[0], "chain") or std.mem.endsWith(u8, example[0], "context")) continue;
-
         const name = example[0];
         const source = example[1];
 
@@ -38,11 +36,6 @@ pub fn build(b: *std.build.Builder) void {
         };
 
         exe.addPackage(vulkan_pkg);
-        exe.addPackage(.{
-            .name = "vengine",
-            .path = .{ .path = "src/v.zig" },
-            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg },
-        });
 
         // mach-glfw
         exe.addPackage(glfw_pkg);
@@ -54,7 +47,15 @@ pub fn build(b: *std.build.Builder) void {
         res.step.dependOn(&res.shader_step.step);
         res.addShader("triangle_vert", "shaders/triangle.vert");
         res.addShader("triangle_frag", "shaders/triangle.frag");
+        res.addShader("tri_vert", "shaders/tri.vert");
+        res.addShader("tri_frag", "shaders/tri.frag");
         exe.addPackage(res.package);
+
+        exe.addPackage(.{
+            .name = "vengine",
+            .path = .{ .path = "src/v.zig" },
+            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, res.package },
+        });
 
         const run_cmd = exe.run();
         run_cmd.step.dependOn(b.getInstallStep());

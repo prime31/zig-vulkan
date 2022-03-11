@@ -198,13 +198,29 @@ fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Render
         .p_preserve_attachments = undefined,
     };
 
+    const dependency = vk.SubpassDependency{
+        .src_subpass = vk.SUBPASS_EXTERNAL,
+        .dst_subpass = 0,
+        .src_stage_mask = .{
+            .color_attachment_output_bit = true,
+        },
+        .src_access_mask = .{},
+        .dst_stage_mask = .{
+            .color_attachment_output_bit = true,
+        },
+        .dst_access_mask = .{
+            .color_attachment_write_bit = true,
+        },
+        .dependency_flags = .{},
+    };
+
     return try gc.vkd.createRenderPass(gc.dev, &.{
         .flags = .{},
         .attachment_count = 1,
         .p_attachments = @ptrCast([*]const vk.AttachmentDescription, &color_attachment),
         .subpass_count = 1,
         .p_subpasses = @ptrCast([*]const vk.SubpassDescription, &subpass),
-        .dependency_count = 0,
-        .p_dependencies = undefined,
+        .dependency_count = 1,
+        .p_dependencies = @ptrCast([*]const vk.SubpassDependency, &dependency),
     }, null);
 }
