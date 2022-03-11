@@ -1,10 +1,6 @@
-# mach/glfw Vulkan example
+# Vulkan + GLFW
 
-This is an example for how to use [mach-glfw](https://github.com/hexops/mach-glfw) and [vulkan-zig](https://github.com/snektron/vulkan-zig) together to create a basic Vulkan window.
-
-This is nearly a 1:1 copy of the [vulkan-zig example](https://github.com/snektron/vulkan-zig) by @snektron, the only difference is using [mach-glfw](https://github.com/hexops/mach-glfw).
-
-<img width="912" alt="image" src="https://user-images.githubusercontent.com/3173176/139573985-d862f35a-e78e-40c2-bc0c-9c4fb68d6ecd.png">
+<img width="1071" alt="image" src="https://cdn.wccftech.com/wp-content/uploads/2019/05/DX-mmbxWkAAGbA4.jpg">
 
 ## Getting started
 
@@ -15,25 +11,22 @@ You must install the LunarG Vulkan SDK: https://vulkan.lunarg.com/sdk/home
 ### Clone the repository and dependencies
 
 ```sh
-git clone --recursive https://github.com/hexops/mach-glfw-vulkan-example
+git clone --recursive https://github.com/hexops/zig-vulkan
 ```
 
 ### Ensure glslc is on your PATH
 
-On MacOS, you may e.g. place the following in your `~/.zprofile` file:
-
+On macOS, you may e.g. place the following in your `~/.zprofile` file though the Vulkan SDK installation should handle it for you.
 ```
 export PATH=$PATH:$HOME/VulkanSDK/1.3.xxx/macOS/bin/
 ```
 
 ### Run the example
-
 ```sh
-zig build run
+zig build clear
 ```
 
 ### Cross compilation
-
 ```sh
 zig build -Dtarget=x86_64-linux-gnu
 zig build -Dtarget=x86_64-windows-gnu

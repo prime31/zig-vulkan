@@ -95,20 +95,24 @@ pub const Engine = struct {
 
     pub fn run(self: *Engine) !void {
         while (!self.window.shouldClose()) {
-            // const state = self.swapchain.present(self.main_cmd_buffer) catch |err| switch (err) {
-            //     error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
-            //     else => |narrow| return narrow,
-            // };
+            // we only have one CommandBuffer so just wait on all the swapchain images
+            try self.swapchain.waitForAllFences();
+            try recordCommandBuffer(self.main_cmd_buffer, self.gc, self.swapchain.extent, self.render_pass, self.framebuffers[self.swapchain.image_index]);
 
-            // if (state == .suboptimal) {
-            //     const size = try self.window.getSize();
-            //     var extent = vk.Extent2D{ .width = @intCast(u32, size.width), .height = @intCast(u32, size.height) };
-            //     try self.swapchain.recreate(extent);
+            const state = self.swapchain.present(self.main_cmd_buffer) catch |err| switch (err) {
+                error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
+                else => |narrow| return narrow,
+            };
 
-            //     for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
-            //     self.allocator.free(self.framebuffers);
-            //     self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain);
-            // }
+            if (state == .suboptimal) {
+                const size = try self.window.getSize();
+                var extent = vk.Extent2D{ .width = @intCast(u32, size.width), .height = @intCast(u32, size.height) };
+                try self.swapchain.recreate(extent);
+
+                for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
+                self.allocator.free(self.framebuffers);
+                self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain);
+            }
 
             try glfw.pollEvents();
         }
@@ -231,4 +235,43 @@ fn createPipeline(
     try builder.shader_stages.append(createShaderStageCreateInfo(vert, .{ .vertex_bit = true }));
     try builder.shader_stages.append(createShaderStageCreateInfo(frag, .{ .fragment_bit = true }));
     return try builder.build(gc, render_pass);
+}
+
+
+
+
+// crap
+fn recordCommandBuffer(
+    cmdbuf: vk.CommandBuffer,
+    gc: *const GraphicsContext,
+    extent: vk.Extent2D,
+    render_pass: vk.RenderPass,
+    framebuffer: vk.Framebuffer,
+) !void {
+    const clear = vk.ClearValue{
+        .color = .{ .float_32 = .{ 0.2, 0.5, 0, 1 } },
+    };
+
+    try gc.vkd.resetCommandBuffer(cmdbuf, .{});
+    try gc.vkd.beginCommandBuffer(cmdbuf, &.{
+        .flags = .{},
+        .p_inheritance_info = null,
+    });
+
+    // This needs to be a separate definition - see https://github.com/ziglang/zig/issues/7627.
+    const render_area = vk.Rect2D{
+        .offset = .{ .x = 0, .y = 0 },
+        .extent = extent,
+    };
+
+    gc.vkd.cmdBeginRenderPass(cmdbuf, &.{
+        .render_pass = render_pass,
+        .framebuffer = framebuffer,
+        .render_area = render_area,
+        .clear_value_count = 1,
+        .p_clear_values = @ptrCast([*]const vk.ClearValue, &clear),
+    }, .@"inline");
+
+    gc.vkd.cmdEndRenderPass(cmdbuf);
+    try gc.vkd.endCommandBuffer(cmdbuf);
 }
