@@ -232,8 +232,8 @@ fn createPipeline(
     defer gc.vkd.destroyShaderModule(gc.dev, frag, null);
 
     var builder = PipelineBuilder.init(allocator, extent, pipeline_layout);
-    try builder.shader_stages.append(createShaderStageCreateInfo(vert, .{ .vertex_bit = true }));
-    try builder.shader_stages.append(createShaderStageCreateInfo(frag, .{ .fragment_bit = true }));
+    try builder.addShaderStage(createShaderStageCreateInfo(vert, .{ .vertex_bit = true }));
+    try builder.addShaderStage(createShaderStageCreateInfo(frag, .{ .fragment_bit = true }));
     return try builder.build(gc, render_pass);
 }
 
@@ -252,17 +252,17 @@ fn recordCommandBuffer(
         .color = .{ .float_32 = .{ 0.2, 0.5, 0, 1 } },
     };
 
-    try gc.vkd.resetCommandBuffer(cmdbuf, .{});
-    try gc.vkd.beginCommandBuffer(cmdbuf, &.{
-        .flags = .{},
-        .p_inheritance_info = null,
-    });
-
     // This needs to be a separate definition - see https://github.com/ziglang/zig/issues/7627.
     const render_area = vk.Rect2D{
         .offset = .{ .x = 0, .y = 0 },
         .extent = extent,
     };
+
+    try gc.vkd.resetCommandBuffer(cmdbuf, .{});
+    try gc.vkd.beginCommandBuffer(cmdbuf, &.{
+        .flags = .{},
+        .p_inheritance_info = null,
+    });
 
     gc.vkd.cmdBeginRenderPass(cmdbuf, &.{
         .render_pass = render_pass,

@@ -5,3 +5,4 @@ zig-out/
 /debug/
 /build/
 /build-*/
+.DS_Store

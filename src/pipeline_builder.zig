@@ -89,6 +89,10 @@ pub const PipelineBuilder = struct {
         };
     }
 
+    pub fn addShaderStage(self: *PipelineBuilder, stage: vk.PipelineShaderStageCreateInfo) !void {
+        try self.shader_stages.append(stage);
+    }
+
     pub fn build(self: PipelineBuilder, gc: *const GraphicsContext, render_pass: vk.RenderPass) !vk.Pipeline {
         defer self.shader_stages.deinit();
 
