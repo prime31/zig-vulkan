@@ -2,6 +2,7 @@ const std = @import("std");
 const vk = @import("vulkan");
 const resources = @import("resources");
 const glfw = @import("glfw");
+const vkinit = @import("vkinit.zig");
 
 const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 const Swapchain = @import("swapchain.zig").Swapchain;
@@ -48,13 +49,7 @@ pub const Engine = struct {
             .command_buffer_count = 1,
         }, @ptrCast([*]vk.CommandBuffer, &main_cmd_buffer));
 
-        const pipeline_layout = try gc.vkd.createPipelineLayout(gc.dev, &.{
-            .flags = .{},
-            .set_layout_count = 0,
-            .p_set_layouts = undefined,
-            .push_constant_range_count = 0,
-            .p_push_constant_ranges = undefined,
-        }, null);
+        const pipeline_layout = try gc.vkd.createPipelineLayout(gc.dev, &vkinit.pipelineLayoutCreateInfo(), null);
         const pipeline = try createPipeline(gc, allocator, swapchain.extent, render_pass, pipeline_layout);
 
         return Engine{
@@ -97,7 +92,7 @@ pub const Engine = struct {
         while (!self.window.shouldClose()) {
             // we only have one CommandBuffer so just wait on all the swapchain images
             try self.swapchain.waitForAllFences();
-            try recordCommandBuffer(self.main_cmd_buffer, self.gc, self.swapchain.extent, self.render_pass, self.framebuffers[self.swapchain.image_index]);
+            try recordCommandBuffer(self.main_cmd_buffer, self.gc, self.swapchain.extent, self.render_pass, self.framebuffers[self.swapchain.image_index], self.pipeline);
 
             const state = self.swapchain.present(self.main_cmd_buffer) catch |err| switch (err) {
                 error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
@@ -247,6 +242,7 @@ fn recordCommandBuffer(
     extent: vk.Extent2D,
     render_pass: vk.RenderPass,
     framebuffer: vk.Framebuffer,
+    pipeline: vk.Pipeline,
 ) !void {
     const clear = vk.ClearValue{
         .color = .{ .float_32 = .{ 0.2, 0.5, 0, 1 } },
@@ -260,7 +256,7 @@ fn recordCommandBuffer(
 
     try gc.vkd.resetCommandBuffer(cmdbuf, .{});
     try gc.vkd.beginCommandBuffer(cmdbuf, &.{
-        .flags = .{},
+        .flags = .{ .one_time_submit_bit = true },
         .p_inheritance_info = null,
     });
 
@@ -271,6 +267,8 @@ fn recordCommandBuffer(
         .clear_value_count = 1,
         .p_clear_values = @ptrCast([*]const vk.ClearValue, &clear),
     }, .@"inline");
+    gc.vkd.cmdBindPipeline(cmdbuf, .graphics, pipeline);
+    gc.vkd.cmdDraw(cmdbuf, 3, 1, 0, 0);
 
     gc.vkd.cmdEndRenderPass(cmdbuf);
     try gc.vkd.endCommandBuffer(cmdbuf);

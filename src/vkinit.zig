@@ -3,9 +3,9 @@ const vk = @import("vulkan");
 
 pub fn commandPoolCreateInfo(queue_family_index: u32, flags: vk.CommandPoolCreateFlags) vk.CommandPoolCreateInfo {
     return .{
-            .flags = flags,
-            .queue_family_index = queue_family_index,
-        };
+        .flags = flags,
+        .queue_family_index = queue_family_index,
+    };
 }
 
 // VkCommandPoolCreateInfo vkinit::command_pool_create_info(uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags /*= 0*/)
@@ -139,16 +139,26 @@ pub fn commandPoolCreateInfo(queue_family_index: u32, flags: vk.CommandPoolCreat
 // 	info.pName = "main";
 // 	return info;
 // }
-// VkPipelineVertexInputStateCreateInfo vkinit::vertex_input_state_create_info() {
-// 	VkPipelineVertexInputStateCreateInfo info = {};
-// 	info.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
-// 	info.pNext = nullptr;
 
-// 	//no vertex bindings or attributes
-// 	info.vertexBindingDescriptionCount = 0;
-// 	info.vertexAttributeDescriptionCount = 0;
-// 	return info;
-// }
+/// vertex input controls how to read vertices from vertex buffers
+pub fn pipelineVertexInputStateCreateInfo() vk.PipelineVertexInputStateCreateInfo {
+    return .{
+        .flags = .{},
+        .vertex_binding_description_count = 0,
+        .p_vertex_binding_descriptions = undefined,
+        .vertex_attribute_description_count = 0,
+        .p_vertex_attribute_descriptions = undefined,
+    };
+}
+
+/// input assembly is the configuration for drawing triangle lists, strips, or individual points
+pub fn pipelineInputAssempblyCreateInfo(topology: vk.PrimitiveTopology) vk.PipelineInputAssemblyStateCreateInfo {
+    return .{
+        .flags = .{},
+        .topology = topology,
+        .primitive_restart_enable = vk.FALSE,
+    };
+}
 
 // VkPipelineInputAssemblyStateCreateInfo vkinit::input_assembly_create_info(VkPrimitiveTopology topology) {
 // 	VkPipelineInputAssemblyStateCreateInfo info = {};
@@ -160,64 +170,57 @@ pub fn commandPoolCreateInfo(queue_family_index: u32, flags: vk.CommandPoolCreat
 // 	info.primitiveRestartEnable = VK_FALSE;
 // 	return info;
 // }
-// VkPipelineRasterizationStateCreateInfo vkinit::rasterization_state_create_info(VkPolygonMode polygonMode)
-// {
-// 	VkPipelineRasterizationStateCreateInfo info = {};
-// 	info.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
-// 	info.pNext = nullptr;
 
-// 	info.depthClampEnable = VK_FALSE;
-// 	//rasterizer discard allows objects with holes, default to no
-// 	info.rasterizerDiscardEnable = VK_FALSE;
+pub fn pipelineRasterizationStateCreateInfo(polygon_mode: vk.PolygonMode) vk.PipelineRasterizationStateCreateInfo {
+    return .{
+        .flags = .{},
+        .depth_clamp_enable = vk.FALSE,
+        .rasterizer_discard_enable = vk.FALSE, // rasterizer discard allows objects with holes, default to no
+        .polygon_mode = polygon_mode,
+        .cull_mode = .{}, // no backface cull
+        .front_face = .clockwise,
+        .depth_bias_enable = vk.FALSE, // no depth bias
+        .depth_bias_constant_factor = 0,
+        .depth_bias_clamp = 0,
+        .depth_bias_slope_factor = 0,
+        .line_width = 1,
+    };
+}
 
-// 	info.polygonMode = polygonMode;
-// 	info.lineWidth = 1.0f;
-// 	//no backface cull
-// 	info.cullMode = VK_CULL_MODE_NONE;
-// 	info.frontFace = VK_FRONT_FACE_CLOCKWISE;
-// 	//no depth bias
-// 	info.depthBiasEnable = VK_FALSE;
-// 	info.depthBiasConstantFactor = 0.0f;
-// 	info.depthBiasClamp = 0.0f;
-// 	info.depthBiasSlopeFactor = 0.0f;
+pub fn pipelineMultisampleStateCreateInfo() vk.PipelineMultisampleStateCreateInfo {
+    return .{
+        .flags = .{},
+        .rasterization_samples = .{ .@"1_bit" = true }, // multisampling defaulted to no multisampling (1 sample per pixel)
+        .sample_shading_enable = vk.FALSE,
+        .min_sample_shading = 1,
+        .p_sample_mask = null,
+        .alpha_to_coverage_enable = vk.FALSE,
+        .alpha_to_one_enable = vk.FALSE,
+    };
+}
 
-// 	return info;
-// }
-// VkPipelineMultisampleStateCreateInfo vkinit::multisampling_state_create_info()
-// {
-// 	VkPipelineMultisampleStateCreateInfo info = {};
-// 	info.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
-// 	info.pNext = nullptr;
+pub fn pipelineColorBlendAttachmentState() vk.PipelineColorBlendAttachmentState {
+    return .{
+        .blend_enable = vk.FALSE,
+        .src_color_blend_factor = .one,
+        .dst_color_blend_factor = .zero,
+        .color_blend_op = .add,
+        .src_alpha_blend_factor = .one,
+        .dst_alpha_blend_factor = .zero,
+        .alpha_blend_op = .add,
+        .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = true },
+    };
+}
 
-// 	info.sampleShadingEnable = VK_FALSE;
-// 	//multisampling defaulted to no multisampling (1 sample per pixel)
-// 	info.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
-// 	info.minSampleShading = 1.0f;
-// 	info.pSampleMask = nullptr;
-// 	info.alphaToCoverageEnable = VK_FALSE;
-// 	info.alphaToOneEnable = VK_FALSE;
-// 	return info;
-// }
-// VkPipelineColorBlendAttachmentState vkinit::color_blend_attachment_state() {
-// 	VkPipelineColorBlendAttachmentState colorBlendAttachment = {};
-// 	colorBlendAttachment.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT |
-// 		VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
-// 	colorBlendAttachment.blendEnable = VK_FALSE;
-// 	return colorBlendAttachment;
-// }
-// VkPipelineLayoutCreateInfo vkinit::pipeline_layout_create_info() {
-// 	VkPipelineLayoutCreateInfo info{};
-// 	info.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-// 	info.pNext = nullptr;
-
-// 	//empty defaults
-// 	info.flags = 0;
-// 	info.setLayoutCount = 0;
-// 	info.pSetLayouts = nullptr;
-// 	info.pushConstantRangeCount = 0;
-// 	info.pPushConstantRanges = nullptr;
-// 	return info;
-// }
+pub fn pipelineLayoutCreateInfo() vk.PipelineLayoutCreateInfo {
+    return .{
+        .flags = .{},
+        .set_layout_count = 0,
+        .p_set_layouts = undefined,
+        .push_constant_range_count = 0,
+        .p_push_constant_ranges = undefined,
+    };
+}
 
 // VkImageCreateInfo vkinit::image_create_info(VkFormat format, VkImageUsageFlags usageFlags, VkExtent3D extent)
 // {

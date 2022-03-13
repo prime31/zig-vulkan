@@ -2010,7 +2010,7 @@ pub const AllocationCallbacks = extern struct {
 pub const DeviceQueueCreateInfo = extern struct {
     s_type: StructureType = .device_queue_create_info,
     p_next: ?*const anyopaque = null,
-    flags: DeviceQueueCreateFlags,
+    flags: DeviceQueueCreateFlags align(@alignOf(Flags)),
     queue_family_index: u32,
     queue_count: u32,
     p_queue_priorities: [*]const f32,
@@ -2018,7 +2018,7 @@ pub const DeviceQueueCreateInfo = extern struct {
 pub const DeviceCreateInfo = extern struct {
     s_type: StructureType = .device_create_info,
     p_next: ?*const anyopaque = null,
-    flags: DeviceCreateFlags,
+    flags: DeviceCreateFlags align(@alignOf(Flags)),
     queue_create_info_count: u32,
     p_queue_create_infos: [*]const DeviceQueueCreateInfo,
     enabled_layer_count: u32,
@@ -2030,7 +2030,7 @@ pub const DeviceCreateInfo = extern struct {
 pub const InstanceCreateInfo = extern struct {
     s_type: StructureType = .instance_create_info,
     p_next: ?*const anyopaque = null,
-    flags: InstanceCreateFlags,
+    flags: InstanceCreateFlags align(@alignOf(Flags)),
     p_application_info: ?*const ApplicationInfo,
     enabled_layer_count: u32,
     pp_enabled_layer_names: [*]const [*:0]const u8,
@@ -2038,7 +2038,7 @@ pub const InstanceCreateInfo = extern struct {
     pp_enabled_extension_names: [*]const [*:0]const u8,
 };
 pub const QueueFamilyProperties = extern struct {
-    queue_flags: QueueFlags,
+    queue_flags: QueueFlags align(@alignOf(Flags)),
     queue_count: u32,
     timestamp_valid_bits: u32,
     min_image_transfer_granularity: Extent3D,
@@ -2061,9 +2061,9 @@ pub const MemoryRequirements = extern struct {
     memory_type_bits: u32,
 };
 pub const SparseImageFormatProperties = extern struct {
-    aspect_mask: ImageAspectFlags,
+    aspect_mask: ImageAspectFlags align(@alignOf(Flags)),
     image_granularity: Extent3D,
-    flags: SparseImageFormatFlags,
+    flags: SparseImageFormatFlags align(@alignOf(Flags)),
 };
 pub const SparseImageMemoryRequirements = extern struct {
     format_properties: SparseImageFormatProperties,
@@ -2073,12 +2073,12 @@ pub const SparseImageMemoryRequirements = extern struct {
     image_mip_tail_stride: DeviceSize,
 };
 pub const MemoryType = extern struct {
-    property_flags: MemoryPropertyFlags,
+    property_flags: MemoryPropertyFlags align(@alignOf(Flags)),
     heap_index: u32,
 };
 pub const MemoryHeap = extern struct {
     size: DeviceSize,
-    flags: MemoryHeapFlags,
+    flags: MemoryHeapFlags align(@alignOf(Flags)),
 };
 pub const MappedMemoryRange = extern struct {
     s_type: StructureType = .mapped_memory_range,
@@ -2088,15 +2088,15 @@ pub const MappedMemoryRange = extern struct {
     size: DeviceSize,
 };
 pub const FormatProperties = extern struct {
-    linear_tiling_features: FormatFeatureFlags,
-    optimal_tiling_features: FormatFeatureFlags,
-    buffer_features: FormatFeatureFlags,
+    linear_tiling_features: FormatFeatureFlags align(@alignOf(Flags)),
+    optimal_tiling_features: FormatFeatureFlags align(@alignOf(Flags)),
+    buffer_features: FormatFeatureFlags align(@alignOf(Flags)),
 };
 pub const ImageFormatProperties = extern struct {
     max_extent: Extent3D,
     max_mip_levels: u32,
     max_array_layers: u32,
-    sample_counts: SampleCountFlags,
+    sample_counts: SampleCountFlags align(@alignOf(Flags)),
     max_resource_size: DeviceSize,
 };
 pub const DescriptorBufferInfo = extern struct {
@@ -2135,9 +2135,9 @@ pub const CopyDescriptorSet = extern struct {
 pub const BufferCreateInfo = extern struct {
     s_type: StructureType = .buffer_create_info,
     p_next: ?*const anyopaque = null,
-    flags: BufferCreateFlags,
+    flags: BufferCreateFlags align(@alignOf(Flags)),
     size: DeviceSize,
-    usage: BufferUsageFlags,
+    usage: BufferUsageFlags align(@alignOf(Flags)),
     sharing_mode: SharingMode,
     queue_family_index_count: u32,
     p_queue_family_indices: [*]const u32,
@@ -2145,25 +2145,25 @@ pub const BufferCreateInfo = extern struct {
 pub const BufferViewCreateInfo = extern struct {
     s_type: StructureType = .buffer_view_create_info,
     p_next: ?*const anyopaque = null,
-    flags: BufferViewCreateFlags,
+    flags: BufferViewCreateFlags align(@alignOf(Flags)),
     buffer: Buffer,
     format: Format,
     offset: DeviceSize,
     range: DeviceSize,
 };
 pub const ImageSubresource = extern struct {
-    aspect_mask: ImageAspectFlags,
+    aspect_mask: ImageAspectFlags align(@alignOf(Flags)),
     mip_level: u32,
     array_layer: u32,
 };
 pub const ImageSubresourceLayers = extern struct {
-    aspect_mask: ImageAspectFlags,
+    aspect_mask: ImageAspectFlags align(@alignOf(Flags)),
     mip_level: u32,
     base_array_layer: u32,
     layer_count: u32,
 };
 pub const ImageSubresourceRange = extern struct {
-    aspect_mask: ImageAspectFlags,
+    aspect_mask: ImageAspectFlags align(@alignOf(Flags)),
     base_mip_level: u32,
     level_count: u32,
     base_array_layer: u32,
@@ -2172,14 +2172,14 @@ pub const ImageSubresourceRange = extern struct {
 pub const MemoryBarrier = extern struct {
     s_type: StructureType = .memory_barrier,
     p_next: ?*const anyopaque = null,
-    src_access_mask: AccessFlags,
-    dst_access_mask: AccessFlags,
+    src_access_mask: AccessFlags align(@alignOf(Flags)),
+    dst_access_mask: AccessFlags align(@alignOf(Flags)),
 };
 pub const BufferMemoryBarrier = extern struct {
     s_type: StructureType = .buffer_memory_barrier,
     p_next: ?*const anyopaque = null,
-    src_access_mask: AccessFlags,
-    dst_access_mask: AccessFlags,
+    src_access_mask: AccessFlags align(@alignOf(Flags)),
+    dst_access_mask: AccessFlags align(@alignOf(Flags)),
     src_queue_family_index: u32,
     dst_queue_family_index: u32,
     buffer: Buffer,
@@ -2189,8 +2189,8 @@ pub const BufferMemoryBarrier = extern struct {
 pub const ImageMemoryBarrier = extern struct {
     s_type: StructureType = .image_memory_barrier,
     p_next: ?*const anyopaque = null,
-    src_access_mask: AccessFlags,
-    dst_access_mask: AccessFlags,
+    src_access_mask: AccessFlags align(@alignOf(Flags)),
+    dst_access_mask: AccessFlags align(@alignOf(Flags)),
     old_layout: ImageLayout,
     new_layout: ImageLayout,
     src_queue_family_index: u32,
@@ -2201,7 +2201,7 @@ pub const ImageMemoryBarrier = extern struct {
 pub const ImageCreateInfo = extern struct {
     s_type: StructureType = .image_create_info,
     p_next: ?*const anyopaque = null,
-    flags: ImageCreateFlags,
+    flags: ImageCreateFlags align(@alignOf(Flags)),
     image_type: ImageType,
     format: Format,
     extent: Extent3D,
@@ -2209,7 +2209,7 @@ pub const ImageCreateInfo = extern struct {
     array_layers: u32,
     samples: SampleCountFlags,
     tiling: ImageTiling,
-    usage: ImageUsageFlags,
+    usage: ImageUsageFlags align(@alignOf(Flags)),
     sharing_mode: SharingMode,
     queue_family_index_count: u32,
     p_queue_family_indices: [*]const u32,
@@ -2225,7 +2225,7 @@ pub const SubresourceLayout = extern struct {
 pub const ImageViewCreateInfo = extern struct {
     s_type: StructureType = .image_view_create_info,
     p_next: ?*const anyopaque = null,
-    flags: ImageViewCreateFlags,
+    flags: ImageViewCreateFlags align(@alignOf(Flags)),
     image: Image,
     view_type: ImageViewType,
     format: Format,
@@ -2242,7 +2242,7 @@ pub const SparseMemoryBind = extern struct {
     size: DeviceSize,
     memory: DeviceMemory,
     memory_offset: DeviceSize,
-    flags: SparseMemoryBindFlags,
+    flags: SparseMemoryBindFlags align(@alignOf(Flags)),
 };
 pub const SparseImageMemoryBind = extern struct {
     subresource: ImageSubresource,
@@ -2250,7 +2250,7 @@ pub const SparseImageMemoryBind = extern struct {
     extent: Extent3D,
     memory: DeviceMemory,
     memory_offset: DeviceSize,
-    flags: SparseMemoryBindFlags,
+    flags: SparseMemoryBindFlags align(@alignOf(Flags)),
 };
 pub const SparseBufferMemoryBindInfo = extern struct {
     buffer: Buffer,
@@ -2312,7 +2312,7 @@ pub const ImageResolve = extern struct {
 pub const ShaderModuleCreateInfo = extern struct {
     s_type: StructureType = .shader_module_create_info,
     p_next: ?*const anyopaque = null,
-    flags: ShaderModuleCreateFlags,
+    flags: ShaderModuleCreateFlags align(@alignOf(Flags)),
     code_size: usize,
     p_code: [*]const u32,
 };
@@ -2320,13 +2320,13 @@ pub const DescriptorSetLayoutBinding = extern struct {
     binding: u32,
     descriptor_type: DescriptorType,
     descriptor_count: u32,
-    stage_flags: ShaderStageFlags,
+    stage_flags: ShaderStageFlags align(@alignOf(Flags)),
     p_immutable_samplers: ?[*]const Sampler,
 };
 pub const DescriptorSetLayoutCreateInfo = extern struct {
     s_type: StructureType = .descriptor_set_layout_create_info,
     p_next: ?*const anyopaque = null,
-    flags: DescriptorSetLayoutCreateFlags,
+    flags: DescriptorSetLayoutCreateFlags align(@alignOf(Flags)),
     binding_count: u32,
     p_bindings: [*]const DescriptorSetLayoutBinding,
 };
@@ -2337,7 +2337,7 @@ pub const DescriptorPoolSize = extern struct {
 pub const DescriptorPoolCreateInfo = extern struct {
     s_type: StructureType = .descriptor_pool_create_info,
     p_next: ?*const anyopaque = null,
-    flags: DescriptorPoolCreateFlags,
+    flags: DescriptorPoolCreateFlags align(@alignOf(Flags)),
     max_sets: u32,
     pool_size_count: u32,
     p_pool_sizes: [*]const DescriptorPoolSize,
@@ -2363,7 +2363,7 @@ pub const SpecializationInfo = extern struct {
 pub const PipelineShaderStageCreateInfo = extern struct {
     s_type: StructureType = .pipeline_shader_stage_create_info,
     p_next: ?*const anyopaque = null,
-    flags: PipelineShaderStageCreateFlags,
+    flags: PipelineShaderStageCreateFlags align(@alignOf(Flags)),
     stage: ShaderStageFlags,
     module: ShaderModule,
     p_name: [*:0]const u8,
@@ -2372,7 +2372,7 @@ pub const PipelineShaderStageCreateInfo = extern struct {
 pub const ComputePipelineCreateInfo = extern struct {
     s_type: StructureType = .compute_pipeline_create_info,
     p_next: ?*const anyopaque = null,
-    flags: PipelineCreateFlags,
+    flags: PipelineCreateFlags align(@alignOf(Flags)),
     stage: PipelineShaderStageCreateInfo,
     layout: PipelineLayout,
     base_pipeline_handle: Pipeline,
@@ -2392,7 +2392,7 @@ pub const VertexInputAttributeDescription = extern struct {
 pub const PipelineVertexInputStateCreateInfo = extern struct {
     s_type: StructureType = .pipeline_vertex_input_state_create_info,
     p_next: ?*const anyopaque = null,
-    flags: PipelineVertexInputStateCreateFlags,
+    flags: PipelineVertexInputStateCreateFlags align(@alignOf(Flags)),
     vertex_binding_description_count: u32,
     p_vertex_binding_descriptions: [*]const VertexInputBindingDescription,
     vertex_attribute_description_count: u32,
@@ -2401,20 +2401,20 @@ pub const PipelineVertexInputStateCreateInfo = extern struct {
 pub const PipelineInputAssemblyStateCreateInfo = extern struct {
     s_type: StructureType = .pipeline_input_assembly_state_create_info,
     p_next: ?*const anyopaque = null,
-    flags: PipelineInputAssemblyStateCreateFlags,
+    flags: PipelineInputAssemblyStateCreateFlags align(@alignOf(Flags)),
     topology: PrimitiveTopology,
     primitive_restart_enable: Bool32,
 };
 pub const PipelineTessellationStateCreateInfo = extern struct {
     s_type: StructureType = .pipeline_tessellation_state_create_info,
     p_next: ?*const anyopaque = null,
-    flags: PipelineTessellationStateCreateFlags,
+    flags: PipelineTessellationStateCreateFlags align(@alignOf(Flags)),
     patch_control_points: u32,
 };
 pub const PipelineViewportStateCreateInfo = extern struct {
     s_type: StructureType = .pipeline_viewport_state_create_info,
     p_next: ?*const anyopaque = null,
-    flags: PipelineViewportStateCreateFlags,
+    flags: PipelineViewportStateCreateFlags align(@alignOf(Flags)),
     viewport_count: u32,
     p_viewports: ?[*]const Viewport,
     scissor_count: u32,
@@ -2423,11 +2423,11 @@ pub const PipelineViewportStateCreateInfo = extern struct {
 pub const PipelineRasterizationStateCreateInfo = extern struct {
     s_type: StructureType = .pipeline_rasterization_state_create_info,
     p_next: ?*const anyopaque = null,
-    flags: PipelineRasterizationStateCreateFlags,
+    flags: PipelineRasterizationStateCreateFlags align(@alignOf(Flags)),
     depth_clamp_enable: Bool32,
     rasterizer_discard_enable: Bool32,
     polygon_mode: PolygonMode,
-    cull_mode: CullModeFlags,
+    cull_mode: CullModeFlags align(@alignOf(Flags)),
     front_face: FrontFace,
     depth_bias_enable: Bool32,
     depth_bias_constant_factor: f32,
@@ -2438,7 +2438,7 @@ pub const PipelineRasterizationStateCreateInfo = extern struct {
 pub const PipelineMultisampleStateCreateInfo = extern struct {
     s_type: StructureType = .pipeline_multisample_state_create_info,
     p_next: ?*const anyopaque = null,
-    flags: PipelineMultisampleStateCreateFlags,
+    flags: PipelineMultisampleStateCreateFlags align(@alignOf(Flags)),
     rasterization_samples: SampleCountFlags,
     sample_shading_enable: Bool32,
     min_sample_shading: f32,
@@ -2454,12 +2454,12 @@ pub const PipelineColorBlendAttachmentState = extern struct {
     src_alpha_blend_factor: BlendFactor,
     dst_alpha_blend_factor: BlendFactor,
     alpha_blend_op: BlendOp,
-    color_write_mask: ColorComponentFlags,
+    color_write_mask: ColorComponentFlags align(@alignOf(Flags)),
 };
 pub const PipelineColorBlendStateCreateInfo = extern struct {
     s_type: StructureType = .pipeline_color_blend_state_create_info,
     p_next: ?*const anyopaque = null,
-    flags: PipelineColorBlendStateCreateFlags,
+    flags: PipelineColorBlendStateCreateFlags align(@alignOf(Flags)),
     logic_op_enable: Bool32,
     logic_op: LogicOp,
     attachment_count: u32,
@@ -2469,7 +2469,7 @@ pub const PipelineColorBlendStateCreateInfo = extern struct {
 pub const PipelineDynamicStateCreateInfo = extern struct {
     s_type: StructureType = .pipeline_dynamic_state_create_info,
     p_next: ?*const anyopaque = null,
-    flags: PipelineDynamicStateCreateFlags,
+    flags: PipelineDynamicStateCreateFlags align(@alignOf(Flags)),
     dynamic_state_count: u32,
     p_dynamic_states: [*]const DynamicState,
 };
@@ -2485,7 +2485,7 @@ pub const StencilOpState = extern struct {
 pub const PipelineDepthStencilStateCreateInfo = extern struct {
     s_type: StructureType = .pipeline_depth_stencil_state_create_info,
     p_next: ?*const anyopaque = null,
-    flags: PipelineDepthStencilStateCreateFlags,
+    flags: PipelineDepthStencilStateCreateFlags align(@alignOf(Flags)),
     depth_test_enable: Bool32,
     depth_write_enable: Bool32,
     depth_compare_op: CompareOp,
@@ -2499,7 +2499,7 @@ pub const PipelineDepthStencilStateCreateInfo = extern struct {
 pub const GraphicsPipelineCreateInfo = extern struct {
     s_type: StructureType = .graphics_pipeline_create_info,
     p_next: ?*const anyopaque = null,
-    flags: PipelineCreateFlags,
+    flags: PipelineCreateFlags align(@alignOf(Flags)),
     stage_count: u32,
     p_stages: [*]const PipelineShaderStageCreateInfo,
     p_vertex_input_state: ?*const PipelineVertexInputStateCreateInfo,
@@ -2520,7 +2520,7 @@ pub const GraphicsPipelineCreateInfo = extern struct {
 pub const PipelineCacheCreateInfo = extern struct {
     s_type: StructureType = .pipeline_cache_create_info,
     p_next: ?*const anyopaque = null,
-    flags: PipelineCacheCreateFlags,
+    flags: PipelineCacheCreateFlags align(@alignOf(Flags)),
     initial_data_size: usize,
     p_initial_data: *const anyopaque,
 };
@@ -2532,14 +2532,14 @@ pub const PipelineCacheHeaderVersionOne = extern struct {
     pipeline_cache_uuid: [UUID_SIZE]u8,
 };
 pub const PushConstantRange = extern struct {
-    stage_flags: ShaderStageFlags,
+    stage_flags: ShaderStageFlags align(@alignOf(Flags)),
     offset: u32,
     size: u32,
 };
 pub const PipelineLayoutCreateInfo = extern struct {
     s_type: StructureType = .pipeline_layout_create_info,
     p_next: ?*const anyopaque = null,
-    flags: PipelineLayoutCreateFlags,
+    flags: PipelineLayoutCreateFlags align(@alignOf(Flags)),
     set_layout_count: u32,
     p_set_layouts: [*]const DescriptorSetLayout,
     push_constant_range_count: u32,
@@ -2548,7 +2548,7 @@ pub const PipelineLayoutCreateInfo = extern struct {
 pub const SamplerCreateInfo = extern struct {
     s_type: StructureType = .sampler_create_info,
     p_next: ?*const anyopaque = null,
-    flags: SamplerCreateFlags,
+    flags: SamplerCreateFlags align(@alignOf(Flags)),
     mag_filter: Filter,
     min_filter: Filter,
     mipmap_mode: SamplerMipmapMode,
@@ -2568,7 +2568,7 @@ pub const SamplerCreateInfo = extern struct {
 pub const CommandPoolCreateInfo = extern struct {
     s_type: StructureType = .command_pool_create_info,
     p_next: ?*const anyopaque = null,
-    flags: CommandPoolCreateFlags,
+    flags: CommandPoolCreateFlags align(@alignOf(Flags)),
     queue_family_index: u32,
 };
 pub const CommandBufferAllocateInfo = extern struct {
@@ -2585,13 +2585,13 @@ pub const CommandBufferInheritanceInfo = extern struct {
     subpass: u32,
     framebuffer: Framebuffer,
     occlusion_query_enable: Bool32,
-    query_flags: QueryControlFlags,
-    pipeline_statistics: QueryPipelineStatisticFlags,
+    query_flags: QueryControlFlags align(@alignOf(Flags)),
+    pipeline_statistics: QueryPipelineStatisticFlags align(@alignOf(Flags)),
 };
 pub const CommandBufferBeginInfo = extern struct {
     s_type: StructureType = .command_buffer_begin_info,
     p_next: ?*const anyopaque = null,
-    flags: CommandBufferUsageFlags,
+    flags: CommandBufferUsageFlags align(@alignOf(Flags)),
     p_inheritance_info: ?*const CommandBufferInheritanceInfo,
 };
 pub const RenderPassBeginInfo = extern struct {
@@ -2617,12 +2617,12 @@ pub const ClearValue = extern union {
     depth_stencil: ClearDepthStencilValue,
 };
 pub const ClearAttachment = extern struct {
-    aspect_mask: ImageAspectFlags,
+    aspect_mask: ImageAspectFlags align(@alignOf(Flags)),
     color_attachment: u32,
     clear_value: ClearValue,
 };
 pub const AttachmentDescription = extern struct {
-    flags: AttachmentDescriptionFlags,
+    flags: AttachmentDescriptionFlags align(@alignOf(Flags)),
     format: Format,
     samples: SampleCountFlags,
     load_op: AttachmentLoadOp,
@@ -2637,7 +2637,7 @@ pub const AttachmentReference = extern struct {
     layout: ImageLayout,
 };
 pub const SubpassDescription = extern struct {
-    flags: SubpassDescriptionFlags,
+    flags: SubpassDescriptionFlags align(@alignOf(Flags)),
     pipeline_bind_point: PipelineBindPoint,
     input_attachment_count: u32,
     p_input_attachments: [*]const AttachmentReference,
@@ -2651,16 +2651,16 @@ pub const SubpassDescription = extern struct {
 pub const SubpassDependency = extern struct {
     src_subpass: u32,
     dst_subpass: u32,
-    src_stage_mask: PipelineStageFlags,
-    dst_stage_mask: PipelineStageFlags,
-    src_access_mask: AccessFlags,
-    dst_access_mask: AccessFlags,
-    dependency_flags: DependencyFlags,
+    src_stage_mask: PipelineStageFlags align(@alignOf(Flags)),
+    dst_stage_mask: PipelineStageFlags align(@alignOf(Flags)),
+    src_access_mask: AccessFlags align(@alignOf(Flags)),
+    dst_access_mask: AccessFlags align(@alignOf(Flags)),
+    dependency_flags: DependencyFlags align(@alignOf(Flags)),
 };
 pub const RenderPassCreateInfo = extern struct {
     s_type: StructureType = .render_pass_create_info,
     p_next: ?*const anyopaque = null,
-    flags: RenderPassCreateFlags,
+    flags: RenderPassCreateFlags align(@alignOf(Flags)),
     attachment_count: u32,
     p_attachments: [*]const AttachmentDescription,
     subpass_count: u32,
@@ -2671,12 +2671,12 @@ pub const RenderPassCreateInfo = extern struct {
 pub const EventCreateInfo = extern struct {
     s_type: StructureType = .event_create_info,
     p_next: ?*const anyopaque = null,
-    flags: EventCreateFlags,
+    flags: EventCreateFlags align(@alignOf(Flags)),
 };
 pub const FenceCreateInfo = extern struct {
     s_type: StructureType = .fence_create_info,
     p_next: ?*const anyopaque = null,
-    flags: FenceCreateFlags,
+    flags: FenceCreateFlags align(@alignOf(Flags)),
 };
 pub const PhysicalDeviceFeatures = extern struct {
     robust_buffer_access: Bool32 = FALSE,
@@ -2823,16 +2823,16 @@ pub const PhysicalDeviceLimits = extern struct {
     max_framebuffer_width: u32,
     max_framebuffer_height: u32,
     max_framebuffer_layers: u32,
-    framebuffer_color_sample_counts: SampleCountFlags,
-    framebuffer_depth_sample_counts: SampleCountFlags,
-    framebuffer_stencil_sample_counts: SampleCountFlags,
-    framebuffer_no_attachments_sample_counts: SampleCountFlags,
+    framebuffer_color_sample_counts: SampleCountFlags align(@alignOf(Flags)),
+    framebuffer_depth_sample_counts: SampleCountFlags align(@alignOf(Flags)),
+    framebuffer_stencil_sample_counts: SampleCountFlags align(@alignOf(Flags)),
+    framebuffer_no_attachments_sample_counts: SampleCountFlags align(@alignOf(Flags)),
     max_color_attachments: u32,
-    sampled_image_color_sample_counts: SampleCountFlags,
-    sampled_image_integer_sample_counts: SampleCountFlags,
-    sampled_image_depth_sample_counts: SampleCountFlags,
-    sampled_image_stencil_sample_counts: SampleCountFlags,
-    storage_image_sample_counts: SampleCountFlags,
+    sampled_image_color_sample_counts: SampleCountFlags align(@alignOf(Flags)),
+    sampled_image_integer_sample_counts: SampleCountFlags align(@alignOf(Flags)),
+    sampled_image_depth_sample_counts: SampleCountFlags align(@alignOf(Flags)),
+    sampled_image_stencil_sample_counts: SampleCountFlags align(@alignOf(Flags)),
+    storage_image_sample_counts: SampleCountFlags align(@alignOf(Flags)),
     max_sample_mask_words: u32,
     timestamp_compute_and_graphics: Bool32,
     timestamp_period: f32,
@@ -2853,20 +2853,20 @@ pub const PhysicalDeviceLimits = extern struct {
 pub const SemaphoreCreateInfo = extern struct {
     s_type: StructureType = .semaphore_create_info,
     p_next: ?*const anyopaque = null,
-    flags: SemaphoreCreateFlags,
+    flags: SemaphoreCreateFlags align(@alignOf(Flags)),
 };
 pub const QueryPoolCreateInfo = extern struct {
     s_type: StructureType = .query_pool_create_info,
     p_next: ?*const anyopaque = null,
-    flags: QueryPoolCreateFlags,
+    flags: QueryPoolCreateFlags align(@alignOf(Flags)),
     query_type: QueryType,
     query_count: u32,
-    pipeline_statistics: QueryPipelineStatisticFlags,
+    pipeline_statistics: QueryPipelineStatisticFlags align(@alignOf(Flags)),
 };
 pub const FramebufferCreateInfo = extern struct {
     s_type: StructureType = .framebuffer_create_info,
     p_next: ?*const anyopaque = null,
-    flags: FramebufferCreateFlags,
+    flags: FramebufferCreateFlags align(@alignOf(Flags)),
     render_pass: RenderPass,
     attachment_count: u32,
     p_attachments: [*]const ImageView,
@@ -2917,7 +2917,7 @@ pub const DisplayPropertiesKHR = extern struct {
     display_name: [*:0]const u8,
     physical_dimensions: Extent2D,
     physical_resolution: Extent2D,
-    supported_transforms: SurfaceTransformFlagsKHR,
+    supported_transforms: SurfaceTransformFlagsKHR align(@alignOf(Flags)),
     plane_reorder_possible: Bool32,
     persistent_content: Bool32,
 };
@@ -2936,11 +2936,11 @@ pub const DisplayModePropertiesKHR = extern struct {
 pub const DisplayModeCreateInfoKHR = extern struct {
     s_type: StructureType = .display_mode_create_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: DisplayModeCreateFlagsKHR,
+    flags: DisplayModeCreateFlagsKHR align(@alignOf(Flags)),
     parameters: DisplayModeParametersKHR,
 };
 pub const DisplayPlaneCapabilitiesKHR = extern struct {
-    supported_alpha: DisplayPlaneAlphaFlagsKHR,
+    supported_alpha: DisplayPlaneAlphaFlagsKHR align(@alignOf(Flags)),
     min_src_position: Offset2D,
     max_src_position: Offset2D,
     min_src_extent: Extent2D,
@@ -2953,7 +2953,7 @@ pub const DisplayPlaneCapabilitiesKHR = extern struct {
 pub const DisplaySurfaceCreateInfoKHR = extern struct {
     s_type: StructureType = .display_surface_create_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: DisplaySurfaceCreateFlagsKHR,
+    flags: DisplaySurfaceCreateFlagsKHR align(@alignOf(Flags)),
     display_mode: DisplayModeKHR,
     plane_index: u32,
     plane_stack_index: u32,
@@ -2976,74 +2976,74 @@ pub const SurfaceCapabilitiesKHR = extern struct {
     min_image_extent: Extent2D,
     max_image_extent: Extent2D,
     max_image_array_layers: u32,
-    supported_transforms: SurfaceTransformFlagsKHR,
+    supported_transforms: SurfaceTransformFlagsKHR align(@alignOf(Flags)),
     current_transform: SurfaceTransformFlagsKHR,
-    supported_composite_alpha: CompositeAlphaFlagsKHR,
-    supported_usage_flags: ImageUsageFlags,
+    supported_composite_alpha: CompositeAlphaFlagsKHR align(@alignOf(Flags)),
+    supported_usage_flags: ImageUsageFlags align(@alignOf(Flags)),
 };
 pub const AndroidSurfaceCreateInfoKHR = extern struct {
     s_type: StructureType = .android_surface_create_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: AndroidSurfaceCreateFlagsKHR,
+    flags: AndroidSurfaceCreateFlagsKHR align(@alignOf(Flags)),
     window: *ANativeWindow,
 };
 pub const ViSurfaceCreateInfoNN = extern struct {
     s_type: StructureType = .vi_surface_create_info_nn,
     p_next: ?*const anyopaque = null,
-    flags: ViSurfaceCreateFlagsNN,
+    flags: ViSurfaceCreateFlagsNN align(@alignOf(Flags)),
     window: *anyopaque,
 };
 pub const WaylandSurfaceCreateInfoKHR = extern struct {
     s_type: StructureType = .wayland_surface_create_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: WaylandSurfaceCreateFlagsKHR,
+    flags: WaylandSurfaceCreateFlagsKHR align(@alignOf(Flags)),
     display: *wl_display,
     surface: *wl_surface,
 };
 pub const Win32SurfaceCreateInfoKHR = extern struct {
     s_type: StructureType = .win32_surface_create_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: Win32SurfaceCreateFlagsKHR,
+    flags: Win32SurfaceCreateFlagsKHR align(@alignOf(Flags)),
     hinstance: HINSTANCE,
     hwnd: HWND,
 };
 pub const XlibSurfaceCreateInfoKHR = extern struct {
     s_type: StructureType = .xlib_surface_create_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: XlibSurfaceCreateFlagsKHR,
+    flags: XlibSurfaceCreateFlagsKHR align(@alignOf(Flags)),
     dpy: *Display,
     window: Window,
 };
 pub const XcbSurfaceCreateInfoKHR = extern struct {
     s_type: StructureType = .xcb_surface_create_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: XcbSurfaceCreateFlagsKHR,
+    flags: XcbSurfaceCreateFlagsKHR align(@alignOf(Flags)),
     connection: *xcb_connection_t,
     window: xcb_window_t,
 };
 pub const DirectFBSurfaceCreateInfoEXT = extern struct {
     s_type: StructureType = .directfb_surface_create_info_ext,
     p_next: ?*const anyopaque = null,
-    flags: DirectFBSurfaceCreateFlagsEXT,
+    flags: DirectFBSurfaceCreateFlagsEXT align(@alignOf(Flags)),
     dfb: *IDirectFB,
     surface: *IDirectFBSurface,
 };
 pub const ImagePipeSurfaceCreateInfoFUCHSIA = extern struct {
     s_type: StructureType = .imagepipe_surface_create_info_fuchsia,
     p_next: ?*const anyopaque = null,
-    flags: ImagePipeSurfaceCreateFlagsFUCHSIA,
+    flags: ImagePipeSurfaceCreateFlagsFUCHSIA align(@alignOf(Flags)),
     image_pipe_handle: zx_handle_t,
 };
 pub const StreamDescriptorSurfaceCreateInfoGGP = extern struct {
     s_type: StructureType = .stream_descriptor_surface_create_info_ggp,
     p_next: ?*const anyopaque = null,
-    flags: StreamDescriptorSurfaceCreateFlagsGGP,
+    flags: StreamDescriptorSurfaceCreateFlagsGGP align(@alignOf(Flags)),
     stream_descriptor: GgpStreamDescriptor,
 };
 pub const ScreenSurfaceCreateInfoQNX = extern struct {
     s_type: StructureType = .screen_surface_create_info_qnx,
     p_next: ?*const anyopaque = null,
-    flags: ScreenSurfaceCreateFlagsQNX,
+    flags: ScreenSurfaceCreateFlagsQNX align(@alignOf(Flags)),
     context: *_screen_context,
     window: *_screen_window,
 };
@@ -3054,14 +3054,14 @@ pub const SurfaceFormatKHR = extern struct {
 pub const SwapchainCreateInfoKHR = extern struct {
     s_type: StructureType = .swapchain_create_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: SwapchainCreateFlagsKHR,
+    flags: SwapchainCreateFlagsKHR align(@alignOf(Flags)),
     surface: SurfaceKHR,
     min_image_count: u32,
     image_format: Format,
     image_color_space: ColorSpaceKHR,
     image_extent: Extent2D,
     image_array_layers: u32,
-    image_usage: ImageUsageFlags,
+    image_usage: ImageUsageFlags align(@alignOf(Flags)),
     image_sharing_mode: SharingMode,
     queue_family_index_count: u32,
     p_queue_family_indices: [*]const u32,
@@ -3084,7 +3084,7 @@ pub const PresentInfoKHR = extern struct {
 pub const DebugReportCallbackCreateInfoEXT = extern struct {
     s_type: StructureType = .debug_report_callback_create_info_ext,
     p_next: ?*const anyopaque = null,
-    flags: DebugReportFlagsEXT,
+    flags: DebugReportFlagsEXT align(@alignOf(Flags)),
     pfn_callback: PfnDebugReportCallbackEXT,
     p_user_data: ?*anyopaque,
 };
@@ -3147,24 +3147,24 @@ pub const DedicatedAllocationMemoryAllocateInfoNV = extern struct {
 };
 pub const ExternalImageFormatPropertiesNV = extern struct {
     image_format_properties: ImageFormatProperties,
-    external_memory_features: ExternalMemoryFeatureFlagsNV,
-    export_from_imported_handle_types: ExternalMemoryHandleTypeFlagsNV,
-    compatible_handle_types: ExternalMemoryHandleTypeFlagsNV,
+    external_memory_features: ExternalMemoryFeatureFlagsNV align(@alignOf(Flags)),
+    export_from_imported_handle_types: ExternalMemoryHandleTypeFlagsNV align(@alignOf(Flags)),
+    compatible_handle_types: ExternalMemoryHandleTypeFlagsNV align(@alignOf(Flags)),
 };
 pub const ExternalMemoryImageCreateInfoNV = extern struct {
     s_type: StructureType = .external_memory_image_create_info_nv,
     p_next: ?*const anyopaque = null,
-    handle_types: ExternalMemoryHandleTypeFlagsNV,
+    handle_types: ExternalMemoryHandleTypeFlagsNV align(@alignOf(Flags)),
 };
 pub const ExportMemoryAllocateInfoNV = extern struct {
     s_type: StructureType = .export_memory_allocate_info_nv,
     p_next: ?*const anyopaque = null,
-    handle_types: ExternalMemoryHandleTypeFlagsNV,
+    handle_types: ExternalMemoryHandleTypeFlagsNV align(@alignOf(Flags)),
 };
 pub const ImportMemoryWin32HandleInfoNV = extern struct {
     s_type: StructureType = .import_memory_win32_handle_info_nv,
     p_next: ?*const anyopaque = null,
-    handle_type: ExternalMemoryHandleTypeFlagsNV,
+    handle_type: ExternalMemoryHandleTypeFlagsNV align(@alignOf(Flags)),
     handle: HANDLE,
 };
 pub const ExportMemoryWin32HandleInfoNV = extern struct {
@@ -3198,7 +3198,7 @@ pub const DevicePrivateDataCreateInfoEXT = DevicePrivateDataCreateInfo;
 pub const PrivateDataSlotCreateInfo = extern struct {
     s_type: StructureType = .private_data_slot_create_info,
     p_next: ?*const anyopaque = null,
-    flags: PrivateDataSlotCreateFlags,
+    flags: PrivateDataSlotCreateFlags align(@alignOf(Flags)),
 };
 pub const PrivateDataSlotCreateInfoEXT = PrivateDataSlotCreateInfo;
 pub const PhysicalDevicePrivateDataFeatures = extern struct {
@@ -3270,10 +3270,10 @@ pub const IndirectCommandsLayoutTokenNV = extern struct {
     vertex_binding_unit: u32,
     vertex_dynamic_stride: Bool32,
     pushconstant_pipeline_layout: PipelineLayout,
-    pushconstant_shader_stage_flags: ShaderStageFlags,
+    pushconstant_shader_stage_flags: ShaderStageFlags align(@alignOf(Flags)),
     pushconstant_offset: u32,
     pushconstant_size: u32,
-    indirect_state_flags: IndirectStateFlagsNV,
+    indirect_state_flags: IndirectStateFlagsNV align(@alignOf(Flags)),
     index_type_count: u32,
     p_index_types: [*]const IndexType,
     p_index_type_values: [*]const u32,
@@ -3281,7 +3281,7 @@ pub const IndirectCommandsLayoutTokenNV = extern struct {
 pub const IndirectCommandsLayoutCreateInfoNV = extern struct {
     s_type: StructureType = .indirect_commands_layout_create_info_nv,
     p_next: ?*const anyopaque = null,
-    flags: IndirectCommandsLayoutUsageFlagsNV,
+    flags: IndirectCommandsLayoutUsageFlagsNV align(@alignOf(Flags)),
     pipeline_bind_point: PipelineBindPoint,
     token_count: u32,
     p_tokens: [*]const IndirectCommandsLayoutTokenNV,
@@ -3343,8 +3343,8 @@ pub const PhysicalDeviceImageFormatInfo2 = extern struct {
     format: Format,
     @"type": ImageType,
     tiling: ImageTiling,
-    usage: ImageUsageFlags,
-    flags: ImageCreateFlags,
+    usage: ImageUsageFlags align(@alignOf(Flags)),
+    flags: ImageCreateFlags align(@alignOf(Flags)),
 };
 pub const PhysicalDeviceImageFormatInfo2KHR = PhysicalDeviceImageFormatInfo2;
 pub const QueueFamilyProperties2 = extern struct {
@@ -3371,7 +3371,7 @@ pub const PhysicalDeviceSparseImageFormatInfo2 = extern struct {
     format: Format,
     @"type": ImageType,
     samples: SampleCountFlags,
-    usage: ImageUsageFlags,
+    usage: ImageUsageFlags align(@alignOf(Flags)),
     tiling: ImageTiling,
 };
 pub const PhysicalDeviceSparseImageFormatInfo2KHR = PhysicalDeviceSparseImageFormatInfo2;
@@ -3421,9 +3421,9 @@ pub const PhysicalDeviceVariablePointersFeaturesKHR = PhysicalDeviceVariablePoin
 pub const PhysicalDeviceVariablePointerFeaturesKHR = PhysicalDeviceVariablePointersFeatures;
 pub const PhysicalDeviceVariablePointerFeatures = PhysicalDeviceVariablePointersFeatures;
 pub const ExternalMemoryProperties = extern struct {
-    external_memory_features: ExternalMemoryFeatureFlags,
-    export_from_imported_handle_types: ExternalMemoryHandleTypeFlags,
-    compatible_handle_types: ExternalMemoryHandleTypeFlags,
+    external_memory_features: ExternalMemoryFeatureFlags align(@alignOf(Flags)),
+    export_from_imported_handle_types: ExternalMemoryHandleTypeFlags align(@alignOf(Flags)),
+    compatible_handle_types: ExternalMemoryHandleTypeFlags align(@alignOf(Flags)),
 };
 pub const ExternalMemoryPropertiesKHR = ExternalMemoryProperties;
 pub const PhysicalDeviceExternalImageFormatInfo = extern struct {
@@ -3441,8 +3441,8 @@ pub const ExternalImageFormatPropertiesKHR = ExternalImageFormatProperties;
 pub const PhysicalDeviceExternalBufferInfo = extern struct {
     s_type: StructureType = .physical_device_external_buffer_info,
     p_next: ?*const anyopaque = null,
-    flags: BufferCreateFlags,
-    usage: BufferUsageFlags,
+    flags: BufferCreateFlags align(@alignOf(Flags)),
+    usage: BufferUsageFlags align(@alignOf(Flags)),
     handle_type: ExternalMemoryHandleTypeFlags,
 };
 pub const PhysicalDeviceExternalBufferInfoKHR = PhysicalDeviceExternalBufferInfo;
@@ -3465,19 +3465,19 @@ pub const PhysicalDeviceIDPropertiesKHR = PhysicalDeviceIDProperties;
 pub const ExternalMemoryImageCreateInfo = extern struct {
     s_type: StructureType = .external_memory_image_create_info,
     p_next: ?*const anyopaque = null,
-    handle_types: ExternalMemoryHandleTypeFlags,
+    handle_types: ExternalMemoryHandleTypeFlags align(@alignOf(Flags)),
 };
 pub const ExternalMemoryImageCreateInfoKHR = ExternalMemoryImageCreateInfo;
 pub const ExternalMemoryBufferCreateInfo = extern struct {
     s_type: StructureType = .external_memory_buffer_create_info,
     p_next: ?*const anyopaque = null,
-    handle_types: ExternalMemoryHandleTypeFlags,
+    handle_types: ExternalMemoryHandleTypeFlags align(@alignOf(Flags)),
 };
 pub const ExternalMemoryBufferCreateInfoKHR = ExternalMemoryBufferCreateInfo;
 pub const ExportMemoryAllocateInfo = extern struct {
     s_type: StructureType = .export_memory_allocate_info,
     p_next: ?*const anyopaque = null,
-    handle_types: ExternalMemoryHandleTypeFlags,
+    handle_types: ExternalMemoryHandleTypeFlags align(@alignOf(Flags)),
 };
 pub const ExportMemoryAllocateInfoKHR = ExportMemoryAllocateInfo;
 pub const ImportMemoryWin32HandleInfoKHR = extern struct {
@@ -3559,22 +3559,22 @@ pub const PhysicalDeviceExternalSemaphoreInfoKHR = PhysicalDeviceExternalSemapho
 pub const ExternalSemaphoreProperties = extern struct {
     s_type: StructureType = .external_semaphore_properties,
     p_next: ?*anyopaque = null,
-    export_from_imported_handle_types: ExternalSemaphoreHandleTypeFlags,
-    compatible_handle_types: ExternalSemaphoreHandleTypeFlags,
-    external_semaphore_features: ExternalSemaphoreFeatureFlags,
+    export_from_imported_handle_types: ExternalSemaphoreHandleTypeFlags align(@alignOf(Flags)),
+    compatible_handle_types: ExternalSemaphoreHandleTypeFlags align(@alignOf(Flags)),
+    external_semaphore_features: ExternalSemaphoreFeatureFlags align(@alignOf(Flags)),
 };
 pub const ExternalSemaphorePropertiesKHR = ExternalSemaphoreProperties;
 pub const ExportSemaphoreCreateInfo = extern struct {
     s_type: StructureType = .export_semaphore_create_info,
     p_next: ?*const anyopaque = null,
-    handle_types: ExternalSemaphoreHandleTypeFlags,
+    handle_types: ExternalSemaphoreHandleTypeFlags align(@alignOf(Flags)),
 };
 pub const ExportSemaphoreCreateInfoKHR = ExportSemaphoreCreateInfo;
 pub const ImportSemaphoreWin32HandleInfoKHR = extern struct {
     s_type: StructureType = .import_semaphore_win32_handle_info_khr,
     p_next: ?*const anyopaque = null,
     semaphore: Semaphore,
-    flags: SemaphoreImportFlags,
+    flags: SemaphoreImportFlags align(@alignOf(Flags)),
     handle_type: ExternalSemaphoreHandleTypeFlags,
     handle: HANDLE,
     name: LPCWSTR,
@@ -3604,7 +3604,7 @@ pub const ImportSemaphoreFdInfoKHR = extern struct {
     s_type: StructureType = .import_semaphore_fd_info_khr,
     p_next: ?*const anyopaque = null,
     semaphore: Semaphore,
-    flags: SemaphoreImportFlags,
+    flags: SemaphoreImportFlags align(@alignOf(Flags)),
     handle_type: ExternalSemaphoreHandleTypeFlags,
     fd: c_int,
 };
@@ -3618,7 +3618,7 @@ pub const ImportSemaphoreZirconHandleInfoFUCHSIA = extern struct {
     s_type: StructureType = .import_semaphore_zircon_handle_info_fuchsia,
     p_next: ?*const anyopaque = null,
     semaphore: Semaphore,
-    flags: SemaphoreImportFlags,
+    flags: SemaphoreImportFlags align(@alignOf(Flags)),
     handle_type: ExternalSemaphoreHandleTypeFlags,
     zircon_handle: zx_handle_t,
 };
@@ -3637,22 +3637,22 @@ pub const PhysicalDeviceExternalFenceInfoKHR = PhysicalDeviceExternalFenceInfo;
 pub const ExternalFenceProperties = extern struct {
     s_type: StructureType = .external_fence_properties,
     p_next: ?*anyopaque = null,
-    export_from_imported_handle_types: ExternalFenceHandleTypeFlags,
-    compatible_handle_types: ExternalFenceHandleTypeFlags,
-    external_fence_features: ExternalFenceFeatureFlags,
+    export_from_imported_handle_types: ExternalFenceHandleTypeFlags align(@alignOf(Flags)),
+    compatible_handle_types: ExternalFenceHandleTypeFlags align(@alignOf(Flags)),
+    external_fence_features: ExternalFenceFeatureFlags align(@alignOf(Flags)),
 };
 pub const ExternalFencePropertiesKHR = ExternalFenceProperties;
 pub const ExportFenceCreateInfo = extern struct {
     s_type: StructureType = .export_fence_create_info,
     p_next: ?*const anyopaque = null,
-    handle_types: ExternalFenceHandleTypeFlags,
+    handle_types: ExternalFenceHandleTypeFlags align(@alignOf(Flags)),
 };
 pub const ExportFenceCreateInfoKHR = ExportFenceCreateInfo;
 pub const ImportFenceWin32HandleInfoKHR = extern struct {
     s_type: StructureType = .import_fence_win32_handle_info_khr,
     p_next: ?*const anyopaque = null,
     fence: Fence,
-    flags: FenceImportFlags,
+    flags: FenceImportFlags align(@alignOf(Flags)),
     handle_type: ExternalFenceHandleTypeFlags,
     handle: HANDLE,
     name: LPCWSTR,
@@ -3674,7 +3674,7 @@ pub const ImportFenceFdInfoKHR = extern struct {
     s_type: StructureType = .import_fence_fd_info_khr,
     p_next: ?*const anyopaque = null,
     fence: Fence,
-    flags: FenceImportFlags,
+    flags: FenceImportFlags align(@alignOf(Flags)),
     handle_type: ExternalFenceHandleTypeFlags,
     fd: c_int,
 };
@@ -3719,11 +3719,11 @@ pub const SurfaceCapabilities2EXT = extern struct {
     min_image_extent: Extent2D,
     max_image_extent: Extent2D,
     max_image_array_layers: u32,
-    supported_transforms: SurfaceTransformFlagsKHR,
+    supported_transforms: SurfaceTransformFlagsKHR align(@alignOf(Flags)),
     current_transform: SurfaceTransformFlagsKHR,
-    supported_composite_alpha: CompositeAlphaFlagsKHR,
-    supported_usage_flags: ImageUsageFlags,
-    supported_surface_counters: SurfaceCounterFlagsEXT,
+    supported_composite_alpha: CompositeAlphaFlagsKHR align(@alignOf(Flags)),
+    supported_usage_flags: ImageUsageFlags align(@alignOf(Flags)),
+    supported_surface_counters: SurfaceCounterFlagsEXT align(@alignOf(Flags)),
 };
 pub const DisplayPowerInfoEXT = extern struct {
     s_type: StructureType = .display_power_info_ext,
@@ -3743,7 +3743,7 @@ pub const DisplayEventInfoEXT = extern struct {
 pub const SwapchainCounterCreateInfoEXT = extern struct {
     s_type: StructureType = .swapchain_counter_create_info_ext,
     p_next: ?*const anyopaque = null,
-    surface_counters: SurfaceCounterFlagsEXT,
+    surface_counters: SurfaceCounterFlagsEXT align(@alignOf(Flags)),
 };
 pub const PhysicalDeviceGroupProperties = extern struct {
     s_type: StructureType = .physical_device_group_properties,
@@ -3756,7 +3756,7 @@ pub const PhysicalDeviceGroupPropertiesKHR = PhysicalDeviceGroupProperties;
 pub const MemoryAllocateFlagsInfo = extern struct {
     s_type: StructureType = .memory_allocate_flags_info,
     p_next: ?*const anyopaque = null,
-    flags: MemoryAllocateFlags,
+    flags: MemoryAllocateFlags align(@alignOf(Flags)),
     device_mask: u32,
 };
 pub const MemoryAllocateFlagsInfoKHR = MemoryAllocateFlagsInfo;
@@ -3828,7 +3828,7 @@ pub const DeviceGroupPresentCapabilitiesKHR = extern struct {
     s_type: StructureType = .device_group_present_capabilities_khr,
     p_next: ?*anyopaque = null,
     present_mask: [MAX_DEVICE_GROUP_SIZE]u32,
-    modes: DeviceGroupPresentModeFlagsKHR,
+    modes: DeviceGroupPresentModeFlagsKHR align(@alignOf(Flags)),
 };
 pub const ImageSwapchainCreateInfoKHR = extern struct {
     s_type: StructureType = .image_swapchain_create_info_khr,
@@ -3867,7 +3867,7 @@ pub const DeviceGroupDeviceCreateInfoKHR = DeviceGroupDeviceCreateInfo;
 pub const DeviceGroupSwapchainCreateInfoKHR = extern struct {
     s_type: StructureType = .device_group_swapchain_create_info_khr,
     p_next: ?*const anyopaque = null,
-    modes: DeviceGroupPresentModeFlagsKHR,
+    modes: DeviceGroupPresentModeFlagsKHR align(@alignOf(Flags)),
 };
 pub const DescriptorUpdateTemplateEntry = extern struct {
     dst_binding: u32,
@@ -3881,7 +3881,7 @@ pub const DescriptorUpdateTemplateEntryKHR = DescriptorUpdateTemplateEntry;
 pub const DescriptorUpdateTemplateCreateInfo = extern struct {
     s_type: StructureType = .descriptor_update_template_create_info,
     p_next: ?*const anyopaque = null,
-    flags: DescriptorUpdateTemplateCreateFlags,
+    flags: DescriptorUpdateTemplateCreateFlags align(@alignOf(Flags)),
     descriptor_update_entry_count: u32,
     p_descriptor_update_entries: [*]const DescriptorUpdateTemplateEntry,
     template_type: DescriptorUpdateTemplateType,
@@ -3956,19 +3956,19 @@ pub const PresentTimeGOOGLE = extern struct {
 pub const IOSSurfaceCreateInfoMVK = extern struct {
     s_type: StructureType = .ios_surface_create_info_mvk,
     p_next: ?*const anyopaque = null,
-    flags: IOSSurfaceCreateFlagsMVK,
+    flags: IOSSurfaceCreateFlagsMVK align(@alignOf(Flags)),
     p_view: *const anyopaque,
 };
 pub const MacOSSurfaceCreateInfoMVK = extern struct {
     s_type: StructureType = .macos_surface_create_info_mvk,
     p_next: ?*const anyopaque = null,
-    flags: MacOSSurfaceCreateFlagsMVK,
+    flags: MacOSSurfaceCreateFlagsMVK align(@alignOf(Flags)),
     p_view: *const anyopaque,
 };
 pub const MetalSurfaceCreateInfoEXT = extern struct {
     s_type: StructureType = .metal_surface_create_info_ext,
     p_next: ?*const anyopaque = null,
-    flags: MetalSurfaceCreateFlagsEXT,
+    flags: MetalSurfaceCreateFlagsEXT align(@alignOf(Flags)),
     p_layer: *const CAMetalLayer,
 };
 pub const ViewportWScalingNV = extern struct {
@@ -3991,7 +3991,7 @@ pub const ViewportSwizzleNV = extern struct {
 pub const PipelineViewportSwizzleStateCreateInfoNV = extern struct {
     s_type: StructureType = .pipeline_viewport_swizzle_state_create_info_nv,
     p_next: ?*const anyopaque = null,
-    flags: PipelineViewportSwizzleStateCreateFlagsNV,
+    flags: PipelineViewportSwizzleStateCreateFlagsNV align(@alignOf(Flags)),
     viewport_count: u32,
     p_viewport_swizzles: [*]const ViewportSwizzleNV,
 };
@@ -4003,7 +4003,7 @@ pub const PhysicalDeviceDiscardRectanglePropertiesEXT = extern struct {
 pub const PipelineDiscardRectangleStateCreateInfoEXT = extern struct {
     s_type: StructureType = .pipeline_discard_rectangle_state_create_info_ext,
     p_next: ?*const anyopaque = null,
-    flags: PipelineDiscardRectangleStateCreateFlagsEXT,
+    flags: PipelineDiscardRectangleStateCreateFlagsEXT align(@alignOf(Flags)),
     discard_rectangle_mode: DiscardRectangleModeEXT,
     discard_rectangle_count: u32,
     p_discard_rectangles: [*]const Rect2D,
@@ -4016,7 +4016,7 @@ pub const PhysicalDeviceMultiviewPerViewAttributesPropertiesNVX = extern struct 
 pub const InputAttachmentAspectReference = extern struct {
     subpass: u32,
     input_attachment_index: u32,
-    aspect_mask: ImageAspectFlags,
+    aspect_mask: ImageAspectFlags align(@alignOf(Flags)),
 };
 pub const InputAttachmentAspectReferenceKHR = InputAttachmentAspectReference;
 pub const RenderPassInputAttachmentAspectCreateInfo = extern struct {
@@ -4070,7 +4070,7 @@ pub const DisplayPlaneCapabilities2KHR = extern struct {
 pub const SharedPresentSurfaceCapabilitiesKHR = extern struct {
     s_type: StructureType = .shared_present_surface_capabilities_khr,
     p_next: ?*anyopaque = null,
-    shared_present_supported_usage_flags: ImageUsageFlags,
+    shared_present_supported_usage_flags: ImageUsageFlags align(@alignOf(Flags)),
 };
 pub const PhysicalDevice16BitStorageFeatures = extern struct {
     s_type: StructureType = .physical_device_16bit_storage_features,
@@ -4085,8 +4085,8 @@ pub const PhysicalDeviceSubgroupProperties = extern struct {
     s_type: StructureType = .physical_device_subgroup_properties,
     p_next: ?*anyopaque = null,
     subgroup_size: u32,
-    supported_stages: ShaderStageFlags,
-    supported_operations: SubgroupFeatureFlags,
+    supported_stages: ShaderStageFlags align(@alignOf(Flags)),
+    supported_operations: SubgroupFeatureFlags align(@alignOf(Flags)),
     quad_operations_in_all_stages: Bool32,
 };
 pub const PhysicalDeviceShaderSubgroupExtendedTypesFeatures = extern struct {
@@ -4161,7 +4161,7 @@ pub const MemoryDedicatedAllocateInfoKHR = MemoryDedicatedAllocateInfo;
 pub const ImageViewUsageCreateInfo = extern struct {
     s_type: StructureType = .image_view_usage_create_info,
     p_next: ?*const anyopaque = null,
-    usage: ImageUsageFlags,
+    usage: ImageUsageFlags align(@alignOf(Flags)),
 };
 pub const ImageViewUsageCreateInfoKHR = ImageViewUsageCreateInfo;
 pub const PipelineTessellationDomainOriginStateCreateInfo = extern struct {
@@ -4223,7 +4223,7 @@ pub const ConditionalRenderingBeginInfoEXT = extern struct {
     p_next: ?*const anyopaque = null,
     buffer: Buffer,
     offset: DeviceSize,
-    flags: ConditionalRenderingFlagsEXT,
+    flags: ConditionalRenderingFlagsEXT align(@alignOf(Flags)),
 };
 pub const ProtectedSubmitInfo = extern struct {
     s_type: StructureType = .protected_submit_info,
@@ -4243,14 +4243,14 @@ pub const PhysicalDeviceProtectedMemoryProperties = extern struct {
 pub const DeviceQueueInfo2 = extern struct {
     s_type: StructureType = .device_queue_info_2,
     p_next: ?*const anyopaque = null,
-    flags: DeviceQueueCreateFlags,
+    flags: DeviceQueueCreateFlags align(@alignOf(Flags)),
     queue_family_index: u32,
     queue_index: u32,
 };
 pub const PipelineCoverageToColorStateCreateInfoNV = extern struct {
     s_type: StructureType = .pipeline_coverage_to_color_state_create_info_nv,
     p_next: ?*const anyopaque = null,
-    flags: PipelineCoverageToColorStateCreateFlagsNV,
+    flags: PipelineCoverageToColorStateCreateFlagsNV align(@alignOf(Flags)),
     coverage_to_color_enable: Bool32,
     coverage_to_color_location: u32,
 };
@@ -4298,7 +4298,7 @@ pub const PipelineSampleLocationsStateCreateInfoEXT = extern struct {
 pub const PhysicalDeviceSampleLocationsPropertiesEXT = extern struct {
     s_type: StructureType = .physical_device_sample_locations_properties_ext,
     p_next: ?*anyopaque = null,
-    sample_location_sample_counts: SampleCountFlags,
+    sample_location_sample_counts: SampleCountFlags align(@alignOf(Flags)),
     max_sample_location_grid_size: Extent2D,
     sample_location_coordinate_range: [2]f32,
     sample_location_sub_pixel_bits: u32,
@@ -4375,7 +4375,7 @@ pub const DescriptorPoolInlineUniformBlockCreateInfoEXT = DescriptorPoolInlineUn
 pub const PipelineCoverageModulationStateCreateInfoNV = extern struct {
     s_type: StructureType = .pipeline_coverage_modulation_state_create_info_nv,
     p_next: ?*const anyopaque = null,
-    flags: PipelineCoverageModulationStateCreateFlagsNV,
+    flags: PipelineCoverageModulationStateCreateFlagsNV align(@alignOf(Flags)),
     coverage_modulation_mode: CoverageModulationModeNV,
     coverage_modulation_table_enable: Bool32,
     coverage_modulation_table_count: u32,
@@ -4391,7 +4391,7 @@ pub const ImageFormatListCreateInfoKHR = ImageFormatListCreateInfo;
 pub const ValidationCacheCreateInfoEXT = extern struct {
     s_type: StructureType = .validation_cache_create_info_ext,
     p_next: ?*const anyopaque = null,
-    flags: ValidationCacheCreateFlagsEXT,
+    flags: ValidationCacheCreateFlagsEXT align(@alignOf(Flags)),
     initial_data_size: usize,
     p_initial_data: *const anyopaque,
 };
@@ -4483,7 +4483,7 @@ pub const NativeBufferANDROID = extern struct {
 pub const SwapchainImageCreateInfoANDROID = extern struct {
     s_type: StructureType = .swapchain_image_create_info_android,
     p_next: ?*const anyopaque = null,
-    usage: SwapchainImageUsageFlagsANDROID,
+    usage: SwapchainImageUsageFlagsANDROID align(@alignOf(Flags)),
 };
 pub const PhysicalDevicePresentationPropertiesANDROID = extern struct {
     s_type: StructureType = .physical_device_presentation_properties_android,
@@ -4498,7 +4498,7 @@ pub const ShaderResourceUsageAMD = extern struct {
     scratch_mem_usage_in_bytes: usize,
 };
 pub const ShaderStatisticsInfoAMD = extern struct {
-    shader_stage_mask: ShaderStageFlags,
+    shader_stage_mask: ShaderStageFlags align(@alignOf(Flags)),
     resource_usage: ShaderResourceUsageAMD,
     num_physical_vgprs: u32,
     num_physical_sgprs: u32,
@@ -4550,16 +4550,16 @@ pub const DebugUtilsLabelEXT = extern struct {
 pub const DebugUtilsMessengerCreateInfoEXT = extern struct {
     s_type: StructureType = .debug_utils_messenger_create_info_ext,
     p_next: ?*const anyopaque = null,
-    flags: DebugUtilsMessengerCreateFlagsEXT,
-    message_severity: DebugUtilsMessageSeverityFlagsEXT,
-    message_type: DebugUtilsMessageTypeFlagsEXT,
+    flags: DebugUtilsMessengerCreateFlagsEXT align(@alignOf(Flags)),
+    message_severity: DebugUtilsMessageSeverityFlagsEXT align(@alignOf(Flags)),
+    message_type: DebugUtilsMessageTypeFlagsEXT align(@alignOf(Flags)),
     pfn_user_callback: PfnDebugUtilsMessengerCallbackEXT,
     p_user_data: ?*anyopaque,
 };
 pub const DebugUtilsMessengerCallbackDataEXT = extern struct {
     s_type: StructureType = .debug_utils_messenger_callback_data_ext,
     p_next: ?*const anyopaque = null,
-    flags: DebugUtilsMessengerCallbackDataFlagsEXT,
+    flags: DebugUtilsMessengerCallbackDataFlagsEXT align(@alignOf(Flags)),
     p_message_id_name: ?[*:0]const u8,
     message_id_number: i32,
     p_message: [*:0]const u8,
@@ -4578,14 +4578,14 @@ pub const PhysicalDeviceDeviceMemoryReportFeaturesEXT = extern struct {
 pub const DeviceDeviceMemoryReportCreateInfoEXT = extern struct {
     s_type: StructureType = .device_device_memory_report_create_info_ext,
     p_next: ?*const anyopaque = null,
-    flags: DeviceMemoryReportFlagsEXT,
+    flags: DeviceMemoryReportFlagsEXT align(@alignOf(Flags)),
     pfn_user_callback: PfnDeviceMemoryReportCallbackEXT,
     p_user_data: *anyopaque,
 };
 pub const DeviceMemoryReportCallbackDataEXT = extern struct {
     s_type: StructureType = .device_memory_report_callback_data_ext,
     p_next: ?*anyopaque = null,
-    flags: DeviceMemoryReportFlagsEXT,
+    flags: DeviceMemoryReportFlagsEXT align(@alignOf(Flags)),
     @"type": DeviceMemoryReportEventTypeEXT,
     memory_object_id: u64,
     size: DeviceSize,
@@ -4648,13 +4648,13 @@ pub const PhysicalDeviceShaderCorePropertiesAMD = extern struct {
 pub const PhysicalDeviceShaderCoreProperties2AMD = extern struct {
     s_type: StructureType = .physical_device_shader_core_properties_2_amd,
     p_next: ?*anyopaque = null,
-    shader_core_features: ShaderCorePropertiesFlagsAMD,
+    shader_core_features: ShaderCorePropertiesFlagsAMD align(@alignOf(Flags)),
     active_compute_unit_count: u32,
 };
 pub const PipelineRasterizationConservativeStateCreateInfoEXT = extern struct {
     s_type: StructureType = .pipeline_rasterization_conservative_state_create_info_ext,
     p_next: ?*const anyopaque = null,
-    flags: PipelineRasterizationConservativeStateCreateFlagsEXT,
+    flags: PipelineRasterizationConservativeStateCreateFlagsEXT align(@alignOf(Flags)),
     conservative_rasterization_mode: ConservativeRasterizationModeEXT,
     extra_primitive_overestimation_size: f32,
 };
@@ -4734,7 +4734,7 @@ pub const DescriptorSetVariableDescriptorCountLayoutSupportEXT = DescriptorSetVa
 pub const AttachmentDescription2 = extern struct {
     s_type: StructureType = .attachment_description_2,
     p_next: ?*const anyopaque = null,
-    flags: AttachmentDescriptionFlags,
+    flags: AttachmentDescriptionFlags align(@alignOf(Flags)),
     format: Format,
     samples: SampleCountFlags,
     load_op: AttachmentLoadOp,
@@ -4750,13 +4750,13 @@ pub const AttachmentReference2 = extern struct {
     p_next: ?*const anyopaque = null,
     attachment: u32,
     layout: ImageLayout,
-    aspect_mask: ImageAspectFlags,
+    aspect_mask: ImageAspectFlags align(@alignOf(Flags)),
 };
 pub const AttachmentReference2KHR = AttachmentReference2;
 pub const SubpassDescription2 = extern struct {
     s_type: StructureType = .subpass_description_2,
     p_next: ?*const anyopaque = null,
-    flags: SubpassDescriptionFlags,
+    flags: SubpassDescriptionFlags align(@alignOf(Flags)),
     pipeline_bind_point: PipelineBindPoint,
     view_mask: u32,
     input_attachment_count: u32,
@@ -4774,18 +4774,18 @@ pub const SubpassDependency2 = extern struct {
     p_next: ?*const anyopaque = null,
     src_subpass: u32,
     dst_subpass: u32,
-    src_stage_mask: PipelineStageFlags,
-    dst_stage_mask: PipelineStageFlags,
-    src_access_mask: AccessFlags,
-    dst_access_mask: AccessFlags,
-    dependency_flags: DependencyFlags,
+    src_stage_mask: PipelineStageFlags align(@alignOf(Flags)),
+    dst_stage_mask: PipelineStageFlags align(@alignOf(Flags)),
+    src_access_mask: AccessFlags align(@alignOf(Flags)),
+    dst_access_mask: AccessFlags align(@alignOf(Flags)),
+    dependency_flags: DependencyFlags align(@alignOf(Flags)),
     view_offset: i32,
 };
 pub const SubpassDependency2KHR = SubpassDependency2;
 pub const RenderPassCreateInfo2 = extern struct {
     s_type: StructureType = .render_pass_create_info_2,
     p_next: ?*const anyopaque = null,
-    flags: RenderPassCreateFlags,
+    flags: RenderPassCreateFlags align(@alignOf(Flags)),
     attachment_count: u32,
     p_attachments: [*]const AttachmentDescription2,
     subpass_count: u32,
@@ -4838,7 +4838,7 @@ pub const TimelineSemaphoreSubmitInfoKHR = TimelineSemaphoreSubmitInfo;
 pub const SemaphoreWaitInfo = extern struct {
     s_type: StructureType = .semaphore_wait_info,
     p_next: ?*const anyopaque = null,
-    flags: SemaphoreWaitFlags,
+    flags: SemaphoreWaitFlags align(@alignOf(Flags)),
     semaphore_count: u32,
     p_semaphores: [*]const Semaphore,
     p_values: [*]const u64,
@@ -4900,7 +4900,7 @@ pub const AndroidHardwareBufferFormatPropertiesANDROID = extern struct {
     p_next: ?*anyopaque = null,
     format: Format,
     external_format: u64,
-    format_features: FormatFeatureFlags,
+    format_features: FormatFeatureFlags align(@alignOf(Flags)),
     sampler_ycbcr_conversion_components: ComponentMapping,
     suggested_ycbcr_model: SamplerYcbcrModelConversion,
     suggested_ycbcr_range: SamplerYcbcrRange,
@@ -4987,7 +4987,7 @@ pub const PhysicalDeviceVertexAttributeDivisorFeaturesEXT = extern struct {
 pub const QueueFamilyCheckpointPropertiesNV = extern struct {
     s_type: StructureType = .queue_family_checkpoint_properties_nv,
     p_next: ?*anyopaque = null,
-    checkpoint_execution_stage_mask: PipelineStageFlags,
+    checkpoint_execution_stage_mask: PipelineStageFlags align(@alignOf(Flags)),
 };
 pub const CheckpointDataNV = extern struct {
     s_type: StructureType = .checkpoint_data_nv,
@@ -4998,8 +4998,8 @@ pub const CheckpointDataNV = extern struct {
 pub const PhysicalDeviceDepthStencilResolveProperties = extern struct {
     s_type: StructureType = .physical_device_depth_stencil_resolve_properties,
     p_next: ?*anyopaque = null,
-    supported_depth_resolve_modes: ResolveModeFlags,
-    supported_stencil_resolve_modes: ResolveModeFlags,
+    supported_depth_resolve_modes: ResolveModeFlags align(@alignOf(Flags)),
+    supported_stencil_resolve_modes: ResolveModeFlags align(@alignOf(Flags)),
     independent_resolve_none: Bool32,
     independent_resolve: Bool32,
 };
@@ -5045,7 +5045,7 @@ pub const PhysicalDeviceTransformFeedbackPropertiesEXT = extern struct {
 pub const PipelineRasterizationStateStreamCreateInfoEXT = extern struct {
     s_type: StructureType = .pipeline_rasterization_state_stream_create_info_ext,
     p_next: ?*const anyopaque = null,
-    flags: PipelineRasterizationStateStreamCreateFlagsEXT,
+    flags: PipelineRasterizationStateStreamCreateFlagsEXT align(@alignOf(Flags)),
     rasterization_stream: u32,
 };
 pub const PhysicalDeviceRepresentativeFragmentTestFeaturesNV = extern struct {
@@ -5191,7 +5191,7 @@ pub const RayTracingShaderGroupCreateInfoKHR = extern struct {
 pub const RayTracingPipelineCreateInfoNV = extern struct {
     s_type: StructureType = .ray_tracing_pipeline_create_info_nv,
     p_next: ?*const anyopaque = null,
-    flags: PipelineCreateFlags,
+    flags: PipelineCreateFlags align(@alignOf(Flags)),
     stage_count: u32,
     p_stages: [*]const PipelineShaderStageCreateInfo,
     group_count: u32,
@@ -5204,7 +5204,7 @@ pub const RayTracingPipelineCreateInfoNV = extern struct {
 pub const RayTracingPipelineCreateInfoKHR = extern struct {
     s_type: StructureType = .ray_tracing_pipeline_create_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: PipelineCreateFlags,
+    flags: PipelineCreateFlags align(@alignOf(Flags)),
     stage_count: u32,
     p_stages: [*]const PipelineShaderStageCreateInfo,
     group_count: u32,
@@ -5249,13 +5249,13 @@ pub const GeometryNV = extern struct {
     p_next: ?*const anyopaque = null,
     geometry_type: GeometryTypeKHR,
     geometry: GeometryDataNV,
-    flags: GeometryFlagsKHR,
+    flags: GeometryFlagsKHR align(@alignOf(Flags)),
 };
 pub const AccelerationStructureInfoNV = extern struct {
     s_type: StructureType = .acceleration_structure_info_nv,
     p_next: ?*const anyopaque = null,
     @"type": AccelerationStructureTypeNV,
-    flags: BuildAccelerationStructureFlagsNV,
+    flags: BuildAccelerationStructureFlagsNV align(@alignOf(Flags)),
     instance_count: u32,
     geometry_count: u32,
     p_geometries: [*]const GeometryNV,
@@ -5371,7 +5371,7 @@ pub const DrmFormatModifierPropertiesListEXT = extern struct {
 pub const DrmFormatModifierPropertiesEXT = extern struct {
     drm_format_modifier: u64,
     drm_format_modifier_plane_count: u32,
-    drm_format_modifier_tiling_features: FormatFeatureFlags,
+    drm_format_modifier_tiling_features: FormatFeatureFlags align(@alignOf(Flags)),
 };
 pub const PhysicalDeviceImageDrmFormatModifierInfoEXT = extern struct {
     s_type: StructureType = .physical_device_image_drm_format_modifier_info_ext,
@@ -5402,7 +5402,7 @@ pub const ImageDrmFormatModifierPropertiesEXT = extern struct {
 pub const ImageStencilUsageCreateInfo = extern struct {
     s_type: StructureType = .image_stencil_usage_create_info,
     p_next: ?*const anyopaque = null,
-    stencil_usage: ImageUsageFlags,
+    stencil_usage: ImageUsageFlags align(@alignOf(Flags)),
 };
 pub const ImageStencilUsageCreateInfoEXT = ImageStencilUsageCreateInfo;
 pub const DeviceMemoryOverallocationCreateInfoAMD = extern struct {
@@ -5483,7 +5483,7 @@ pub const PhysicalDeviceDepthClipEnableFeaturesEXT = extern struct {
 pub const PipelineRasterizationDepthClipStateCreateInfoEXT = extern struct {
     s_type: StructureType = .pipeline_rasterization_depth_clip_state_create_info_ext,
     p_next: ?*const anyopaque = null,
-    flags: PipelineRasterizationDepthClipStateCreateFlagsEXT,
+    flags: PipelineRasterizationDepthClipStateCreateFlagsEXT align(@alignOf(Flags)),
     depth_clip_enable: Bool32,
 };
 pub const PhysicalDeviceMemoryBudgetPropertiesEXT = extern struct {
@@ -5568,8 +5568,8 @@ pub const FramebufferAttachmentsCreateInfoKHR = FramebufferAttachmentsCreateInfo
 pub const FramebufferAttachmentImageInfo = extern struct {
     s_type: StructureType = .framebuffer_attachment_image_info,
     p_next: ?*const anyopaque = null,
-    flags: ImageCreateFlags,
-    usage: ImageUsageFlags,
+    flags: ImageCreateFlags align(@alignOf(Flags)),
+    usage: ImageUsageFlags align(@alignOf(Flags)),
     width: u32,
     height: u32,
     layer_count: u32,
@@ -5599,7 +5599,7 @@ pub const PhysicalDeviceCooperativeMatrixFeaturesNV = extern struct {
 pub const PhysicalDeviceCooperativeMatrixPropertiesNV = extern struct {
     s_type: StructureType = .physical_device_cooperative_matrix_properties_nv,
     p_next: ?*anyopaque = null,
-    cooperative_matrix_supported_stages: ShaderStageFlags,
+    cooperative_matrix_supported_stages: ShaderStageFlags align(@alignOf(Flags)),
 };
 pub const CooperativeMatrixPropertiesNV = extern struct {
     s_type: StructureType = .cooperative_matrix_properties_nv,
@@ -5637,7 +5637,7 @@ pub const PresentFrameTokenGGP = extern struct {
     frame_token: GgpFrameToken,
 };
 pub const PipelineCreationFeedback = extern struct {
-    flags: PipelineCreationFeedbackFlags,
+    flags: PipelineCreationFeedbackFlags align(@alignOf(Flags)),
     duration: u64,
 };
 pub const PipelineCreationFeedbackEXT = PipelineCreationFeedback;
@@ -5686,7 +5686,7 @@ pub const PerformanceCounterKHR = extern struct {
 pub const PerformanceCounterDescriptionKHR = extern struct {
     s_type: StructureType = .performance_counter_description_khr,
     p_next: ?*anyopaque = null,
-    flags: PerformanceCounterDescriptionFlagsKHR,
+    flags: PerformanceCounterDescriptionFlagsKHR align(@alignOf(Flags)),
     name: [MAX_DESCRIPTION_SIZE]u8,
     category: [MAX_DESCRIPTION_SIZE]u8,
     description: [MAX_DESCRIPTION_SIZE]u8,
@@ -5709,7 +5709,7 @@ pub const PerformanceCounterResultKHR = extern union {
 pub const AcquireProfilingLockInfoKHR = extern struct {
     s_type: StructureType = .acquire_profiling_lock_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: AcquireProfilingLockFlagsKHR,
+    flags: AcquireProfilingLockFlagsKHR align(@alignOf(Flags)),
     timeout: u64,
 };
 pub const PerformanceQuerySubmitInfoKHR = extern struct {
@@ -5720,7 +5720,7 @@ pub const PerformanceQuerySubmitInfoKHR = extern struct {
 pub const HeadlessSurfaceCreateInfoEXT = extern struct {
     s_type: StructureType = .headless_surface_create_info_ext,
     p_next: ?*const anyopaque = null,
-    flags: HeadlessSurfaceCreateFlagsEXT,
+    flags: HeadlessSurfaceCreateFlagsEXT align(@alignOf(Flags)),
 };
 pub const PhysicalDeviceCoverageReductionModeFeaturesNV = extern struct {
     s_type: StructureType = .physical_device_coverage_reduction_mode_features_nv,
@@ -5730,7 +5730,7 @@ pub const PhysicalDeviceCoverageReductionModeFeaturesNV = extern struct {
 pub const PipelineCoverageReductionStateCreateInfoNV = extern struct {
     s_type: StructureType = .pipeline_coverage_reduction_state_create_info_nv,
     p_next: ?*const anyopaque = null,
-    flags: PipelineCoverageReductionStateCreateFlagsNV,
+    flags: PipelineCoverageReductionStateCreateFlagsNV align(@alignOf(Flags)),
     coverage_reduction_mode: CoverageReductionModeNV,
 };
 pub const FramebufferMixedSamplesCombinationNV = extern struct {
@@ -5738,8 +5738,8 @@ pub const FramebufferMixedSamplesCombinationNV = extern struct {
     p_next: ?*anyopaque = null,
     coverage_reduction_mode: CoverageReductionModeNV,
     rasterization_samples: SampleCountFlags,
-    depth_stencil_samples: SampleCountFlags,
-    color_samples: SampleCountFlags,
+    depth_stencil_samples: SampleCountFlags align(@alignOf(Flags)),
+    color_samples: SampleCountFlags align(@alignOf(Flags)),
 };
 pub const PhysicalDeviceShaderIntegerFunctions2FeaturesINTEL = extern struct {
     s_type: StructureType = .physical_device_shader_integer_functions_2_features_intel,
@@ -5857,7 +5857,7 @@ pub const PipelineInfoKHR = extern struct {
 pub const PipelineExecutablePropertiesKHR = extern struct {
     s_type: StructureType = .pipeline_executable_properties_khr,
     p_next: ?*anyopaque = null,
-    stages: ShaderStageFlags,
+    stages: ShaderStageFlags align(@alignOf(Flags)),
     name: [MAX_DESCRIPTION_SIZE]u8,
     description: [MAX_DESCRIPTION_SIZE]u8,
     subgroup_size: u32,
@@ -5924,7 +5924,7 @@ pub const PhysicalDeviceSubgroupSizeControlProperties = extern struct {
     min_subgroup_size: u32,
     max_subgroup_size: u32,
     max_compute_workgroup_subgroups: u32,
-    required_subgroup_size_stages: ShaderStageFlags,
+    required_subgroup_size_stages: ShaderStageFlags align(@alignOf(Flags)),
 };
 pub const PhysicalDeviceSubgroupSizeControlPropertiesEXT = PhysicalDeviceSubgroupSizeControlProperties;
 pub const PipelineShaderStageRequiredSubgroupSizeCreateInfo = extern struct {
@@ -6010,8 +6010,8 @@ pub const PhysicalDeviceVulkan11Properties = extern struct {
     device_node_mask: u32,
     device_luid_valid: Bool32,
     subgroup_size: u32,
-    subgroup_supported_stages: ShaderStageFlags,
-    subgroup_supported_operations: SubgroupFeatureFlags,
+    subgroup_supported_stages: ShaderStageFlags align(@alignOf(Flags)),
+    subgroup_supported_operations: SubgroupFeatureFlags align(@alignOf(Flags)),
     subgroup_quad_operations_in_all_stages: Bool32,
     point_clipping_behavior: PointClippingBehavior,
     max_multiview_view_count: u32,
@@ -6118,14 +6118,14 @@ pub const PhysicalDeviceVulkan12Properties = extern struct {
     max_descriptor_set_update_after_bind_sampled_images: u32,
     max_descriptor_set_update_after_bind_storage_images: u32,
     max_descriptor_set_update_after_bind_input_attachments: u32,
-    supported_depth_resolve_modes: ResolveModeFlags,
-    supported_stencil_resolve_modes: ResolveModeFlags,
+    supported_depth_resolve_modes: ResolveModeFlags align(@alignOf(Flags)),
+    supported_stencil_resolve_modes: ResolveModeFlags align(@alignOf(Flags)),
     independent_resolve_none: Bool32,
     independent_resolve: Bool32,
     filter_minmax_single_component_formats: Bool32,
     filter_minmax_image_component_mapping: Bool32,
     max_timeline_semaphore_value_difference: u64,
-    framebuffer_integer_color_sample_counts: SampleCountFlags,
+    framebuffer_integer_color_sample_counts: SampleCountFlags align(@alignOf(Flags)),
 };
 pub const PhysicalDeviceVulkan13Features = extern struct {
     s_type: StructureType = .physical_device_vulkan_1_3_features,
@@ -6152,7 +6152,7 @@ pub const PhysicalDeviceVulkan13Properties = extern struct {
     min_subgroup_size: u32,
     max_subgroup_size: u32,
     max_compute_workgroup_subgroups: u32,
-    required_subgroup_size_stages: ShaderStageFlags,
+    required_subgroup_size_stages: ShaderStageFlags align(@alignOf(Flags)),
     max_inline_uniform_block_size: u32,
     max_per_stage_descriptor_inline_uniform_blocks: u32,
     max_per_stage_descriptor_update_after_bind_inline_uniform_blocks: u32,
@@ -6198,7 +6198,7 @@ pub const PhysicalDeviceVulkan13Properties = extern struct {
 pub const PipelineCompilerControlCreateInfoAMD = extern struct {
     s_type: StructureType = .pipeline_compiler_control_create_info_amd,
     p_next: ?*const anyopaque = null,
-    compiler_control_flags: PipelineCompilerControlFlagsAMD,
+    compiler_control_flags: PipelineCompilerControlFlagsAMD align(@alignOf(Flags)),
 };
 pub const PhysicalDeviceCoherentMemoryFeaturesAMD = extern struct {
     s_type: StructureType = .physical_device_coherent_memory_features_amd,
@@ -6210,7 +6210,7 @@ pub const PhysicalDeviceToolProperties = extern struct {
     p_next: ?*anyopaque = null,
     name: [MAX_EXTENSION_NAME_SIZE]u8,
     version: [MAX_EXTENSION_NAME_SIZE]u8,
-    purposes: ToolPurposeFlags,
+    purposes: ToolPurposeFlags align(@alignOf(Flags)),
     description: [MAX_DESCRIPTION_SIZE]u8,
     layer: [MAX_EXTENSION_NAME_SIZE]u8,
 };
@@ -6285,13 +6285,13 @@ pub const AccelerationStructureGeometryKHR = extern struct {
     p_next: ?*const anyopaque = null,
     geometry_type: GeometryTypeKHR,
     geometry: AccelerationStructureGeometryDataKHR,
-    flags: GeometryFlagsKHR,
+    flags: GeometryFlagsKHR align(@alignOf(Flags)),
 };
 pub const AccelerationStructureBuildGeometryInfoKHR = extern struct {
     s_type: StructureType = .acceleration_structure_build_geometry_info_khr,
     p_next: ?*const anyopaque = null,
     @"type": AccelerationStructureTypeKHR,
-    flags: BuildAccelerationStructureFlagsKHR,
+    flags: BuildAccelerationStructureFlagsKHR align(@alignOf(Flags)),
     mode: BuildAccelerationStructureModeKHR,
     src_acceleration_structure: AccelerationStructureKHR,
     dst_acceleration_structure: AccelerationStructureKHR,
@@ -6309,7 +6309,7 @@ pub const AccelerationStructureBuildRangeInfoKHR = extern struct {
 pub const AccelerationStructureCreateInfoKHR = extern struct {
     s_type: StructureType = .acceleration_structure_create_info_khr,
     p_next: ?*const anyopaque = null,
-    create_flags: AccelerationStructureCreateFlagsKHR,
+    create_flags: AccelerationStructureCreateFlagsKHR align(@alignOf(Flags)),
     buffer: Buffer,
     offset: DeviceSize,
     size: DeviceSize,
@@ -6417,7 +6417,7 @@ pub const PhysicalDeviceDiagnosticsConfigFeaturesNV = extern struct {
 pub const DeviceDiagnosticsConfigCreateInfoNV = extern struct {
     s_type: StructureType = .device_diagnostics_config_create_info_nv,
     p_next: ?*const anyopaque = null,
-    flags: DeviceDiagnosticsConfigFlagsNV,
+    flags: DeviceDiagnosticsConfigFlagsNV align(@alignOf(Flags)),
 };
 pub const PhysicalDeviceZeroInitializeWorkgroupMemoryFeatures = extern struct {
     s_type: StructureType = .physical_device_zero_initialize_workgroup_memory_features,
@@ -6652,7 +6652,7 @@ pub const PhysicalDeviceFragmentShadingRatePropertiesKHR = extern struct {
 pub const PhysicalDeviceFragmentShadingRateKHR = extern struct {
     s_type: StructureType = .physical_device_fragment_shading_rate_khr,
     p_next: ?*anyopaque = null,
-    sample_counts: SampleCountFlags,
+    sample_counts: SampleCountFlags align(@alignOf(Flags)),
     fragment_size: Extent2D,
 };
 pub const PhysicalDeviceShaderTerminateInvocationFeatures = extern struct {
@@ -6752,19 +6752,19 @@ pub const PipelineColorWriteCreateInfoEXT = extern struct {
 pub const MemoryBarrier2 = extern struct {
     s_type: StructureType = .memory_barrier_2,
     p_next: ?*const anyopaque = null,
-    src_stage_mask: PipelineStageFlags2,
-    src_access_mask: AccessFlags2,
-    dst_stage_mask: PipelineStageFlags2,
-    dst_access_mask: AccessFlags2,
+    src_stage_mask: PipelineStageFlags2 align(@alignOf(Flags64)),
+    src_access_mask: AccessFlags2 align(@alignOf(Flags64)),
+    dst_stage_mask: PipelineStageFlags2 align(@alignOf(Flags64)),
+    dst_access_mask: AccessFlags2 align(@alignOf(Flags64)),
 };
 pub const MemoryBarrier2KHR = MemoryBarrier2;
 pub const ImageMemoryBarrier2 = extern struct {
     s_type: StructureType = .image_memory_barrier_2,
     p_next: ?*const anyopaque = null,
-    src_stage_mask: PipelineStageFlags2,
-    src_access_mask: AccessFlags2,
-    dst_stage_mask: PipelineStageFlags2,
-    dst_access_mask: AccessFlags2,
+    src_stage_mask: PipelineStageFlags2 align(@alignOf(Flags64)),
+    src_access_mask: AccessFlags2 align(@alignOf(Flags64)),
+    dst_stage_mask: PipelineStageFlags2 align(@alignOf(Flags64)),
+    dst_access_mask: AccessFlags2 align(@alignOf(Flags64)),
     old_layout: ImageLayout,
     new_layout: ImageLayout,
     src_queue_family_index: u32,
@@ -6776,10 +6776,10 @@ pub const ImageMemoryBarrier2KHR = ImageMemoryBarrier2;
 pub const BufferMemoryBarrier2 = extern struct {
     s_type: StructureType = .buffer_memory_barrier_2,
     p_next: ?*const anyopaque = null,
-    src_stage_mask: PipelineStageFlags2,
-    src_access_mask: AccessFlags2,
-    dst_stage_mask: PipelineStageFlags2,
-    dst_access_mask: AccessFlags2,
+    src_stage_mask: PipelineStageFlags2 align(@alignOf(Flags64)),
+    src_access_mask: AccessFlags2 align(@alignOf(Flags64)),
+    dst_stage_mask: PipelineStageFlags2 align(@alignOf(Flags64)),
+    dst_access_mask: AccessFlags2 align(@alignOf(Flags64)),
     src_queue_family_index: u32,
     dst_queue_family_index: u32,
     buffer: Buffer,
@@ -6790,7 +6790,7 @@ pub const BufferMemoryBarrier2KHR = BufferMemoryBarrier2;
 pub const DependencyInfo = extern struct {
     s_type: StructureType = .dependency_info,
     p_next: ?*const anyopaque = null,
-    dependency_flags: DependencyFlags,
+    dependency_flags: DependencyFlags align(@alignOf(Flags)),
     memory_barrier_count: u32,
     p_memory_barriers: [*]const MemoryBarrier2,
     buffer_memory_barrier_count: u32,
@@ -6804,7 +6804,7 @@ pub const SemaphoreSubmitInfo = extern struct {
     p_next: ?*const anyopaque = null,
     semaphore: Semaphore,
     value: u64,
-    stage_mask: PipelineStageFlags2,
+    stage_mask: PipelineStageFlags2 align(@alignOf(Flags64)),
     device_index: u32,
 };
 pub const SemaphoreSubmitInfoKHR = SemaphoreSubmitInfo;
@@ -6818,7 +6818,7 @@ pub const CommandBufferSubmitInfoKHR = CommandBufferSubmitInfo;
 pub const SubmitInfo2 = extern struct {
     s_type: StructureType = .submit_info_2,
     p_next: ?*const anyopaque = null,
-    flags: SubmitFlags,
+    flags: SubmitFlags align(@alignOf(Flags)),
     wait_semaphore_info_count: u32,
     p_wait_semaphore_infos: [*]const SemaphoreSubmitInfo,
     command_buffer_info_count: u32,
@@ -6830,12 +6830,12 @@ pub const SubmitInfo2KHR = SubmitInfo2;
 pub const QueueFamilyCheckpointProperties2NV = extern struct {
     s_type: StructureType = .queue_family_checkpoint_properties_2_nv,
     p_next: ?*anyopaque = null,
-    checkpoint_execution_stage_mask: PipelineStageFlags2,
+    checkpoint_execution_stage_mask: PipelineStageFlags2 align(@alignOf(Flags64)),
 };
 pub const CheckpointData2NV = extern struct {
     s_type: StructureType = .checkpoint_data_2_nv,
     p_next: ?*anyopaque = null,
-    stage: PipelineStageFlags2,
+    stage: PipelineStageFlags2 align(@alignOf(Flags64)),
     p_checkpoint_marker: *anyopaque,
 };
 pub const PhysicalDeviceSynchronization2Features = extern struct {
@@ -6847,7 +6847,7 @@ pub const PhysicalDeviceSynchronization2FeaturesKHR = PhysicalDeviceSynchronizat
 pub const VideoQueueFamilyProperties2KHR = extern struct {
     s_type: StructureType = .video_queue_family_properties_2_khr,
     p_next: ?*anyopaque = null,
-    video_codec_operations: VideoCodecOperationFlagsKHR,
+    video_codec_operations: VideoCodecOperationFlagsKHR align(@alignOf(Flags)),
 };
 pub const QueueFamilyQueryResultStatusProperties2KHR = extern struct {
     s_type: StructureType = .queue_family_query_result_status_properties_2_khr,
@@ -6863,7 +6863,7 @@ pub const VideoProfilesKHR = extern struct {
 pub const PhysicalDeviceVideoFormatInfoKHR = extern struct {
     s_type: StructureType = .physical_device_video_format_info_khr,
     p_next: ?*anyopaque = null,
-    image_usage: ImageUsageFlags,
+    image_usage: ImageUsageFlags align(@alignOf(Flags)),
     p_video_profiles: *const VideoProfilesKHR,
 };
 pub const VideoFormatPropertiesKHR = extern struct {
@@ -6875,14 +6875,14 @@ pub const VideoProfileKHR = extern struct {
     s_type: StructureType = .video_profile_khr,
     p_next: ?*anyopaque = null,
     video_codec_operation: VideoCodecOperationFlagsKHR,
-    chroma_subsampling: VideoChromaSubsamplingFlagsKHR,
-    luma_bit_depth: VideoComponentBitDepthFlagsKHR,
-    chroma_bit_depth: VideoComponentBitDepthFlagsKHR,
+    chroma_subsampling: VideoChromaSubsamplingFlagsKHR align(@alignOf(Flags)),
+    luma_bit_depth: VideoComponentBitDepthFlagsKHR align(@alignOf(Flags)),
+    chroma_bit_depth: VideoComponentBitDepthFlagsKHR align(@alignOf(Flags)),
 };
 pub const VideoCapabilitiesKHR = extern struct {
     s_type: StructureType = .video_capabilities_khr,
     p_next: ?*anyopaque = null,
-    capability_flags: VideoCapabilityFlagsKHR,
+    capability_flags: VideoCapabilityFlagsKHR align(@alignOf(Flags)),
     min_bitstream_buffer_offset_alignment: DeviceSize,
     min_bitstream_buffer_size_alignment: DeviceSize,
     video_picture_extent_granularity: Extent2D,
@@ -6922,7 +6922,7 @@ pub const VideoReferenceSlotKHR = extern struct {
 pub const VideoDecodeInfoKHR = extern struct {
     s_type: StructureType = .video_decode_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: VideoDecodeFlagsKHR,
+    flags: VideoDecodeFlagsKHR align(@alignOf(Flags)),
     coded_offset: Offset2D,
     coded_extent: Extent2D,
     src_buffer: Buffer,
@@ -6962,7 +6962,7 @@ pub const VideoDecodeH264ProfileEXT = extern struct {
     s_type: StructureType = .video_decode_h264_profile_ext,
     p_next: ?*const anyopaque = null,
     std_profile_idc: StdVideoH264ProfileIdc,
-    picture_layout: VideoDecodeH264PictureLayoutFlagsEXT,
+    picture_layout: VideoDecodeH264PictureLayoutFlagsEXT align(@alignOf(Flags)),
 };
 pub const VideoDecodeH264CapabilitiesEXT = extern struct {
     s_type: StructureType = .video_decode_h264_capabilities_ext,
@@ -6974,7 +6974,7 @@ pub const VideoDecodeH264CapabilitiesEXT = extern struct {
 pub const VideoDecodeH264SessionCreateInfoEXT = extern struct {
     s_type: StructureType = .video_decode_h264_session_create_info_ext,
     p_next: ?*const anyopaque = null,
-    flags: VideoDecodeH264CreateFlagsEXT,
+    flags: VideoDecodeH264CreateFlagsEXT align(@alignOf(Flags)),
     p_std_extension_version: *const ExtensionProperties,
 };
 pub const StdVideoH264SequenceParameterSet = if (@hasDecl(root, "StdVideoH264SequenceParameterSet")) root.StdVideoH264SequenceParameterSet else @compileError("Missing type definition of 'StdVideoH264SequenceParameterSet'");
@@ -7047,7 +7047,7 @@ pub const VideoDecodeH265CapabilitiesEXT = extern struct {
 pub const VideoDecodeH265SessionCreateInfoEXT = extern struct {
     s_type: StructureType = .video_decode_h265_session_create_info_ext,
     p_next: ?*const anyopaque = null,
-    flags: VideoDecodeH265CreateFlagsEXT,
+    flags: VideoDecodeH265CreateFlagsEXT align(@alignOf(Flags)),
     p_std_extension_version: *const ExtensionProperties,
 };
 pub const VideoDecodeH265SessionParametersAddInfoEXT = extern struct {
@@ -7081,7 +7081,7 @@ pub const VideoSessionCreateInfoKHR = extern struct {
     s_type: StructureType = .video_session_create_info_khr,
     p_next: ?*const anyopaque = null,
     queue_family_index: u32,
-    flags: VideoSessionCreateFlagsKHR,
+    flags: VideoSessionCreateFlagsKHR align(@alignOf(Flags)),
     p_video_profile: *const VideoProfileKHR,
     picture_format: Format,
     max_coded_extent: Extent2D,
@@ -7103,8 +7103,8 @@ pub const VideoSessionParametersUpdateInfoKHR = extern struct {
 pub const VideoBeginCodingInfoKHR = extern struct {
     s_type: StructureType = .video_begin_coding_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: VideoBeginCodingFlagsKHR,
-    codec_quality_preset: VideoCodingQualityPresetFlagsKHR,
+    flags: VideoBeginCodingFlagsKHR align(@alignOf(Flags)),
+    codec_quality_preset: VideoCodingQualityPresetFlagsKHR align(@alignOf(Flags)),
     video_session: VideoSessionKHR,
     video_session_parameters: VideoSessionParametersKHR,
     reference_slot_count: u32,
@@ -7113,17 +7113,17 @@ pub const VideoBeginCodingInfoKHR = extern struct {
 pub const VideoEndCodingInfoKHR = extern struct {
     s_type: StructureType = .video_end_coding_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: VideoEndCodingFlagsKHR,
+    flags: VideoEndCodingFlagsKHR align(@alignOf(Flags)),
 };
 pub const VideoCodingControlInfoKHR = extern struct {
     s_type: StructureType = .video_coding_control_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: VideoCodingControlFlagsKHR,
+    flags: VideoCodingControlFlagsKHR align(@alignOf(Flags)),
 };
 pub const VideoEncodeInfoKHR = extern struct {
     s_type: StructureType = .video_encode_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: VideoEncodeFlagsKHR,
+    flags: VideoEncodeFlagsKHR align(@alignOf(Flags)),
     quality_level: u32,
     coded_extent: Extent2D,
     dst_bitstream_buffer: Buffer,
@@ -7138,7 +7138,7 @@ pub const VideoEncodeInfoKHR = extern struct {
 pub const VideoEncodeRateControlInfoKHR = extern struct {
     s_type: StructureType = .video_encode_rate_control_info_khr,
     p_next: ?*const anyopaque = null,
-    flags: VideoEncodeRateControlFlagsKHR,
+    flags: VideoEncodeRateControlFlagsKHR align(@alignOf(Flags)),
     rate_control_mode: VideoEncodeRateControlModeFlagsKHR,
     layer_count: u8,
     p_layer_configs: [*]const VideoEncodeRateControlLayerInfoKHR,
@@ -7156,9 +7156,9 @@ pub const VideoEncodeRateControlLayerInfoKHR = extern struct {
 pub const VideoEncodeH264CapabilitiesEXT = extern struct {
     s_type: StructureType = .video_encode_h264_capabilities_ext,
     p_next: ?*const anyopaque = null,
-    flags: VideoEncodeH264CapabilityFlagsEXT,
-    input_mode_flags: VideoEncodeH264InputModeFlagsEXT,
-    output_mode_flags: VideoEncodeH264OutputModeFlagsEXT,
+    flags: VideoEncodeH264CapabilityFlagsEXT align(@alignOf(Flags)),
+    input_mode_flags: VideoEncodeH264InputModeFlagsEXT align(@alignOf(Flags)),
+    output_mode_flags: VideoEncodeH264OutputModeFlagsEXT align(@alignOf(Flags)),
     min_picture_size_in_mbs: Extent2D,
     max_picture_size_in_mbs: Extent2D,
     input_image_data_alignment: Extent2D,
@@ -7171,7 +7171,7 @@ pub const VideoEncodeH264CapabilitiesEXT = extern struct {
 pub const VideoEncodeH264SessionCreateInfoEXT = extern struct {
     s_type: StructureType = .video_encode_h264_session_create_info_ext,
     p_next: ?*const anyopaque = null,
-    flags: VideoEncodeH264CreateFlagsEXT,
+    flags: VideoEncodeH264CreateFlagsEXT align(@alignOf(Flags)),
     max_picture_size_in_mbs: Extent2D,
     p_std_extension_version: *const ExtensionProperties,
 };
@@ -7273,10 +7273,10 @@ pub const VideoEncodeH264RateControlLayerInfoEXT = extern struct {
 pub const VideoEncodeH265CapabilitiesEXT = extern struct {
     s_type: StructureType = .video_encode_h265_capabilities_ext,
     p_next: ?*const anyopaque = null,
-    flags: VideoEncodeH265CapabilityFlagsEXT,
-    input_mode_flags: VideoEncodeH265InputModeFlagsEXT,
-    output_mode_flags: VideoEncodeH265OutputModeFlagsEXT,
-    ctb_sizes: VideoEncodeH265CtbSizeFlagsEXT,
+    flags: VideoEncodeH265CapabilityFlagsEXT align(@alignOf(Flags)),
+    input_mode_flags: VideoEncodeH265InputModeFlagsEXT align(@alignOf(Flags)),
+    output_mode_flags: VideoEncodeH265OutputModeFlagsEXT align(@alignOf(Flags)),
+    ctb_sizes: VideoEncodeH265CtbSizeFlagsEXT align(@alignOf(Flags)),
     input_image_data_alignment: Extent2D,
     max_num_l0_reference_for_p: u8,
     max_num_l0_reference_for_b: u8,
@@ -7288,7 +7288,7 @@ pub const VideoEncodeH265CapabilitiesEXT = extern struct {
 pub const VideoEncodeH265SessionCreateInfoEXT = extern struct {
     s_type: StructureType = .video_encode_h265_session_create_info_ext,
     p_next: ?*const anyopaque = null,
-    flags: VideoEncodeH265CreateFlagsEXT,
+    flags: VideoEncodeH265CreateFlagsEXT align(@alignOf(Flags)),
     p_std_extension_version: *const ExtensionProperties,
 };
 pub const StdVideoEncodeH265PictureInfoFlags = if (@hasDecl(root, "StdVideoEncodeH265PictureInfoFlags")) root.StdVideoEncodeH265PictureInfoFlags else @compileError("Missing type definition of 'StdVideoEncodeH265PictureInfoFlags'");
@@ -7522,7 +7522,7 @@ pub const AccelerationStructureMotionInfoNV = extern struct {
     s_type: StructureType = .acceleration_structure_motion_info_nv,
     p_next: ?*const anyopaque = null,
     max_instances: u32,
-    flags: AccelerationStructureMotionInfoFlagsNV,
+    flags: AccelerationStructureMotionInfoFlagsNV align(@alignOf(Flags)),
 };
 pub const SRTDataNV = extern struct {
     sx: f32,
@@ -7567,7 +7567,7 @@ pub const AccelerationStructureMotionInstanceDataNV = extern union {
 };
 pub const AccelerationStructureMotionInstanceNV = extern struct {
     @"type": AccelerationStructureMotionInstanceTypeNV,
-    flags: AccelerationStructureMotionInstanceFlagsNV,
+    flags: AccelerationStructureMotionInstanceFlagsNV align(@alignOf(Flags)),
     data: AccelerationStructureMotionInstanceDataNV,
 };
 pub const RemoteAddressNV = *anyopaque;
@@ -7607,7 +7607,7 @@ pub const BufferCollectionPropertiesFUCHSIA = extern struct {
     buffer_count: u32,
     create_info_index: u32,
     sysmem_pixel_format: u64,
-    format_features: FormatFeatureFlags,
+    format_features: FormatFeatureFlags align(@alignOf(Flags)),
     sysmem_color_space_index: SysmemColorSpaceFUCHSIA,
     sampler_ycbcr_conversion_components: ComponentMapping,
     suggested_ycbcr_model: SamplerYcbcrModelConversion,
@@ -7619,7 +7619,7 @@ pub const BufferConstraintsInfoFUCHSIA = extern struct {
     s_type: StructureType = .buffer_constraints_info_fuchsia,
     p_next: ?*const anyopaque = null,
     create_info: BufferCreateInfo,
-    required_format_features: FormatFeatureFlags,
+    required_format_features: FormatFeatureFlags align(@alignOf(Flags)),
     buffer_collection_constraints: BufferCollectionConstraintsInfoFUCHSIA,
 };
 pub const SysmemColorSpaceFUCHSIA = extern struct {
@@ -7631,8 +7631,8 @@ pub const ImageFormatConstraintsInfoFUCHSIA = extern struct {
     s_type: StructureType = .image_format_constraints_info_fuchsia,
     p_next: ?*const anyopaque = null,
     image_create_info: ImageCreateInfo,
-    required_format_features: FormatFeatureFlags,
-    flags: ImageFormatConstraintsFlagsFUCHSIA,
+    required_format_features: FormatFeatureFlags align(@alignOf(Flags)),
+    flags: ImageFormatConstraintsFlagsFUCHSIA align(@alignOf(Flags)),
     sysmem_pixel_format: u64,
     color_space_count: u32,
     p_color_spaces: *const SysmemColorSpaceFUCHSIA,
@@ -7643,7 +7643,7 @@ pub const ImageConstraintsInfoFUCHSIA = extern struct {
     format_constraints_count: u32,
     p_format_constraints: [*]const ImageFormatConstraintsInfoFUCHSIA,
     buffer_collection_constraints: BufferCollectionConstraintsInfoFUCHSIA,
-    flags: ImageConstraintsInfoFlagsFUCHSIA,
+    flags: ImageConstraintsInfoFlagsFUCHSIA align(@alignOf(Flags)),
 };
 pub const BufferCollectionConstraintsInfoFUCHSIA = extern struct {
     s_type: StructureType = .buffer_collection_constraints_info_fuchsia,
@@ -7662,9 +7662,9 @@ pub const PhysicalDeviceRGBA10X6FormatsFeaturesEXT = extern struct {
 pub const FormatProperties3 = extern struct {
     s_type: StructureType = .format_properties_3,
     p_next: ?*anyopaque = null,
-    linear_tiling_features: FormatFeatureFlags2,
-    optimal_tiling_features: FormatFeatureFlags2,
-    buffer_features: FormatFeatureFlags2,
+    linear_tiling_features: FormatFeatureFlags2 align(@alignOf(Flags64)),
+    optimal_tiling_features: FormatFeatureFlags2 align(@alignOf(Flags64)),
+    buffer_features: FormatFeatureFlags2 align(@alignOf(Flags64)),
 };
 pub const FormatProperties3KHR = FormatProperties3;
 pub const DrmFormatModifierPropertiesList2EXT = extern struct {
@@ -7676,14 +7676,14 @@ pub const DrmFormatModifierPropertiesList2EXT = extern struct {
 pub const DrmFormatModifierProperties2EXT = extern struct {
     drm_format_modifier: u64,
     drm_format_modifier_plane_count: u32,
-    drm_format_modifier_tiling_features: FormatFeatureFlags2,
+    drm_format_modifier_tiling_features: FormatFeatureFlags2 align(@alignOf(Flags64)),
 };
 pub const AndroidHardwareBufferFormatProperties2ANDROID = extern struct {
     s_type: StructureType = .android_hardware_buffer_format_properties_2_android,
     p_next: ?*anyopaque = null,
     format: Format,
     external_format: u64,
-    format_features: FormatFeatureFlags2,
+    format_features: FormatFeatureFlags2 align(@alignOf(Flags64)),
     sampler_ycbcr_conversion_components: ComponentMapping,
     suggested_ycbcr_model: SamplerYcbcrModelConversion,
     suggested_ycbcr_range: SamplerYcbcrRange,
@@ -7703,7 +7703,7 @@ pub const PipelineRenderingCreateInfoKHR = PipelineRenderingCreateInfo;
 pub const RenderingInfo = extern struct {
     s_type: StructureType = .rendering_info,
     p_next: ?*const anyopaque = null,
-    flags: RenderingFlags,
+    flags: RenderingFlags align(@alignOf(Flags)),
     render_area: Rect2D,
     layer_count: u32,
     view_mask: u32,
@@ -7748,7 +7748,7 @@ pub const PhysicalDeviceDynamicRenderingFeaturesKHR = PhysicalDeviceDynamicRende
 pub const CommandBufferInheritanceRenderingInfo = extern struct {
     s_type: StructureType = .command_buffer_inheritance_rendering_info,
     p_next: ?*const anyopaque = null,
-    flags: RenderingFlags,
+    flags: RenderingFlags align(@alignOf(Flags)),
     view_mask: u32,
     color_attachment_count: u32,
     p_color_attachment_formats: [*]const Format,
@@ -7942,7 +7942,7 @@ pub const PipelineCacheHeaderVersion = enum(i32) {
     _,
 };
 pub const PipelineCacheCreateFlags = packed struct {
-    externally_synchronized_bit: bool align(@alignOf(Flags)) = false,
+    externally_synchronized_bit: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -9446,7 +9446,7 @@ pub const ObjectType = enum(i32) {
     pub const private_data_slot_ext = ObjectType.private_data_slot;
 };
 pub const QueueFlags = packed struct {
-    graphics_bit: bool align(@alignOf(Flags)) = false,
+    graphics_bit: bool = false,
     compute_bit: bool = false,
     transfer_bit: bool = false,
     sparse_binding_bit: bool = false,
@@ -9481,7 +9481,7 @@ pub const QueueFlags = packed struct {
     pub usingnamespace FlagsMixin(QueueFlags, Flags);
 };
 pub const CullModeFlags = packed struct {
-    front_bit: bool align(@alignOf(Flags)) = false,
+    front_bit: bool = false,
     back_bit: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -9516,7 +9516,7 @@ pub const CullModeFlags = packed struct {
     pub usingnamespace FlagsMixin(CullModeFlags, Flags);
 };
 pub const RenderPassCreateFlags = packed struct {
-    _reserved_bit_0: bool align(@alignOf(Flags)) = false,
+    _reserved_bit_0: bool = false,
     transform_bit_qcom: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -9551,7 +9551,7 @@ pub const RenderPassCreateFlags = packed struct {
     pub usingnamespace FlagsMixin(RenderPassCreateFlags, Flags);
 };
 pub const DeviceQueueCreateFlags = packed struct {
-    protected_bit: bool align(@alignOf(Flags)) = false,
+    protected_bit: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -9586,7 +9586,7 @@ pub const DeviceQueueCreateFlags = packed struct {
     pub usingnamespace FlagsMixin(DeviceQueueCreateFlags, Flags);
 };
 pub const MemoryPropertyFlags = packed struct {
-    device_local_bit: bool align(@alignOf(Flags)) = false,
+    device_local_bit: bool = false,
     host_visible_bit: bool = false,
     host_coherent_bit: bool = false,
     host_cached_bit: bool = false,
@@ -9621,7 +9621,7 @@ pub const MemoryPropertyFlags = packed struct {
     pub usingnamespace FlagsMixin(MemoryPropertyFlags, Flags);
 };
 pub const MemoryHeapFlags = packed struct {
-    device_local_bit: bool align(@alignOf(Flags)) = false,
+    device_local_bit: bool = false,
     multi_instance_bit: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -9656,7 +9656,7 @@ pub const MemoryHeapFlags = packed struct {
     pub usingnamespace FlagsMixin(MemoryHeapFlags, Flags);
 };
 pub const AccessFlags = packed struct {
-    indirect_command_read_bit: bool align(@alignOf(Flags)) = false,
+    indirect_command_read_bit: bool = false,
     index_read_bit: bool = false,
     vertex_attribute_read_bit: bool = false,
     uniform_read_bit: bool = false,
@@ -9691,7 +9691,7 @@ pub const AccessFlags = packed struct {
     pub usingnamespace FlagsMixin(AccessFlags, Flags);
 };
 pub const BufferUsageFlags = packed struct {
-    transfer_src_bit: bool align(@alignOf(Flags)) = false,
+    transfer_src_bit: bool = false,
     transfer_dst_bit: bool = false,
     uniform_texel_buffer_bit: bool = false,
     storage_texel_buffer_bit: bool = false,
@@ -9726,7 +9726,7 @@ pub const BufferUsageFlags = packed struct {
     pub usingnamespace FlagsMixin(BufferUsageFlags, Flags);
 };
 pub const BufferCreateFlags = packed struct {
-    sparse_binding_bit: bool align(@alignOf(Flags)) = false,
+    sparse_binding_bit: bool = false,
     sparse_residency_bit: bool = false,
     sparse_aliased_bit: bool = false,
     protected_bit: bool = false,
@@ -9761,7 +9761,7 @@ pub const BufferCreateFlags = packed struct {
     pub usingnamespace FlagsMixin(BufferCreateFlags, Flags);
 };
 pub const ShaderStageFlags = packed struct {
-    vertex_bit: bool align(@alignOf(Flags)) = false,
+    vertex_bit: bool = false,
     tessellation_control_bit: bool = false,
     tessellation_evaluation_bit: bool = false,
     geometry_bit: bool = false,
@@ -9796,7 +9796,7 @@ pub const ShaderStageFlags = packed struct {
     pub usingnamespace FlagsMixin(ShaderStageFlags, Flags);
 };
 pub const ImageUsageFlags = packed struct {
-    transfer_src_bit: bool align(@alignOf(Flags)) = false,
+    transfer_src_bit: bool = false,
     transfer_dst_bit: bool = false,
     sampled_bit: bool = false,
     storage_bit: bool = false,
@@ -9831,7 +9831,7 @@ pub const ImageUsageFlags = packed struct {
     pub usingnamespace FlagsMixin(ImageUsageFlags, Flags);
 };
 pub const ImageCreateFlags = packed struct {
-    sparse_binding_bit: bool align(@alignOf(Flags)) = false,
+    sparse_binding_bit: bool = false,
     sparse_residency_bit: bool = false,
     sparse_aliased_bit: bool = false,
     mutable_format_bit: bool = false,
@@ -9866,7 +9866,7 @@ pub const ImageCreateFlags = packed struct {
     pub usingnamespace FlagsMixin(ImageCreateFlags, Flags);
 };
 pub const ImageViewCreateFlags = packed struct {
-    fragment_density_map_dynamic_bit_ext: bool align(@alignOf(Flags)) = false,
+    fragment_density_map_dynamic_bit_ext: bool = false,
     fragment_density_map_deferred_bit_ext: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -9901,7 +9901,7 @@ pub const ImageViewCreateFlags = packed struct {
     pub usingnamespace FlagsMixin(ImageViewCreateFlags, Flags);
 };
 pub const SamplerCreateFlags = packed struct {
-    subsampled_bit_ext: bool align(@alignOf(Flags)) = false,
+    subsampled_bit_ext: bool = false,
     subsampled_coarse_reconstruction_bit_ext: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -9936,7 +9936,7 @@ pub const SamplerCreateFlags = packed struct {
     pub usingnamespace FlagsMixin(SamplerCreateFlags, Flags);
 };
 pub const PipelineCreateFlags = packed struct {
-    disable_optimization_bit: bool align(@alignOf(Flags)) = false,
+    disable_optimization_bit: bool = false,
     allow_derivatives_bit: bool = false,
     derivative_bit: bool = false,
     view_index_from_device_index_bit: bool = false,
@@ -9971,7 +9971,7 @@ pub const PipelineCreateFlags = packed struct {
     pub usingnamespace FlagsMixin(PipelineCreateFlags, Flags);
 };
 pub const PipelineShaderStageCreateFlags = packed struct {
-    allow_varying_subgroup_size_bit: bool align(@alignOf(Flags)) = false,
+    allow_varying_subgroup_size_bit: bool = false,
     require_full_subgroups_bit: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -10006,7 +10006,7 @@ pub const PipelineShaderStageCreateFlags = packed struct {
     pub usingnamespace FlagsMixin(PipelineShaderStageCreateFlags, Flags);
 };
 pub const ColorComponentFlags = packed struct {
-    r_bit: bool align(@alignOf(Flags)) = false,
+    r_bit: bool = false,
     g_bit: bool = false,
     b_bit: bool = false,
     a_bit: bool = false,
@@ -10041,7 +10041,7 @@ pub const ColorComponentFlags = packed struct {
     pub usingnamespace FlagsMixin(ColorComponentFlags, Flags);
 };
 pub const FenceCreateFlags = packed struct {
-    signaled_bit: bool align(@alignOf(Flags)) = false,
+    signaled_bit: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -10076,7 +10076,7 @@ pub const FenceCreateFlags = packed struct {
     pub usingnamespace FlagsMixin(FenceCreateFlags, Flags);
 };
 pub const FormatFeatureFlags = packed struct {
-    sampled_image_bit: bool align(@alignOf(Flags)) = false,
+    sampled_image_bit: bool = false,
     storage_image_bit: bool = false,
     storage_image_atomic_bit: bool = false,
     uniform_texel_buffer_bit: bool = false,
@@ -10111,7 +10111,7 @@ pub const FormatFeatureFlags = packed struct {
     pub usingnamespace FlagsMixin(FormatFeatureFlags, Flags);
 };
 pub const QueryControlFlags = packed struct {
-    precise_bit: bool align(@alignOf(Flags)) = false,
+    precise_bit: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -10146,7 +10146,7 @@ pub const QueryControlFlags = packed struct {
     pub usingnamespace FlagsMixin(QueryControlFlags, Flags);
 };
 pub const QueryResultFlags = packed struct {
-    @"64_bit": bool align(@alignOf(Flags)) = false,
+    @"64_bit": bool = false,
     wait_bit: bool = false,
     with_availability_bit: bool = false,
     partial_bit: bool = false,
@@ -10181,7 +10181,7 @@ pub const QueryResultFlags = packed struct {
     pub usingnamespace FlagsMixin(QueryResultFlags, Flags);
 };
 pub const CommandBufferUsageFlags = packed struct {
-    one_time_submit_bit: bool align(@alignOf(Flags)) = false,
+    one_time_submit_bit: bool = false,
     render_pass_continue_bit: bool = false,
     simultaneous_use_bit: bool = false,
     _reserved_bit_3: bool = false,
@@ -10216,7 +10216,7 @@ pub const CommandBufferUsageFlags = packed struct {
     pub usingnamespace FlagsMixin(CommandBufferUsageFlags, Flags);
 };
 pub const QueryPipelineStatisticFlags = packed struct {
-    input_assembly_vertices_bit: bool align(@alignOf(Flags)) = false,
+    input_assembly_vertices_bit: bool = false,
     input_assembly_primitives_bit: bool = false,
     vertex_shader_invocations_bit: bool = false,
     geometry_shader_invocations_bit: bool = false,
@@ -10251,7 +10251,7 @@ pub const QueryPipelineStatisticFlags = packed struct {
     pub usingnamespace FlagsMixin(QueryPipelineStatisticFlags, Flags);
 };
 pub const ImageAspectFlags = packed struct {
-    color_bit: bool align(@alignOf(Flags)) = false,
+    color_bit: bool = false,
     depth_bit: bool = false,
     stencil_bit: bool = false,
     metadata_bit: bool = false,
@@ -10286,7 +10286,7 @@ pub const ImageAspectFlags = packed struct {
     pub usingnamespace FlagsMixin(ImageAspectFlags, Flags);
 };
 pub const SparseImageFormatFlags = packed struct {
-    single_miptail_bit: bool align(@alignOf(Flags)) = false,
+    single_miptail_bit: bool = false,
     aligned_mip_size_bit: bool = false,
     nonstandard_block_size_bit: bool = false,
     _reserved_bit_3: bool = false,
@@ -10321,7 +10321,7 @@ pub const SparseImageFormatFlags = packed struct {
     pub usingnamespace FlagsMixin(SparseImageFormatFlags, Flags);
 };
 pub const SparseMemoryBindFlags = packed struct {
-    metadata_bit: bool align(@alignOf(Flags)) = false,
+    metadata_bit: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -10356,7 +10356,7 @@ pub const SparseMemoryBindFlags = packed struct {
     pub usingnamespace FlagsMixin(SparseMemoryBindFlags, Flags);
 };
 pub const PipelineStageFlags = packed struct {
-    top_of_pipe_bit: bool align(@alignOf(Flags)) = false,
+    top_of_pipe_bit: bool = false,
     draw_indirect_bit: bool = false,
     vertex_input_bit: bool = false,
     vertex_shader_bit: bool = false,
@@ -10391,7 +10391,7 @@ pub const PipelineStageFlags = packed struct {
     pub usingnamespace FlagsMixin(PipelineStageFlags, Flags);
 };
 pub const CommandPoolCreateFlags = packed struct {
-    transient_bit: bool align(@alignOf(Flags)) = false,
+    transient_bit: bool = false,
     reset_command_buffer_bit: bool = false,
     protected_bit: bool = false,
     _reserved_bit_3: bool = false,
@@ -10426,7 +10426,7 @@ pub const CommandPoolCreateFlags = packed struct {
     pub usingnamespace FlagsMixin(CommandPoolCreateFlags, Flags);
 };
 pub const CommandPoolResetFlags = packed struct {
-    release_resources_bit: bool align(@alignOf(Flags)) = false,
+    release_resources_bit: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -10461,7 +10461,7 @@ pub const CommandPoolResetFlags = packed struct {
     pub usingnamespace FlagsMixin(CommandPoolResetFlags, Flags);
 };
 pub const CommandBufferResetFlags = packed struct {
-    release_resources_bit: bool align(@alignOf(Flags)) = false,
+    release_resources_bit: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -10496,7 +10496,7 @@ pub const CommandBufferResetFlags = packed struct {
     pub usingnamespace FlagsMixin(CommandBufferResetFlags, Flags);
 };
 pub const SampleCountFlags = packed struct {
-    @"1_bit": bool align(@alignOf(Flags)) = false,
+    @"1_bit": bool = false,
     @"2_bit": bool = false,
     @"4_bit": bool = false,
     @"8_bit": bool = false,
@@ -10531,7 +10531,7 @@ pub const SampleCountFlags = packed struct {
     pub usingnamespace FlagsMixin(SampleCountFlags, Flags);
 };
 pub const AttachmentDescriptionFlags = packed struct {
-    may_alias_bit: bool align(@alignOf(Flags)) = false,
+    may_alias_bit: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -10566,7 +10566,7 @@ pub const AttachmentDescriptionFlags = packed struct {
     pub usingnamespace FlagsMixin(AttachmentDescriptionFlags, Flags);
 };
 pub const StencilFaceFlags = packed struct {
-    front_bit: bool align(@alignOf(Flags)) = false,
+    front_bit: bool = false,
     back_bit: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -10601,7 +10601,7 @@ pub const StencilFaceFlags = packed struct {
     pub usingnamespace FlagsMixin(StencilFaceFlags, Flags);
 };
 pub const DescriptorPoolCreateFlags = packed struct {
-    free_descriptor_set_bit: bool align(@alignOf(Flags)) = false,
+    free_descriptor_set_bit: bool = false,
     update_after_bind_bit: bool = false,
     host_only_bit_valve: bool = false,
     _reserved_bit_3: bool = false,
@@ -10636,7 +10636,7 @@ pub const DescriptorPoolCreateFlags = packed struct {
     pub usingnamespace FlagsMixin(DescriptorPoolCreateFlags, Flags);
 };
 pub const DependencyFlags = packed struct {
-    by_region_bit: bool align(@alignOf(Flags)) = false,
+    by_region_bit: bool = false,
     view_local_bit: bool = false,
     device_group_bit: bool = false,
     _reserved_bit_3: bool = false,
@@ -10678,7 +10678,7 @@ pub const SemaphoreType = enum(i32) {
     pub const timeline_khr = SemaphoreType.timeline;
 };
 pub const SemaphoreWaitFlags = packed struct {
-    any_bit: bool align(@alignOf(Flags)) = false,
+    any_bit: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -10741,7 +10741,7 @@ pub const ColorSpaceKHR = enum(i32) {
     _,
 };
 pub const DisplayPlaneAlphaFlagsKHR = packed struct {
-    opaque_bit_khr: bool align(@alignOf(Flags)) = false,
+    opaque_bit_khr: bool = false,
     global_bit_khr: bool = false,
     per_pixel_bit_khr: bool = false,
     per_pixel_premultiplied_bit_khr: bool = false,
@@ -10776,7 +10776,7 @@ pub const DisplayPlaneAlphaFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(DisplayPlaneAlphaFlagsKHR, Flags);
 };
 pub const CompositeAlphaFlagsKHR = packed struct {
-    opaque_bit_khr: bool align(@alignOf(Flags)) = false,
+    opaque_bit_khr: bool = false,
     pre_multiplied_bit_khr: bool = false,
     post_multiplied_bit_khr: bool = false,
     inherit_bit_khr: bool = false,
@@ -10811,7 +10811,7 @@ pub const CompositeAlphaFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(CompositeAlphaFlagsKHR, Flags);
 };
 pub const SurfaceTransformFlagsKHR = packed struct {
-    identity_bit_khr: bool align(@alignOf(Flags)) = false,
+    identity_bit_khr: bool = false,
     rotate_90_bit_khr: bool = false,
     rotate_180_bit_khr: bool = false,
     rotate_270_bit_khr: bool = false,
@@ -10846,7 +10846,7 @@ pub const SurfaceTransformFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(SurfaceTransformFlagsKHR, Flags);
 };
 pub const SwapchainImageUsageFlagsANDROID = packed struct {
-    shared_bit_android: bool align(@alignOf(Flags)) = false,
+    shared_bit_android: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -10888,7 +10888,7 @@ pub const TimeDomainEXT = enum(i32) {
     _,
 };
 pub const DebugReportFlagsEXT = packed struct {
-    information_bit_ext: bool align(@alignOf(Flags)) = false,
+    information_bit_ext: bool = false,
     warning_bit_ext: bool = false,
     performance_warning_bit_ext: bool = false,
     error_bit_ext: bool = false,
@@ -10980,7 +10980,7 @@ pub const RasterizationOrderAMD = enum(i32) {
     _,
 };
 pub const ExternalMemoryHandleTypeFlagsNV = packed struct {
-    opaque_win32_bit_nv: bool align(@alignOf(Flags)) = false,
+    opaque_win32_bit_nv: bool = false,
     opaque_win32_kmt_bit_nv: bool = false,
     d3d11_image_bit_nv: bool = false,
     d3d11_image_kmt_bit_nv: bool = false,
@@ -11015,7 +11015,7 @@ pub const ExternalMemoryHandleTypeFlagsNV = packed struct {
     pub usingnamespace FlagsMixin(ExternalMemoryHandleTypeFlagsNV, Flags);
 };
 pub const ExternalMemoryFeatureFlagsNV = packed struct {
-    dedicated_only_bit_nv: bool align(@alignOf(Flags)) = false,
+    dedicated_only_bit_nv: bool = false,
     exportable_bit_nv: bool = false,
     importable_bit_nv: bool = false,
     _reserved_bit_3: bool = false,
@@ -11074,7 +11074,7 @@ pub const ValidationFeatureDisableEXT = enum(i32) {
     _,
 };
 pub const SubgroupFeatureFlags = packed struct {
-    basic_bit: bool align(@alignOf(Flags)) = false,
+    basic_bit: bool = false,
     vote_bit: bool = false,
     arithmetic_bit: bool = false,
     ballot_bit: bool = false,
@@ -11109,7 +11109,7 @@ pub const SubgroupFeatureFlags = packed struct {
     pub usingnamespace FlagsMixin(SubgroupFeatureFlags, Flags);
 };
 pub const IndirectCommandsLayoutUsageFlagsNV = packed struct {
-    explicit_preprocess_bit_nv: bool align(@alignOf(Flags)) = false,
+    explicit_preprocess_bit_nv: bool = false,
     indexed_sequences_bit_nv: bool = false,
     unordered_sequences_bit_nv: bool = false,
     _reserved_bit_3: bool = false,
@@ -11144,7 +11144,7 @@ pub const IndirectCommandsLayoutUsageFlagsNV = packed struct {
     pub usingnamespace FlagsMixin(IndirectCommandsLayoutUsageFlagsNV, Flags);
 };
 pub const IndirectStateFlagsNV = packed struct {
-    flag_frontface_bit_nv: bool align(@alignOf(Flags)) = false,
+    flag_frontface_bit_nv: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -11194,7 +11194,7 @@ pub const PrivateDataSlotCreateFlags = packed struct {
     pub usingnamespace FlagsMixin(PrivateDataSlotCreateFlags, Flags);
 };
 pub const DescriptorSetLayoutCreateFlags = packed struct {
-    push_descriptor_bit_khr: bool align(@alignOf(Flags)) = false,
+    push_descriptor_bit_khr: bool = false,
     update_after_bind_pool_bit: bool = false,
     host_only_pool_bit_valve: bool = false,
     _reserved_bit_3: bool = false,
@@ -11229,7 +11229,7 @@ pub const DescriptorSetLayoutCreateFlags = packed struct {
     pub usingnamespace FlagsMixin(DescriptorSetLayoutCreateFlags, Flags);
 };
 pub const ExternalMemoryHandleTypeFlags = packed struct {
-    opaque_fd_bit: bool align(@alignOf(Flags)) = false,
+    opaque_fd_bit: bool = false,
     opaque_win32_bit: bool = false,
     opaque_win32_kmt_bit: bool = false,
     d3d11_texture_bit: bool = false,
@@ -11264,7 +11264,7 @@ pub const ExternalMemoryHandleTypeFlags = packed struct {
     pub usingnamespace FlagsMixin(ExternalMemoryHandleTypeFlags, Flags);
 };
 pub const ExternalMemoryFeatureFlags = packed struct {
-    dedicated_only_bit: bool align(@alignOf(Flags)) = false,
+    dedicated_only_bit: bool = false,
     exportable_bit: bool = false,
     importable_bit: bool = false,
     _reserved_bit_3: bool = false,
@@ -11299,7 +11299,7 @@ pub const ExternalMemoryFeatureFlags = packed struct {
     pub usingnamespace FlagsMixin(ExternalMemoryFeatureFlags, Flags);
 };
 pub const ExternalSemaphoreHandleTypeFlags = packed struct {
-    opaque_fd_bit: bool align(@alignOf(Flags)) = false,
+    opaque_fd_bit: bool = false,
     opaque_win32_bit: bool = false,
     opaque_win32_kmt_bit: bool = false,
     d3d12_fence_bit: bool = false,
@@ -11334,7 +11334,7 @@ pub const ExternalSemaphoreHandleTypeFlags = packed struct {
     pub usingnamespace FlagsMixin(ExternalSemaphoreHandleTypeFlags, Flags);
 };
 pub const ExternalSemaphoreFeatureFlags = packed struct {
-    exportable_bit: bool align(@alignOf(Flags)) = false,
+    exportable_bit: bool = false,
     importable_bit: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -11369,7 +11369,7 @@ pub const ExternalSemaphoreFeatureFlags = packed struct {
     pub usingnamespace FlagsMixin(ExternalSemaphoreFeatureFlags, Flags);
 };
 pub const SemaphoreImportFlags = packed struct {
-    temporary_bit: bool align(@alignOf(Flags)) = false,
+    temporary_bit: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -11404,7 +11404,7 @@ pub const SemaphoreImportFlags = packed struct {
     pub usingnamespace FlagsMixin(SemaphoreImportFlags, Flags);
 };
 pub const ExternalFenceHandleTypeFlags = packed struct {
-    opaque_fd_bit: bool align(@alignOf(Flags)) = false,
+    opaque_fd_bit: bool = false,
     opaque_win32_bit: bool = false,
     opaque_win32_kmt_bit: bool = false,
     sync_fd_bit: bool = false,
@@ -11439,7 +11439,7 @@ pub const ExternalFenceHandleTypeFlags = packed struct {
     pub usingnamespace FlagsMixin(ExternalFenceHandleTypeFlags, Flags);
 };
 pub const ExternalFenceFeatureFlags = packed struct {
-    exportable_bit: bool align(@alignOf(Flags)) = false,
+    exportable_bit: bool = false,
     importable_bit: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -11474,7 +11474,7 @@ pub const ExternalFenceFeatureFlags = packed struct {
     pub usingnamespace FlagsMixin(ExternalFenceFeatureFlags, Flags);
 };
 pub const FenceImportFlags = packed struct {
-    temporary_bit: bool align(@alignOf(Flags)) = false,
+    temporary_bit: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -11509,7 +11509,7 @@ pub const FenceImportFlags = packed struct {
     pub usingnamespace FlagsMixin(FenceImportFlags, Flags);
 };
 pub const SurfaceCounterFlagsEXT = packed struct {
-    vblank_bit_ext: bool align(@alignOf(Flags)) = false,
+    vblank_bit_ext: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -11558,7 +11558,7 @@ pub const DisplayEventTypeEXT = enum(i32) {
     _,
 };
 pub const PeerMemoryFeatureFlags = packed struct {
-    copy_src_bit: bool align(@alignOf(Flags)) = false,
+    copy_src_bit: bool = false,
     copy_dst_bit: bool = false,
     generic_src_bit: bool = false,
     generic_dst_bit: bool = false,
@@ -11593,7 +11593,7 @@ pub const PeerMemoryFeatureFlags = packed struct {
     pub usingnamespace FlagsMixin(PeerMemoryFeatureFlags, Flags);
 };
 pub const MemoryAllocateFlags = packed struct {
-    device_mask_bit: bool align(@alignOf(Flags)) = false,
+    device_mask_bit: bool = false,
     device_address_bit: bool = false,
     device_address_capture_replay_bit: bool = false,
     _reserved_bit_3: bool = false,
@@ -11628,7 +11628,7 @@ pub const MemoryAllocateFlags = packed struct {
     pub usingnamespace FlagsMixin(MemoryAllocateFlags, Flags);
 };
 pub const DeviceGroupPresentModeFlagsKHR = packed struct {
-    local_bit_khr: bool align(@alignOf(Flags)) = false,
+    local_bit_khr: bool = false,
     remote_bit_khr: bool = false,
     sum_bit_khr: bool = false,
     local_multi_device_bit_khr: bool = false,
@@ -11663,7 +11663,7 @@ pub const DeviceGroupPresentModeFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(DeviceGroupPresentModeFlagsKHR, Flags);
 };
 pub const SwapchainCreateFlagsKHR = packed struct {
-    split_instance_bind_regions_bit_khr: bool align(@alignOf(Flags)) = false,
+    split_instance_bind_regions_bit_khr: bool = false,
     protected_bit_khr: bool = false,
     mutable_format_bit_khr: bool = false,
     _reserved_bit_3: bool = false,
@@ -11714,7 +11714,7 @@ pub const DiscardRectangleModeEXT = enum(i32) {
     _,
 };
 pub const SubpassDescriptionFlags = packed struct {
-    per_view_attributes_bit_nvx: bool align(@alignOf(Flags)) = false,
+    per_view_attributes_bit_nvx: bool = false,
     per_view_position_x_only_bit_nvx: bool = false,
     fragment_region_bit_qcom: bool = false,
     shader_resolve_bit_qcom: bool = false,
@@ -11838,7 +11838,7 @@ pub const QueueGlobalPriorityKHR = enum(i32) {
     pub const realtime_ext = QueueGlobalPriorityKHR.realtime_khr;
 };
 pub const DebugUtilsMessageSeverityFlagsEXT = packed struct {
-    verbose_bit_ext: bool align(@alignOf(Flags)) = false,
+    verbose_bit_ext: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -11873,7 +11873,7 @@ pub const DebugUtilsMessageSeverityFlagsEXT = packed struct {
     pub usingnamespace FlagsMixin(DebugUtilsMessageSeverityFlagsEXT, Flags);
 };
 pub const DebugUtilsMessageTypeFlagsEXT = packed struct {
-    general_bit_ext: bool align(@alignOf(Flags)) = false,
+    general_bit_ext: bool = false,
     validation_bit_ext: bool = false,
     performance_bit_ext: bool = false,
     _reserved_bit_3: bool = false,
@@ -11914,7 +11914,7 @@ pub const ConservativeRasterizationModeEXT = enum(i32) {
     _,
 };
 pub const DescriptorBindingFlags = packed struct {
-    update_after_bind_bit: bool align(@alignOf(Flags)) = false,
+    update_after_bind_bit: bool = false,
     update_unused_while_pending_bit: bool = false,
     partially_bound_bit: bool = false,
     variable_descriptor_count_bit: bool = false,
@@ -11995,7 +11995,7 @@ pub const DriverId = enum(i32) {
     pub const broadcom_proprietary_khr = DriverId.broadcom_proprietary;
 };
 pub const ConditionalRenderingFlagsEXT = packed struct {
-    inverted_bit_ext: bool align(@alignOf(Flags)) = false,
+    inverted_bit_ext: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -12030,7 +12030,7 @@ pub const ConditionalRenderingFlagsEXT = packed struct {
     pub usingnamespace FlagsMixin(ConditionalRenderingFlagsEXT, Flags);
 };
 pub const ResolveModeFlags = packed struct {
-    sample_zero_bit: bool align(@alignOf(Flags)) = false,
+    sample_zero_bit: bool = false,
     average_bit: bool = false,
     min_bit: bool = false,
     max_bit: bool = false,
@@ -12087,7 +12087,7 @@ pub const CoarseSampleOrderTypeNV = enum(i32) {
     _,
 };
 pub const GeometryInstanceFlagsKHR = packed struct {
-    triangle_facing_cull_disable_bit_khr: bool align(@alignOf(Flags)) = false,
+    triangle_facing_cull_disable_bit_khr: bool = false,
     triangle_flip_facing_bit_khr: bool = false,
     force_opaque_bit_khr: bool = false,
     force_no_opaque_bit_khr: bool = false,
@@ -12122,7 +12122,7 @@ pub const GeometryInstanceFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(GeometryInstanceFlagsKHR, Flags);
 };
 pub const GeometryFlagsKHR = packed struct {
-    opaque_bit_khr: bool align(@alignOf(Flags)) = false,
+    opaque_bit_khr: bool = false,
     no_duplicate_any_hit_invocation_bit_khr: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -12157,7 +12157,7 @@ pub const GeometryFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(GeometryFlagsKHR, Flags);
 };
 pub const BuildAccelerationStructureFlagsKHR = packed struct {
-    allow_update_bit_khr: bool align(@alignOf(Flags)) = false,
+    allow_update_bit_khr: bool = false,
     allow_compaction_bit_khr: bool = false,
     prefer_fast_trace_bit_khr: bool = false,
     prefer_fast_build_bit_khr: bool = false,
@@ -12192,7 +12192,7 @@ pub const BuildAccelerationStructureFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(BuildAccelerationStructureFlagsKHR, Flags);
 };
 pub const AccelerationStructureCreateFlagsKHR = packed struct {
-    device_address_capture_replay_bit_khr: bool align(@alignOf(Flags)) = false,
+    device_address_capture_replay_bit_khr: bool = false,
     _reserved_bit_1: bool = false,
     motion_bit_nv: bool = false,
     _reserved_bit_3: bool = false,
@@ -12296,7 +12296,7 @@ pub const MemoryOverallocationBehaviorAMD = enum(i32) {
     _,
 };
 pub const FramebufferCreateFlags = packed struct {
-    imageless_bit: bool align(@alignOf(Flags)) = false,
+    imageless_bit: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -12352,7 +12352,7 @@ pub const ComponentTypeNV = enum(i32) {
     _,
 };
 pub const DeviceDiagnosticsConfigFlagsNV = packed struct {
-    enable_shader_debug_info_bit_nv: bool align(@alignOf(Flags)) = false,
+    enable_shader_debug_info_bit_nv: bool = false,
     enable_resource_tracking_bit_nv: bool = false,
     enable_automatic_checkpoints_bit_nv: bool = false,
     _reserved_bit_3: bool = false,
@@ -12387,7 +12387,7 @@ pub const DeviceDiagnosticsConfigFlagsNV = packed struct {
     pub usingnamespace FlagsMixin(DeviceDiagnosticsConfigFlagsNV, Flags);
 };
 pub const PipelineCreationFeedbackFlags = packed struct {
-    valid_bit: bool align(@alignOf(Flags)) = false,
+    valid_bit: bool = false,
     application_pipeline_cache_hit_bit: bool = false,
     base_pipeline_acceleration_bit: bool = false,
     _reserved_bit_3: bool = false,
@@ -12458,7 +12458,7 @@ pub const PerformanceCounterStorageKHR = enum(i32) {
     _,
 };
 pub const PerformanceCounterDescriptionFlagsKHR = packed struct {
-    performance_impacting_bit_khr: bool align(@alignOf(Flags)) = false,
+    performance_impacting_bit_khr: bool = false,
     concurrently_impacted_bit_khr: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -12554,7 +12554,7 @@ pub const PipelineCompilerControlFlagsAMD = packed struct {
     pub usingnamespace FlagsMixin(PipelineCompilerControlFlagsAMD, Flags);
 };
 pub const ToolPurposeFlags = packed struct {
-    validation_bit: bool align(@alignOf(Flags)) = false,
+    validation_bit: bool = false,
     profiling_bit: bool = false,
     tracing_bit: bool = false,
     additional_features_bit: bool = false,
@@ -12617,7 +12617,7 @@ pub const FragmentShadingRateTypeNV = enum(i32) {
     _,
 };
 pub const AccessFlags2 = packed struct {
-    indirect_command_read_bit: bool align(@alignOf(Flags64)) = false,
+    indirect_command_read_bit: bool = false,
     index_read_bit: bool = false,
     vertex_attribute_read_bit: bool = false,
     uniform_read_bit: bool = false,
@@ -12684,7 +12684,7 @@ pub const AccessFlags2 = packed struct {
     pub usingnamespace FlagsMixin(AccessFlags2, Flags64);
 };
 pub const PipelineStageFlags2 = packed struct {
-    top_of_pipe_bit: bool align(@alignOf(Flags64)) = false,
+    top_of_pipe_bit: bool = false,
     draw_indirect_bit: bool = false,
     vertex_input_bit: bool = false,
     vertex_shader_bit: bool = false,
@@ -12751,7 +12751,7 @@ pub const PipelineStageFlags2 = packed struct {
     pub usingnamespace FlagsMixin(PipelineStageFlags2, Flags64);
 };
 pub const SubmitFlags = packed struct {
-    protected_bit: bool align(@alignOf(Flags)) = false,
+    protected_bit: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -12786,7 +12786,7 @@ pub const SubmitFlags = packed struct {
     pub usingnamespace FlagsMixin(SubmitFlags, Flags);
 };
 pub const EventCreateFlags = packed struct {
-    device_only_bit: bool align(@alignOf(Flags)) = false,
+    device_only_bit: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -12832,7 +12832,7 @@ pub const AccelerationStructureMotionInstanceTypeNV = enum(i32) {
     _,
 };
 pub const PipelineColorBlendStateCreateFlags = packed struct {
-    rasterization_order_attachment_access_bit_arm: bool align(@alignOf(Flags)) = false,
+    rasterization_order_attachment_access_bit_arm: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -12867,7 +12867,7 @@ pub const PipelineColorBlendStateCreateFlags = packed struct {
     pub usingnamespace FlagsMixin(PipelineColorBlendStateCreateFlags, Flags);
 };
 pub const PipelineDepthStencilStateCreateFlags = packed struct {
-    rasterization_order_attachment_depth_access_bit_arm: bool align(@alignOf(Flags)) = false,
+    rasterization_order_attachment_depth_access_bit_arm: bool = false,
     rasterization_order_attachment_stencil_access_bit_arm: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -12902,7 +12902,7 @@ pub const PipelineDepthStencilStateCreateFlags = packed struct {
     pub usingnamespace FlagsMixin(PipelineDepthStencilStateCreateFlags, Flags);
 };
 pub const VideoCodecOperationFlagsKHR = packed struct {
-    decode_h264_bit_ext: bool align(@alignOf(Flags)) = false,
+    decode_h264_bit_ext: bool = false,
     decode_h265_bit_ext: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -12937,7 +12937,7 @@ pub const VideoCodecOperationFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(VideoCodecOperationFlagsKHR, Flags);
 };
 pub const VideoChromaSubsamplingFlagsKHR = packed struct {
-    monochrome_bit_khr: bool align(@alignOf(Flags)) = false,
+    monochrome_bit_khr: bool = false,
     @"420_bit_khr": bool = false,
     @"422_bit_khr": bool = false,
     @"444_bit_khr": bool = false,
@@ -12972,7 +12972,7 @@ pub const VideoChromaSubsamplingFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(VideoChromaSubsamplingFlagsKHR, Flags);
 };
 pub const VideoComponentBitDepthFlagsKHR = packed struct {
-    @"8_bit_khr": bool align(@alignOf(Flags)) = false,
+    @"8_bit_khr": bool = false,
     _reserved_bit_1: bool = false,
     @"10_bit_khr": bool = false,
     _reserved_bit_3: bool = false,
@@ -13007,7 +13007,7 @@ pub const VideoComponentBitDepthFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(VideoComponentBitDepthFlagsKHR, Flags);
 };
 pub const VideoCapabilityFlagsKHR = packed struct {
-    protected_content_bit_khr: bool align(@alignOf(Flags)) = false,
+    protected_content_bit_khr: bool = false,
     separate_reference_images_bit_khr: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -13042,7 +13042,7 @@ pub const VideoCapabilityFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(VideoCapabilityFlagsKHR, Flags);
 };
 pub const VideoSessionCreateFlagsKHR = packed struct {
-    protected_content_bit_khr: bool align(@alignOf(Flags)) = false,
+    protected_content_bit_khr: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -13077,7 +13077,7 @@ pub const VideoSessionCreateFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(VideoSessionCreateFlagsKHR, Flags);
 };
 pub const VideoCodingQualityPresetFlagsKHR = packed struct {
-    normal_bit_khr: bool align(@alignOf(Flags)) = false,
+    normal_bit_khr: bool = false,
     power_bit_khr: bool = false,
     quality_bit_khr: bool = false,
     _reserved_bit_3: bool = false,
@@ -13112,7 +13112,7 @@ pub const VideoCodingQualityPresetFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(VideoCodingQualityPresetFlagsKHR, Flags);
 };
 pub const VideoDecodeH264PictureLayoutFlagsEXT = packed struct {
-    interlaced_interleaved_lines_bit_ext: bool align(@alignOf(Flags)) = false,
+    interlaced_interleaved_lines_bit_ext: bool = false,
     interlaced_separate_planes_bit_ext: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -13147,7 +13147,7 @@ pub const VideoDecodeH264PictureLayoutFlagsEXT = packed struct {
     pub usingnamespace FlagsMixin(VideoDecodeH264PictureLayoutFlagsEXT, Flags);
 };
 pub const VideoCodingControlFlagsKHR = packed struct {
-    reset_bit_khr: bool align(@alignOf(Flags)) = false,
+    reset_bit_khr: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -13188,7 +13188,7 @@ pub const QueryResultStatusKHR = enum(i32) {
     _,
 };
 pub const VideoDecodeFlagsKHR = packed struct {
-    reserved_0_bit_khr: bool align(@alignOf(Flags)) = false,
+    reserved_0_bit_khr: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -13223,7 +13223,7 @@ pub const VideoDecodeFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(VideoDecodeFlagsKHR, Flags);
 };
 pub const VideoEncodeFlagsKHR = packed struct {
-    reserved_0_bit_khr: bool align(@alignOf(Flags)) = false,
+    reserved_0_bit_khr: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -13258,7 +13258,7 @@ pub const VideoEncodeFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(VideoEncodeFlagsKHR, Flags);
 };
 pub const VideoEncodeRateControlFlagsKHR = packed struct {
-    reserved_0_bit_khr: bool align(@alignOf(Flags)) = false,
+    reserved_0_bit_khr: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -13293,7 +13293,7 @@ pub const VideoEncodeRateControlFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(VideoEncodeRateControlFlagsKHR, Flags);
 };
 pub const VideoEncodeRateControlModeFlagsKHR = packed struct {
-    _reserved_bit_0: bool align(@alignOf(Flags)) = false,
+    _reserved_bit_0: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -13328,7 +13328,7 @@ pub const VideoEncodeRateControlModeFlagsKHR = packed struct {
     pub usingnamespace FlagsMixin(VideoEncodeRateControlModeFlagsKHR, Flags);
 };
 pub const VideoEncodeH264CapabilityFlagsEXT = packed struct {
-    cabac_bit_ext: bool align(@alignOf(Flags)) = false,
+    cabac_bit_ext: bool = false,
     cavlc_bit_ext: bool = false,
     weighted_bi_pred_implicit_bit_ext: bool = false,
     transform_8x8_bit_ext: bool = false,
@@ -13363,7 +13363,7 @@ pub const VideoEncodeH264CapabilityFlagsEXT = packed struct {
     pub usingnamespace FlagsMixin(VideoEncodeH264CapabilityFlagsEXT, Flags);
 };
 pub const VideoEncodeH264InputModeFlagsEXT = packed struct {
-    frame_bit_ext: bool align(@alignOf(Flags)) = false,
+    frame_bit_ext: bool = false,
     slice_bit_ext: bool = false,
     non_vcl_bit_ext: bool = false,
     _reserved_bit_3: bool = false,
@@ -13398,7 +13398,7 @@ pub const VideoEncodeH264InputModeFlagsEXT = packed struct {
     pub usingnamespace FlagsMixin(VideoEncodeH264InputModeFlagsEXT, Flags);
 };
 pub const VideoEncodeH264OutputModeFlagsEXT = packed struct {
-    frame_bit_ext: bool align(@alignOf(Flags)) = false,
+    frame_bit_ext: bool = false,
     slice_bit_ext: bool = false,
     non_vcl_bit_ext: bool = false,
     _reserved_bit_3: bool = false,
@@ -13433,7 +13433,7 @@ pub const VideoEncodeH264OutputModeFlagsEXT = packed struct {
     pub usingnamespace FlagsMixin(VideoEncodeH264OutputModeFlagsEXT, Flags);
 };
 pub const VideoEncodeH264CreateFlagsEXT = packed struct {
-    reserved_0_bit_ext: bool align(@alignOf(Flags)) = false,
+    reserved_0_bit_ext: bool = false,
     _reserved_bit_1: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -13468,7 +13468,7 @@ pub const VideoEncodeH264CreateFlagsEXT = packed struct {
     pub usingnamespace FlagsMixin(VideoEncodeH264CreateFlagsEXT, Flags);
 };
 pub const VideoEncodeH264RateControlStructureFlagsEXT = packed struct {
-    flat_bit_ext: bool align(@alignOf(Flags)) = false,
+    flat_bit_ext: bool = false,
     dyadic_bit_ext: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -13503,7 +13503,7 @@ pub const VideoEncodeH264RateControlStructureFlagsEXT = packed struct {
     pub usingnamespace FlagsMixin(VideoEncodeH264RateControlStructureFlagsEXT, Flags);
 };
 pub const ImageConstraintsInfoFlagsFUCHSIA = packed struct {
-    cpu_read_rarely_fuchsia: bool align(@alignOf(Flags)) = false,
+    cpu_read_rarely_fuchsia: bool = false,
     cpu_read_often_fuchsia: bool = false,
     cpu_write_rarely_fuchsia: bool = false,
     cpu_write_often_fuchsia: bool = false,
@@ -13538,7 +13538,7 @@ pub const ImageConstraintsInfoFlagsFUCHSIA = packed struct {
     pub usingnamespace FlagsMixin(ImageConstraintsInfoFlagsFUCHSIA, Flags);
 };
 pub const FormatFeatureFlags2 = packed struct {
-    sampled_image_bit: bool align(@alignOf(Flags64)) = false,
+    sampled_image_bit: bool = false,
     storage_image_bit: bool = false,
     storage_image_atomic_bit: bool = false,
     uniform_texel_buffer_bit: bool = false,
@@ -13605,7 +13605,7 @@ pub const FormatFeatureFlags2 = packed struct {
     pub usingnamespace FlagsMixin(FormatFeatureFlags2, Flags64);
 };
 pub const RenderingFlags = packed struct {
-    contents_secondary_command_buffers_bit: bool align(@alignOf(Flags)) = false,
+    contents_secondary_command_buffers_bit: bool = false,
     suspending_bit: bool = false,
     resuming_bit: bool = false,
     _reserved_bit_3: bool = false,
@@ -13640,7 +13640,7 @@ pub const RenderingFlags = packed struct {
     pub usingnamespace FlagsMixin(RenderingFlags, Flags);
 };
 pub const VideoEncodeH265InputModeFlagsEXT = packed struct {
-    frame_bit_ext: bool align(@alignOf(Flags)) = false,
+    frame_bit_ext: bool = false,
     slice_bit_ext: bool = false,
     non_vcl_bit_ext: bool = false,
     _reserved_bit_3: bool = false,
@@ -13675,7 +13675,7 @@ pub const VideoEncodeH265InputModeFlagsEXT = packed struct {
     pub usingnamespace FlagsMixin(VideoEncodeH265InputModeFlagsEXT, Flags);
 };
 pub const VideoEncodeH265OutputModeFlagsEXT = packed struct {
-    frame_bit_ext: bool align(@alignOf(Flags)) = false,
+    frame_bit_ext: bool = false,
     slice_bit_ext: bool = false,
     non_vcl_bit_ext: bool = false,
     _reserved_bit_3: bool = false,
@@ -13710,7 +13710,7 @@ pub const VideoEncodeH265OutputModeFlagsEXT = packed struct {
     pub usingnamespace FlagsMixin(VideoEncodeH265OutputModeFlagsEXT, Flags);
 };
 pub const VideoEncodeH265CtbSizeFlagsEXT = packed struct {
-    @"8_bit_ext": bool align(@alignOf(Flags)) = false,
+    @"8_bit_ext": bool = false,
     @"16_bit_ext": bool = false,
     @"32_bit_ext": bool = false,
     @"64_bit_ext": bool = false,
@@ -13745,7 +13745,7 @@ pub const VideoEncodeH265CtbSizeFlagsEXT = packed struct {
     pub usingnamespace FlagsMixin(VideoEncodeH265CtbSizeFlagsEXT, Flags);
 };
 pub const VideoEncodeH265RateControlStructureFlagsEXT = packed struct {
-    flat_bit_ext: bool align(@alignOf(Flags)) = false,
+    flat_bit_ext: bool = false,
     dyadic_bit_ext: bool = false,
     _reserved_bit_2: bool = false,
     _reserved_bit_3: bool = false,
@@ -18817,11 +18817,14 @@ pub fn InstanceWrapper(comptime cmds: InstanceCommandFlags) type {
                 p_external_fence_properties,
             );
         }
+        pub const ReleaseDisplayEXTError = error{
+            Unknown,
+        };
         pub fn releaseDisplayEXT(
             self: Self,
             physical_device: PhysicalDevice,
             display: DisplayKHR,
-        ) void {
+        ) ReleaseDisplayEXTError!void {
             const result = self.dispatch.vkReleaseDisplayEXT(
                 physical_device,
                 display,
@@ -20956,12 +20959,15 @@ pub fn DeviceWrapper(comptime cmds: DeviceCommandFlags) type {
                 p_allocator,
             );
         }
+        pub const ResetDescriptorPoolError = error{
+            Unknown,
+        };
         pub fn resetDescriptorPool(
             self: Self,
             device: Device,
             descriptor_pool: DescriptorPool,
             flags: DescriptorPoolResetFlags,
-        ) void {
+        ) ResetDescriptorPoolError!void {
             const result = self.dispatch.vkResetDescriptorPool(
                 device,
                 descriptor_pool,
@@ -20999,13 +21005,16 @@ pub fn DeviceWrapper(comptime cmds: DeviceCommandFlags) type {
                 else => return error.Unknown,
             }
         }
+        pub const FreeDescriptorSetsError = error{
+            Unknown,
+        };
         pub fn freeDescriptorSets(
             self: Self,
             device: Device,
             descriptor_pool: DescriptorPool,
             descriptor_set_count: u32,
             p_descriptor_sets: [*]const DescriptorSet,
-        ) void {
+        ) FreeDescriptorSetsError!void {
             const result = self.dispatch.vkFreeDescriptorSets(
                 device,
                 descriptor_pool,
@@ -23516,12 +23525,15 @@ pub fn DeviceWrapper(comptime cmds: DeviceCommandFlags) type {
                 p_support,
             );
         }
+        pub const GetSwapchainGrallocUsageANDROIDError = error{
+            Unknown,
+        };
         pub fn getSwapchainGrallocUsageANDROID(
             self: Self,
             device: Device,
             format: Format,
             image_usage: ImageUsageFlags,
-        ) c_int {
+        ) GetSwapchainGrallocUsageANDROIDError!c_int {
             var gralloc_usage: c_int = undefined;
             const result = self.dispatch.vkGetSwapchainGrallocUsageANDROID(
                 device,
@@ -23538,13 +23550,16 @@ pub fn DeviceWrapper(comptime cmds: DeviceCommandFlags) type {
             gralloc_consumer_usage: u64,
             gralloc_producer_usage: u64,
         };
+        pub const GetSwapchainGrallocUsage2ANDROIDError = error{
+            Unknown,
+        };
         pub fn getSwapchainGrallocUsage2ANDROID(
             self: Self,
             device: Device,
             format: Format,
             image_usage: ImageUsageFlags,
             swapchain_image_usage: SwapchainImageUsageFlagsANDROID,
-        ) GetSwapchainGrallocUsage2ANDROIDResult {
+        ) GetSwapchainGrallocUsage2ANDROIDError!GetSwapchainGrallocUsage2ANDROIDResult {
             var return_values: GetSwapchainGrallocUsage2ANDROIDResult = undefined;
             const result = self.dispatch.vkGetSwapchainGrallocUsage2ANDROID(
                 device,
@@ -23559,6 +23574,9 @@ pub fn DeviceWrapper(comptime cmds: DeviceCommandFlags) type {
             }
             return return_values;
         }
+        pub const AcquireImageANDROIDError = error{
+            Unknown,
+        };
         pub fn acquireImageANDROID(
             self: Self,
             device: Device,
@@ -23566,7 +23584,7 @@ pub fn DeviceWrapper(comptime cmds: DeviceCommandFlags) type {
             native_fence_fd: c_int,
             semaphore: Semaphore,
             fence: Fence,
-        ) void {
+        ) AcquireImageANDROIDError!void {
             const result = self.dispatch.vkAcquireImageANDROID(
                 device,
                 image,
@@ -23578,13 +23596,16 @@ pub fn DeviceWrapper(comptime cmds: DeviceCommandFlags) type {
                 else => return error.Unknown,
             }
         }
+        pub const QueueSignalReleaseImageANDROIDError = error{
+            Unknown,
+        };
         pub fn queueSignalReleaseImageANDROID(
             self: Self,
             queue: Queue,
             wait_semaphore_count: u32,
             p_wait_semaphores: [*]const Semaphore,
             image: Image,
-        ) c_int {
+        ) QueueSignalReleaseImageANDROIDError!c_int {
             var native_fence_fd: c_int = undefined;
             const result = self.dispatch.vkQueueSignalReleaseImageANDROID(
                 queue,
@@ -25454,11 +25475,14 @@ pub fn DeviceWrapper(comptime cmds: DeviceCommandFlags) type {
                 operation,
             );
         }
+        pub const GetDeferredOperationResultKHRError = error{
+            Unknown,
+        };
         pub fn getDeferredOperationResultKHR(
             self: Self,
             device: Device,
             operation: DeferredOperationKHR,
-        ) Result {
+        ) GetDeferredOperationResultKHRError!Result {
             const result = self.dispatch.vkGetDeferredOperationResultKHR(
                 device,
                 operation,

@@ -101,13 +101,13 @@ pub const Swapchain = struct {
         self.gc.vkd.destroySemaphore(self.gc.dev, self.next_image_acquired, null);
     }
 
-    pub fn waitForAllFences(self: Swapchain) !void {
-        for (self.swap_images) |si| si.waitForFence(self.gc) catch {};
-    }
-
     pub fn deinit(self: Swapchain) void {
         self.deinitExceptSwapchain();
         self.gc.vkd.destroySwapchainKHR(self.gc.dev, self.handle, null);
+    }
+
+    pub fn waitForAllFences(self: Swapchain) !void {
+        for (self.swap_images) |si| si.waitForFence(self.gc) catch {};
     }
 
     pub fn recreate(self: *Swapchain, new_extent: vk.Extent2D) !void {
@@ -127,17 +127,17 @@ pub const Swapchain = struct {
     }
 
     pub fn present(self: *Swapchain, cmdbuf: vk.CommandBuffer) !PresentState {
-        // Simple method:
+        // ---- Simple method:
         // 1) Acquire next image
         // 2) Wait for and reset fence of the acquired image
         // 3) Submit command buffer with fence of acquired image,
         //    dependendent on the semaphore signalled by the first step.
         // 4) Present current frame, dependent on semaphore signalled by previous step
         // Problem: This way we can't reference the current image while rendering.
-        // Better method: Shuffle the steps around such that acquire next image is the last step,
+        // ---- Better method: Shuffle the steps around such that acquire next image is the last step,
         // leaving the swapchain in a state with the current image.
         // 1) Wait for and reset fence of current image
-        // 2) Submit command buffer, signalling fence of current image and dependent on
+        // 2) Submit command buffer, signalling semaphore of current image and dependent on
         //    the semaphore signalled by step 4.
         // 3) Present current frame, dependent on semaphore signalled by the submit
         // 4) Acquire next image, signalling its semaphore
@@ -149,6 +149,7 @@ pub const Swapchain = struct {
         try self.gc.vkd.resetFences(self.gc.dev, 1, @ptrCast([*]const vk.Fence, &current.frame_fence));
 
         // Step 2: Submit the command buffer
+        // TODO: should the flag used here be color_attachment_output_bit?
         const wait_stage = [_]vk.PipelineStageFlags{.{ .top_of_pipe_bit = true }};
         try self.gc.vkd.queueSubmit(self.gc.graphics_queue.handle, 1, &[_]vk.SubmitInfo{.{
             .wait_semaphore_count = 1,

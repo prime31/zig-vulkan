@@ -1,5 +1,6 @@
 const std = @import("std");
 const vk = @import("vulkan");
+const vkinit = @import("vkinit.zig");
 
 const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 
@@ -15,12 +16,7 @@ pub const PipelineBuilder = struct {
     pipeline_layout: vk.PipelineLayout,
 
     pub fn init(allocator: std.mem.Allocator, extent: vk.Extent2D, pipeline_layout: vk.PipelineLayout) PipelineBuilder {
-        const input_assembly = vk.PipelineInputAssemblyStateCreateInfo{
-            .flags = .{},
-            .topology = .triangle_list,
-            .primitive_restart_enable = vk.FALSE,
-        };
-
+        // build viewport and scissor from the swapchain extents
         const viewport = vk.Viewport{
             .x = 0,
             .y = 0,
@@ -35,41 +31,6 @@ pub const PipelineBuilder = struct {
             .extent = extent,
         };
 
-        const rasterizer = vk.PipelineRasterizationStateCreateInfo{
-            .flags = .{},
-            .depth_clamp_enable = vk.FALSE,
-            .rasterizer_discard_enable = vk.FALSE,
-            .polygon_mode = .fill,
-            .cull_mode = .{ .back_bit = true },
-            .front_face = .clockwise,
-            .depth_bias_enable = vk.FALSE,
-            .depth_bias_constant_factor = 0,
-            .depth_bias_clamp = 0,
-            .depth_bias_slope_factor = 0,
-            .line_width = 1,
-        };
-
-        const color_blend_attachment = vk.PipelineColorBlendAttachmentState{
-            .blend_enable = vk.FALSE,
-            .src_color_blend_factor = .one,
-            .dst_color_blend_factor = .zero,
-            .color_blend_op = .add,
-            .src_alpha_blend_factor = .one,
-            .dst_alpha_blend_factor = .zero,
-            .alpha_blend_op = .add,
-            .color_write_mask = .{ .r_bit = true, .g_bit = true, .b_bit = true, .a_bit = true },
-        };
-
-        const multisampling = vk.PipelineMultisampleStateCreateInfo{
-            .flags = .{},
-            .rasterization_samples = .{ .@"1_bit" = true },
-            .sample_shading_enable = vk.FALSE,
-            .min_sample_shading = 1,
-            .p_sample_mask = null,
-            .alpha_to_coverage_enable = vk.FALSE,
-            .alpha_to_one_enable = vk.FALSE,
-        };
-
         return .{
             .shader_stages = std.ArrayList(vk.PipelineShaderStageCreateInfo).init(allocator),
             .vertex_input_info = .{
@@ -79,12 +40,12 @@ pub const PipelineBuilder = struct {
                 .vertex_attribute_description_count = 0,
                 .p_vertex_attribute_descriptions = undefined,
             },
-            .input_assembly = input_assembly,
+            .input_assembly = vkinit.pipelineInputAssempblyCreateInfo(.triangle_list),
             .viewport = viewport,
             .scissor = scissor,
-            .rasterizer = rasterizer,
-            .color_blend_attachment = color_blend_attachment,
-            .multisampling = multisampling,
+            .rasterizer = vkinit.pipelineRasterizationStateCreateInfo(.fill),
+            .color_blend_attachment = vkinit.pipelineColorBlendAttachmentState(),
+            .multisampling = vkinit.pipelineMultisampleStateCreateInfo(),
             .pipeline_layout = pipeline_layout,
         };
     }
@@ -104,6 +65,7 @@ pub const PipelineBuilder = struct {
             .p_scissors = @ptrCast([*]const vk.Rect2D, &self.scissor),
         };
 
+        // color_blending must match the fragment shader output
         const color_blending = vk.PipelineColorBlendStateCreateInfo{
             .flags = .{},
             .logic_op_enable = vk.FALSE,
