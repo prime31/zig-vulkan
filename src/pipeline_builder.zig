@@ -50,6 +50,10 @@ pub const PipelineBuilder = struct {
         };
     }
 
+    pub fn deinit(self: PipelineBuilder) void {
+        self.shader_stages.deinit();
+    }
+
     pub fn addShaderStage(self: *PipelineBuilder, stage: vk.PipelineShaderStageCreateInfo) !void {
         try self.shader_stages.append(stage);
     }

@@ -8,16 +8,24 @@ pub fn build(b: *std.build.Builder) void {
     const target = b.standardTargetOptions(.{});
     const mode = b.standardReleaseOptions();
 
-    // shader resources, to be compiled using glslc
-    const res = zigvulkan.ResourceGenStep.init(b, "resources.zig");
-    res.shader_step = vkgen.ShaderCompileStep.init(b, &[_][]const u8{ "glslc", "--target-env=vulkan1.1" }, "shaders");
-    res.step.dependOn(&res.shader_step.step);
+    // shader compilation and resources.zig generation
+    const resources_pkg = addShaderCompilationStep(b, true);
 
-    // add all shader for compilation
-    const shaders = getAllShaders(b, "shaders");
-    for (shaders) |shader| {
-        res.addShader(shader[0], shader[1]);
-    }
+    // packages
+    const vulkan_pkg = std.build.Pkg{
+        .name = "vulkan",
+        .path = .{
+            .path = std.fs.path.join(b.allocator, &[_][]const u8{
+                b.build_root,
+                b.cache_root,
+                "vk.zig",
+            }) catch unreachable,
+        },
+    };
+    const glfw_pkg = std.build.Pkg{
+        .name = "glfw",
+        .path = .{ .path = "libs/mach-glfw/src/main.zig" },
+    };
 
     const examples = getAllExamples(b, "examples");
     for (examples) |example| {
@@ -31,23 +39,8 @@ pub fn build(b: *std.build.Builder) void {
         exe.install();
 
         // packages
-        const vulkan_pkg = std.build.Pkg{
-            .name = "vulkan",
-            .path = .{
-                .path = std.fs.path.join(b.allocator, &[_][]const u8{
-                    b.build_root,
-                    b.cache_root,
-                    "vk.zig",
-                }) catch unreachable,
-            },
-        };
-        const glfw_pkg = std.build.Pkg{
-            .name = "glfw",
-            .path = .{ .path = "libs/mach-glfw/src/main.zig" },
-        };
-
         exe.addPackage(vulkan_pkg);
-        exe.addPackage(res.package);
+        exe.addPackage(resources_pkg);
 
         // mach-glfw
         exe.addPackage(glfw_pkg);
@@ -56,7 +49,7 @@ pub fn build(b: *std.build.Builder) void {
         exe.addPackage(.{
             .name = "vengine",
             .path = .{ .path = "src/v.zig" },
-            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, res.package },
+            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg },
         });
 
         const run_cmd = exe.run();
@@ -70,12 +63,56 @@ pub fn build(b: *std.build.Builder) void {
     }
 
     // generate vk.zig bindings
-    var generate_exe = b.addSystemCommand(&[_][]const u8{ "echo", "done" });
+    var generate_exe = b.addSystemCommand(&[_][]const u8{ "echo", "done generating vk.zig" });
     const exe_step = b.step("generate_vulkan_bindings", b.fmt("Generates the vk.zig file", .{}));
     exe_step.dependOn(&generate_exe.step);
 
     const gen = vkgen.VkGenerateStep.initFromSdk(b, "/Users/desaro/VulkanSDK/1.3.204.1/macOS", "vk.zig");
     exe_step.dependOn(&gen.step);
+
+    // tests
+    const exe_tests = b.addTest("src/tests.zig");
+    glfw.link(b, exe_tests, .{});
+
+    exe_tests.addPackage(vulkan_pkg);
+    exe_tests.addPackage(glfw_pkg);
+    exe_tests.setTarget(target);
+    exe_tests.setBuildMode(b.standardReleaseOptions());
+
+    const test_step = b.step("test", "Run unit tests");
+    test_step.dependOn(&exe_tests.step);
+}
+
+/// if always_compile_shaders is true, every build will compile shaders. If it is false, shader compilation will only occur
+/// when specifically running compile_shaders
+fn addShaderCompilationStep(b: *std.build.Builder, always_compile_shaders: bool) std.build.Pkg {
+    // compile shaders
+    var compile_shaders_exe = b.addSystemCommand(&[_][]const u8{ "echo", "done compiling shaders" });
+    const compile_shaders_exe_step = b.step("compile_shaders", b.fmt("Compiles shaders", .{}));
+    compile_shaders_exe_step.dependOn(&compile_shaders_exe.step);
+
+    const res = zigvulkan.ResourceGenStep.init(b, "resources.zig");
+    res.shader_step = vkgen.ShaderCompileStep.init(b, &[_][]const u8{ "glslc", "--target-env=vulkan1.1" }, "shaders");
+    res.step.dependOn(&res.shader_step.step);
+    compile_shaders_exe_step.dependOn(&res.step);
+
+    // add all shader for compilation
+    const shaders = getAllShaders(b, "shaders");
+    for (shaders) |shader| {
+        res.addShader(shader[0], shader[1]);
+    }
+
+    if (always_compile_shaders) {
+        return res.package;
+    } else {
+        return std.build.Pkg{ .name = "resources", .path = .{
+            .path = std.fs.path.join(b.allocator, &[_][]const u8{
+                b.build_root,
+                b.cache_root,
+                "resources.zig",
+            }) catch unreachable,
+        } };
+    }
 }
 
 fn getAllExamples(b: *std.build.Builder, root_directory: []const u8) [][2][]const u8 {

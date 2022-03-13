@@ -20,6 +20,8 @@ pub const Engine = struct {
     main_cmd_buffer: vk.CommandBuffer,
     pipeline_layout: vk.PipelineLayout,
     pipeline: vk.Pipeline,
+    pipeline2: vk.Pipeline,
+    pipeline_index: u1 = 0,
 
     pub fn init(app_name: [*:0]const u8) !Engine {
         const allocator = std.heap.page_allocator;
@@ -51,6 +53,7 @@ pub const Engine = struct {
 
         const pipeline_layout = try gc.vkd.createPipelineLayout(gc.dev, &vkinit.pipelineLayoutCreateInfo(), null);
         const pipeline = try createPipeline(gc, allocator, swapchain.extent, render_pass, pipeline_layout);
+        const pipeline2 = try createPipeline2(gc, allocator, swapchain.extent, render_pass, pipeline_layout);
 
         return Engine{
             .allocator = allocator,
@@ -63,6 +66,7 @@ pub const Engine = struct {
             .main_cmd_buffer = main_cmd_buffer,
             .pipeline_layout = pipeline_layout,
             .pipeline = pipeline,
+            .pipeline2 = pipeline2,
         };
     }
 
@@ -76,6 +80,7 @@ pub const Engine = struct {
         self.allocator.free(self.framebuffers);
 
         self.gc.vkd.destroyPipeline(self.gc.dev, self.pipeline, null);
+        self.gc.vkd.destroyPipeline(self.gc.dev, self.pipeline2, null);
         self.gc.vkd.destroyRenderPass(self.gc.dev, self.render_pass, null);
         self.gc.vkd.destroyPipelineLayout(self.gc.dev, self.pipeline_layout, null);
 
@@ -90,9 +95,12 @@ pub const Engine = struct {
 
     pub fn run(self: *Engine) !void {
         while (!self.window.shouldClose()) {
+            self.pipeline_index = if (self.window.getKey(.space) == .press) 1 else 0;
+
             // we only have one CommandBuffer so just wait on all the swapchain images
             try self.swapchain.waitForAllFences();
-            try recordCommandBuffer(self.main_cmd_buffer, self.gc, self.swapchain.extent, self.render_pass, self.framebuffers[self.swapchain.image_index], self.pipeline);
+            const pip = if (self.pipeline_index == 0) self.pipeline else self.pipeline2;
+            try recordCommandBuffer(self.main_cmd_buffer, self.gc, self.swapchain.extent, self.render_pass, self.framebuffers[self.swapchain.image_index], pip);
 
             const state = self.swapchain.present(self.main_cmd_buffer) catch |err| switch (err) {
                 error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
@@ -222,6 +230,25 @@ fn createPipeline(
 ) !vk.Pipeline {
     const vert = try createShaderModule(gc, @ptrCast([*]const u32, resources.tri_vert), resources.tri_vert.len);
     const frag = try createShaderModule(gc, @ptrCast([*]const u32, resources.tri_frag), resources.tri_frag.len);
+
+    defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
+    defer gc.vkd.destroyShaderModule(gc.dev, frag, null);
+
+    var builder = PipelineBuilder.init(allocator, extent, pipeline_layout);
+    try builder.addShaderStage(createShaderStageCreateInfo(vert, .{ .vertex_bit = true }));
+    try builder.addShaderStage(createShaderStageCreateInfo(frag, .{ .fragment_bit = true }));
+    return try builder.build(gc, render_pass);
+}
+
+fn createPipeline2(
+    gc: *const GraphicsContext,
+    allocator: std.mem.Allocator,
+    extent: vk.Extent2D,
+    render_pass: vk.RenderPass,
+    pipeline_layout: vk.PipelineLayout,
+) !vk.Pipeline {
+    const vert = try createShaderModule(gc, @ptrCast([*]const u32, resources.colored_tri_vert), resources.colored_tri_vert.len);
+    const frag = try createShaderModule(gc, @ptrCast([*]const u32, resources.colored_tri_frag), resources.colored_tri_frag.len);
 
     defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
     defer gc.vkd.destroyShaderModule(gc.dev, frag, null);
