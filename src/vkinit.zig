@@ -8,39 +8,6 @@ pub fn commandPoolCreateInfo(queue_family_index: u32, flags: vk.CommandPoolCreat
     };
 }
 
-// VkCommandPoolCreateInfo vkinit::command_pool_create_info(uint32_t queueFamilyIndex, VkCommandPoolCreateFlags flags /*= 0*/)
-// {
-// 	VkCommandPoolCreateInfo info = {};
-// 	info.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
-// 	info.pNext = nullptr;
-
-// 	info.flags = flags;
-// 	return info;
-// }
-
-// VkCommandBufferAllocateInfo vkinit::command_buffer_allocate_info(VkCommandPool pool, uint32_t count /*= 1*/, VkCommandBufferLevel level /*= VK_COMMAND_BUFFER_LEVEL_PRIMARY*/)
-// {
-// 	VkCommandBufferAllocateInfo info = {};
-// 	info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-// 	info.pNext = nullptr;
-
-// 	info.commandPool = pool;
-// 	info.commandBufferCount = count;
-// 	info.level = level;
-// 	return info;
-// }
-
-// VkCommandBufferBeginInfo vkinit::command_buffer_begin_info(VkCommandBufferUsageFlags flags /*= 0*/)
-// {
-// 	VkCommandBufferBeginInfo info = {};
-// 	info.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
-// 	info.pNext = nullptr;
-
-// 	info.pInheritanceInfo = nullptr;
-// 	info.flags = flags;
-// 	return info;
-// }
-
 // VkFramebufferCreateInfo vkinit::framebuffer_create_info(VkRenderPass renderPass, VkExtent2D extent)
 // {
 // 	VkFramebufferCreateInfo info = {};
@@ -53,26 +20,6 @@ pub fn commandPoolCreateInfo(queue_family_index: u32, flags: vk.CommandPoolCreat
 // 	info.height = extent.height;
 // 	info.layers = 1;
 
-// 	return info;
-// }
-
-// VkFenceCreateInfo vkinit::fence_create_info(VkFenceCreateFlags flags /*= 0*/)
-// {
-// 	VkFenceCreateInfo info = {};
-// 	info.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
-// 	info.pNext = nullptr;
-
-// 	info.flags = flags;
-
-// 	return info;
-// }
-
-// VkSemaphoreCreateInfo vkinit::semaphore_create_info(VkSemaphoreCreateFlags flags /*= 0*/)
-// {
-// 	VkSemaphoreCreateInfo info = {};
-// 	info.sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO;
-// 	info.pNext = nullptr;
-// 	info.flags = flags;
 // 	return info;
 // }
 
@@ -159,17 +106,6 @@ pub fn pipelineInputAssempblyCreateInfo(topology: vk.PrimitiveTopology) vk.Pipel
         .primitive_restart_enable = vk.FALSE,
     };
 }
-
-// VkPipelineInputAssemblyStateCreateInfo vkinit::input_assembly_create_info(VkPrimitiveTopology topology) {
-// 	VkPipelineInputAssemblyStateCreateInfo info = {};
-// 	info.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
-// 	info.pNext = nullptr;
-
-// 	info.topology = topology;
-// 	//we are not going to use primitive restart on the entire tutorial so leave it on false
-// 	info.primitiveRestartEnable = VK_FALSE;
-// 	return info;
-// }
 
 pub fn pipelineRasterizationStateCreateInfo(polygon_mode: vk.PolygonMode) vk.PipelineRasterizationStateCreateInfo {
     return .{

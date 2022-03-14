@@ -34,17 +34,18 @@ pub const DeletionQueue = struct {
 
     pub fn append(self: *DeletionQueue, obj: anytype) void {
         const vk_obj = switch (@TypeOf(obj)) {
-            vk.CommandBuffer => @panic("Cannot use app for CommandBuffers!"),
+            vk.CommandBuffer => @panic("Cannot use append for CommandBuffers! Use appendCommandBuffer instead."),
             vk.CommandPool => .{ .cmd_pool = obj },
             vk.Framebuffer => .{ .framebuffer = obj },
             vk.Pipeline => .{ .pipeline = obj },
             vk.PipelineLayout => .{ .pipeline_layout = obj },
             vk.RenderPass => .{ .render_pass = obj },
-            else => unreachable,
+            else => @panic("Attempted to delete an object that isnt supported by the DeletionQueue: " ++ @typeName(@TypeOf(obj))),
         };
         self.queue.append(vk_obj) catch unreachable;
     }
 
+    /// special handling for cmd_buffer since it requires
     pub fn appendCommandBuffer(self: *DeletionQueue, cmd_buffer: vk.CommandBuffer, pool: vk.CommandPool) void {
         self.queue.append(.{ .cmd_buffer = .{
             .buffer = cmd_buffer,
@@ -53,7 +54,6 @@ pub const DeletionQueue = struct {
     }
 
     pub fn flush(self: *DeletionQueue) void {
-        std.debug.print("\n", .{});
         var iter = ReverseSliceIterator(VkObject).init(self.queue.items);
         while (iter.next()) |obj| {
             switch (obj) {
@@ -65,6 +65,8 @@ pub const DeletionQueue = struct {
                 .render_pass => |rp| self.gc.vkd.destroyRenderPass(self.gc.dev, rp, null),
             }
         }
+
+        self.queue.clearRetainingCapacity();
     }
 };
 
