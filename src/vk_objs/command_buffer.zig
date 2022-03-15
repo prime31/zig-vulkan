@@ -1,7 +1,7 @@
 const std = @import("std");
 const vk = @import("vulkan");
 
-const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
+const GraphicsContext = @import("../graphics_context.zig").GraphicsContext;
 
 pub const CommandBuffer = struct {
     cmdbuf: vk.CommandBuffer,
