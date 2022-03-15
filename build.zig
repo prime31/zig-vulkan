@@ -126,6 +126,9 @@ pub fn build(b: *Builder) void {
             .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg },
         });
 
+        // vulken-mem
+        linkVulkanMemoryAllocator(b, exe);
+
         const run_cmd = exe.run();
         run_cmd.step.dependOn(b.getInstallStep());
         if (b.args) |args| {
@@ -184,6 +187,42 @@ fn addShaderCompilationStep(b: *Builder, always_compile_shaders: bool) std.build
             }) catch unreachable,
         } };
     }
+}
+
+fn linkVulkanMemoryAllocator(b: *Builder, step: *std.build.LibExeObjStep) void {
+    _ = b;
+
+    const src_dir = "libs/vulkan-mem";
+    const vk_include_dir = "-I libs/mack-glfw/upstream/bulkan_headers/include";
+
+    step.linkLibCpp();
+    step.addIncludeDir(src_dir);
+    step.addIncludeDir(vk_include_dir);
+    step.addLibPath(src_dir);
+    step.linkSystemLibrary("VulkanMemoryAllocator");
+    step.linkSystemLibrary("vulkan");
+
+    // step.addCSourceFile(src_dir ++ "/vk_mem_alloc.c", &.{ "-D=VMA_IMPLEMENTATION", "-Wno-return-type-c-linkage" });
+    // step.addPackage(getVulkanMemoryAllocatorPackage(b));
+}
+
+fn getVulkanMemoryAllocatorPackage(b: *Builder) std.build.Pkg {
+    const vulkan_pkg = std.build.Pkg{
+        .name = "vulkan",
+        .path = .{
+            .path = std.fs.path.join(b.allocator, &[_][]const u8{
+                b.build_root,
+                b.cache_root,
+                "vk.zig",
+            }) catch unreachable,
+        },
+    };
+
+    return .{
+        .name = "vkmem",
+        .path = .{ .path = "libs/vulkan-mem/vk_mem_alloc.zig" },
+        .dependencies = &[_]std.build.Pkg{ vulkan_pkg },
+    };
 }
 
 fn getAllExamples(b: *Builder, root_directory: []const u8) [][2][]const u8 {
