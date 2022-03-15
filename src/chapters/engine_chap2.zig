@@ -2,14 +2,16 @@ const std = @import("std");
 const vk = @import("vulkan");
 const resources = @import("resources");
 const glfw = @import("glfw");
-const vkinit = @import("vkinit.zig");
+const vkinit = @import("../vkinit.zig");
 
-const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
-const Swapchain = @import("swapchain.zig").Swapchain;
-const PipelineBuilder = @import("pipeline_builder.zig").PipelineBuilder;
+const GraphicsContext = @import("../graphics_context.zig").GraphicsContext;
+const Swapchain = @import("../swapchain.zig").Swapchain;
+const PipelineBuilder = @import("../pipeline_builder.zig").PipelineBuilder;
 const Allocator = std.mem.Allocator;
 
-pub const Engine = struct {
+pub const EngineChap2 = struct {
+    const Self = @This();
+
     allocator: Allocator,
     window: glfw.Window,
     gc: *GraphicsContext,
@@ -23,7 +25,7 @@ pub const Engine = struct {
     pipeline2: vk.Pipeline,
     pipeline_index: u1 = 0,
 
-    pub fn init(app_name: [*:0]const u8) !Engine {
+    pub fn init(app_name: [*:0]const u8) !Self {
         const allocator = std.heap.page_allocator;
         try glfw.init(.{});
 
@@ -55,7 +57,7 @@ pub const Engine = struct {
         const pipeline = try createPipeline(gc, allocator, swapchain.extent, render_pass, pipeline_layout);
         const pipeline2 = try createPipeline2(gc, allocator, swapchain.extent, render_pass, pipeline_layout);
 
-        return Engine{
+        return Self{
             .allocator = allocator,
             .window = window,
             .gc = gc,
@@ -70,7 +72,7 @@ pub const Engine = struct {
         };
     }
 
-    pub fn deinit(self: *Engine) void {
+    pub fn deinit(self: *Self) void {
         try self.swapchain.waitForAllFences();
 
         self.gc.vkd.freeCommandBuffers(self.gc.dev, self.pool, 1, @ptrCast([*]vk.CommandBuffer, &self.main_cmd_buffer));
@@ -93,7 +95,7 @@ pub const Engine = struct {
         glfw.terminate();
     }
 
-    pub fn run(self: *Engine) !void {
+    pub fn run(self: *Self) !void {
         while (!self.window.shouldClose()) {
             self.pipeline_index = if (self.window.getKey(.space) == .press) 1 else 0;
 
@@ -121,6 +123,7 @@ pub const Engine = struct {
         }
     }
 };
+
 
 fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.RenderPass {
     const color_attachment = vk.AttachmentDescription{
@@ -262,7 +265,6 @@ fn createPipeline2(
 
 
 
-// crap
 fn recordCommandBuffer(
     cmdbuf: vk.CommandBuffer,
     gc: *const GraphicsContext,

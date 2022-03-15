@@ -1,6 +1,6 @@
 const std = @import("std");
 const glfw = @import("glfw");
-const Engine = @import("vengine").Engine;
+const Engine = @import("vengine").EngineChap2;
 
 // https://vkguide.dev/docs/chapter-2/triangle_walkthrough/
 pub fn main() !void {
