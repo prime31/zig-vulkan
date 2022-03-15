@@ -7,3 +7,4 @@
 ## TODO
 - regenerate with translate-c and fix the `vk_mem_alloc.zig` file
 - clean up `vk_mem_alloc.zig` flags and other bits to match vulkan-zig
+- switch vk.Result methods to return zig errors

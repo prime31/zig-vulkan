@@ -147,7 +147,6 @@ pub const EngineChap3 = struct {
     }
 };
 
-
 fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.RenderPass {
     const color_attachment = vk.AttachmentDescription{
         .flags = .{},
@@ -285,18 +284,30 @@ fn uploadMesh(mesh: *Mesh, allocator: vkmem.VmaAllocator) void {
         .usage = .{ .vertex_buffer_bit = true },
     });
 
-
     // let the VMA library know that this data should be writeable by CPU, but also readable by GPU
     var vma_malloc_info = std.mem.zeroes(vkmem.VmaAllocationCreateInfo);
     vma_malloc_info.usage = vkmem.VMA_MEMORY_USAGE_CPU_TO_GPU;
 
     // allocate the buffer
-    const res = vkmem.vmaCreateBuffer(allocator, &buffer_info, &vma_malloc_info, &mesh.vert_buffer.buffer, &mesh.vert_buffer.allocation, undefined,);
+    var res = vkmem.vmaCreateBuffer(
+        allocator,
+        &buffer_info,
+        &vma_malloc_info,
+        &mesh.vert_buffer.buffer,
+        &mesh.vert_buffer.allocation,
+        undefined,
+    );
     std.debug.assert(res == vk.Result.success);
+
+    // copy vertex data
+    var data: ?*anyopaque = undefined;
+    res = vkmem.vmaMapMemory(allocator, mesh.vert_buffer.allocation, @ptrCast([*c]?*anyopaque, &data));
+    std.debug.assert(res == vk.Result.success);
+
+    const gpu_vertices = @ptrCast([*]Vertex, @alignCast(@alignOf(Vertex), data));
+    std.mem.copy(Vertex, gpu_vertices[0..mesh.vertices.items.len], mesh.vertices.items);
+    vkmem.vmaUnmapMemory(allocator, mesh.vert_buffer.allocation);
 }
-
-
-
 
 fn recordCommandBuffer(
     cmdbuf: vk.CommandBuffer,

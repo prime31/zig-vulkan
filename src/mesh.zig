@@ -13,7 +13,7 @@ pub const AllocatedBuffer = struct {
     }
 };
 
-pub const Vertex = struct {
+pub const Vertex = extern struct {
     const binding_description = vk.VertexInputBindingDescription{
         .binding = 0,
         .stride = @sizeOf(Vertex),

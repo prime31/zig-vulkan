@@ -112,7 +112,6 @@ pub fn build(b: *Builder) void {
         exe.setOutputDir("zig-cache/bin");
         exe.setTarget(target);
         exe.setBuildMode(mode);
-        exe.install();
 
         // packages
         exe.addPackage(vulkan_pkg);
