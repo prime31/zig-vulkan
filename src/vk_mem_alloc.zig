@@ -1,21 +1,22 @@
+// manually added translation layer
 const vk = @import("vulkan");
 
-pub const PFN_vkAllocateMemory = ?fn (vk.Device, [*c]const vk.MemoryAllocateInfo, [*c]const vk.AllocationCallbacks, [*c]vk.DeviceMemory) callconv(.C) vk.Result;
-pub const PFN_vkFreeMemory = ?fn (vk.Device, vk.DeviceMemory, [*c]const vk.AllocationCallbacks) callconv(.C) void;
-pub const PFN_vkMapMemory = ?fn (vk.Device, vk.DeviceMemory, vk.DeviceSize, vk.DeviceSize, vk.MemoryMapFlags, [*c]?*anyopaque) callconv(.C) vk.Result;
-pub const PFN_vkUnmapMemory = ?fn (vk.Device, vk.DeviceMemory) callconv(.C) void;
-pub const PFN_vkFlushMappedMemoryRanges = ?fn (vk.Device, u32, [*c]const vk.MappedMemoryRange) callconv(.C) vk.Result;
-pub const PFN_vkInvalidateMappedMemoryRanges = ?fn (vk.Device, u32, [*c]const vk.MappedMemoryRange) callconv(.C) vk.Result;
-
-pub const PFN_vkBindBufferMemory = ?fn (vk.Device, vk.Buffer, vk.DeviceMemory, vk.DeviceSize) callconv(.C) vk.Result;
-pub const PFN_vkBindImageMemory = ?fn (vk.Device, vk.Image, vk.DeviceMemory, vk.DeviceSize) callconv(.C) vk.Result;
-pub const PFN_vkGetBufferMemoryRequirements = ?fn (vk.Device, vk.Buffer, [*c]vk.MemoryRequirements) callconv(.C) void;
-pub const PFN_vkGetImageMemoryRequirements = ?fn (vk.Device, vk.Image, [*c]vk.MemoryRequirements) callconv(.C) void;
-pub const PFN_vkCreateBuffer = ?fn (vk.Device, [*c]const vk.BufferCreateInfo, [*c]const vk.AllocationCallbacks, [*c]vk.Buffer) callconv(.C) vk.Result;
-pub const PFN_vkDestroyBuffer = ?fn (vk.Device, vk.Buffer, [*c]const vk.AllocationCallbacks) callconv(.C) void;
-pub const PFN_vkCreateImage = ?fn (vk.Device, [*c]const vk.ImageCreateInfo, [*c]const vk.AllocationCallbacks, [*c]vk.Image) callconv(.C) vk.Result;
-pub const PFN_vkDestroyImage = ?fn (vk.Device, vk.Image, [*c]const vk.AllocationCallbacks) callconv(.C) void;
-pub const PFN_vkCmdCopyBuffer = ?fn (vk.CommandBuffer, vk.Buffer, vk.Buffer, u32, [*c]const vk.BufferCopy) callconv(.C) void;
+const PFN_vkAllocateMemory = vk.PfnAllocateMemory;
+const PFN_vkFreeMemory = vk.PfnFreeMemory;
+const PFN_vkMapMemory = vk.PfnMapMemory;
+const PFN_vkUnmapMemory = vk.PfnUnmapMemory;
+const PFN_vkFlushMappedMemoryRanges = vk.PfnFlushMappedMemoryRanges;
+const PFN_vkInvalidateMappedMemoryRanges = vk.PfnInvalidateMappedMemoryRanges;
+const PFN_vkBindBufferMemory = vk.PfnBindBufferMemory;
+const PFN_vkBindImageMemory = vk.PfnBindImageMemory;
+const PFN_vkGetBufferMemoryRequirements = vk.PfnGetBufferMemoryRequirements;
+const PFN_vkGetImageMemoryRequirements = vk.PfnGetImageMemoryRequirements;
+const PFN_vkCreateBuffer = vk.PfnCreateBuffer;
+const PFN_vkDestroyBuffer = vk.PfnDestroyBuffer;
+const PFN_vkCreateImage = vk.PfnCreateImage;
+const PFN_vkDestroyImage = vk.PfnDestroyImage;
+const PFN_vkCmdCopyBuffer = vk.PfnCmdCopyBuffer;
+// end translation layer
 
 
 pub const struct_VmaAllocator_T = opaque {};
@@ -39,6 +40,8 @@ pub const enum_VmaAllocatorCreateFlagBits = c_uint;
 pub const VmaAllocatorCreateFlagBits = enum_VmaAllocatorCreateFlagBits;
 pub const VmaAllocatorCreateFlags = vk.Flags;
 pub const struct_VmaVulkanFunctions = extern struct {
+    vkGetInstanceProcAddr: vk.PfnGetInstanceProcAddr,
+    vkGetDeviceProcAddr: vk.PfnGetDeviceProcAddr,
     vkGetPhysicalDeviceProperties: vk.PfnGetPhysicalDeviceProperties,
     vkGetPhysicalDeviceMemoryProperties: vk.PfnGetPhysicalDeviceMemoryProperties,
     vkAllocateMemory: PFN_vkAllocateMemory,
@@ -61,6 +64,8 @@ pub const struct_VmaVulkanFunctions = extern struct {
     vkBindBufferMemory2KHR: vk.PfnBindBufferMemory2,
     vkBindImageMemory2KHR: vk.PfnBindImageMemory2,
     vkGetPhysicalDeviceMemoryProperties2KHR: vk.PfnGetPhysicalDeviceMemoryProperties2,
+    vkGetDeviceBufferMemoryRequirements: vk.PfnGetDeviceBufferMemoryRequirements,
+    vkGetDeviceImageMemoryRequirements: vk.PfnGetDeviceImageMemoryRequirements,
 };
 pub const VmaVulkanFunctions = struct_VmaVulkanFunctions;
 pub const VMA_RECORD_FLUSH_AFTER_CALL_BIT: c_int = 1;
@@ -80,13 +85,13 @@ pub const struct_VmaAllocatorCreateInfo = extern struct {
     preferredLargeHeapBlockSize: vk.DeviceSize,
     pAllocationCallbacks: [*c]const vk.AllocationCallbacks,
     pDeviceMemoryCallbacks: [*c]const VmaDeviceMemoryCallbacks,
-    frameInUseCount: u32,
     pHeapSizeLimit: [*c]const vk.DeviceSize,
     pVulkanFunctions: [*c]const VmaVulkanFunctions,
-    pRecordSettings: [*c]const VmaRecordSettings,
     instance: vk.Instance,
     vulkanApiVersion: u32,
+    pTypeExternalMemoryHandleTypes: vk.ExternalMemoryHandleTypeFlagsKHR,
 };
+
 pub const VmaAllocatorCreateInfo = struct_VmaAllocatorCreateInfo;
 pub extern fn vmaCreateAllocator(pCreateInfo: [*c]const VmaAllocatorCreateInfo, pAllocator: [*c]VmaAllocator) vk.Result;
 pub extern fn vmaDestroyAllocator(allocator: VmaAllocator) void;
@@ -306,8 +311,6 @@ pub const VMA_MEMORY_BUDGET = @as(c_int, 1);
 pub const VMA_BUFFER_DEVICE_ADDRESS = @as(c_int, 1);
 pub const VMA_CALL_PRE = "";
 pub const VMA_CALL_POST = "";
-// pub const VMA_NOT_NULL_NON_DISPATCHABLE = VMA_NOT_NULL;
-// pub const VMA_NULLABLE_NON_DISPATCHABLE = VMA_NULLABLE;
 pub const VMA_STATS_STRING_ENABLED = @as(c_int, 1);
 
 

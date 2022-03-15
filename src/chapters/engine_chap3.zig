@@ -45,7 +45,12 @@ pub const EngineChap3 = struct {
         var allocator_info = std.mem.zeroInit(vkmem.VmaAllocatorCreateInfo, .{
             .physicalDevice = gc.pdev,
             .device = gc.dev,
+            .pVulkanFunctions = &std.mem.zeroInit(vkmem.VmaVulkanFunctions, .{
+                .vkGetInstanceProcAddr = gc.vkb.dispatch.vkGetInstanceProcAddr,
+                .vkGetDeviceProcAddr = gc.vki.dispatch.vkGetDeviceProcAddr,
+            }),
             .instance = gc.instance,
+            .vulkanApiVersion = vk.API_VERSION_1_2,
         });
 
         var vk_allocator: vkmem.VmaAllocator = undefined;
@@ -93,6 +98,9 @@ pub const EngineChap3 = struct {
 
     pub fn deinit(self: *Self) void {
         try self.swapchain.waitForAllFences();
+
+        self.triangle_mesh.deinit(self.vk_allocator);
+        vkmem.vmaDestroyAllocator(self.vk_allocator);
 
         self.gc.vkd.freeCommandBuffers(self.gc.dev, self.pool, 1, @ptrCast([*]vk.CommandBuffer, &self.main_cmd_buffer));
         self.gc.vkd.destroyCommandPool(self.gc.dev, self.pool, null);
@@ -276,9 +284,6 @@ fn uploadMesh(mesh: *Mesh, allocator: vkmem.VmaAllocator) void {
         .size = mesh.vertices.items.len * @sizeOf(Vertex),
         .usage = .{ .vertex_buffer_bit = true },
     });
-    buffer_info.flags = .{};
-    buffer_info.size = mesh.vertices.items.len * @sizeOf(Vertex);
-    buffer_info.usage = .{ .vertex_buffer_bit = true };
 
 
     // let the VMA library know that this data should be writeable by CPU, but also readable by GPU
@@ -286,7 +291,6 @@ fn uploadMesh(mesh: *Mesh, allocator: vkmem.VmaAllocator) void {
     vma_malloc_info.usage = vkmem.VMA_MEMORY_USAGE_CPU_TO_GPU;
 
     // allocate the buffer
-    std.debug.print("---- {any}, {any}\n", .{ mesh.vert_buffer.buffer, buffer_info.size });
     const res = vkmem.vmaCreateBuffer(allocator, &buffer_info, &vma_malloc_info, &mesh.vert_buffer.buffer, &mesh.vert_buffer.allocation, undefined,);
     std.debug.assert(res == vk.Result.success);
 }

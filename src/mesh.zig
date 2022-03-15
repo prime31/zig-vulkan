@@ -7,6 +7,10 @@ const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 pub const AllocatedBuffer = struct {
     buffer: vk.Buffer,
     allocation: vkmem.VmaAllocation,
+
+    pub fn deinit(self: AllocatedBuffer, vk_allocator: vkmem.VmaAllocator) void {
+        vkmem.vmaDestroyBuffer(vk_allocator, self.buffer, self.allocation);
+    }
 };
 
 pub const Vertex = struct {
@@ -51,5 +55,10 @@ pub const Mesh = struct {
             .vertices = std.ArrayList(Vertex).init(allocator),
             .vert_buffer = undefined,
         };
+    }
+
+    pub fn deinit(self: Mesh, vk_allocator: vkmem.VmaAllocator) void {
+        self.vert_buffer.deinit(vk_allocator);
+        self.vertices.deinit();
     }
 };
