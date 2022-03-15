@@ -1,6 +1,5 @@
 const std = @import("std");
 const vk = @import("vulkan");
-const vkmem = @import("../vk_mem_alloc.zig");
 const resources = @import("resources");
 const glfw = @import("glfw");
 const vkinit = @import("../vkinit.zig");
@@ -18,7 +17,6 @@ pub const EngineChap3 = struct {
     allocator: Allocator,
     window: glfw.Window,
     gc: *GraphicsContext,
-    vk_allocator: vkmem.VmaAllocator,
     swapchain: Swapchain,
     render_pass: vk.RenderPass,
     framebuffers: []vk.Framebuffer,
@@ -41,17 +39,6 @@ pub const EngineChap3 = struct {
         var gc = try allocator.create(GraphicsContext);
         gc.* = try GraphicsContext.init(allocator, app_name, window, true);
 
-        // initialize the memory allocator
-        var allocator_info = std.mem.zeroInit(vkmem.VmaAllocatorCreateInfo, .{
-            .physicalDevice = gc.pdev,
-            .device = gc.dev,
-            .instance = gc.instance,
-        });
-
-        var vk_allocator: vkmem.VmaAllocator = undefined;
-        const alloc_res = vkmem.vmaCreateAllocator(&allocator_info, &vk_allocator);
-        std.debug.assert(alloc_res == vk.Result.success);
-
         var swapchain = try Swapchain.init(gc, allocator, extent);
         const render_pass = try createRenderPass(gc, swapchain);
         const framebuffers = try createFramebuffers(gc, allocator, render_pass, swapchain);
@@ -72,13 +59,12 @@ pub const EngineChap3 = struct {
         const pipeline = try createPipeline(gc, allocator, swapchain.extent, render_pass, pipeline_layout);
 
         var mesh = try loadMeshes();
-        uploadMesh(&mesh, vk_allocator);
+        try uploadMesh(gc, pool, &mesh);
 
         return Self{
             .allocator = allocator,
             .window = window,
             .gc = gc,
-            .vk_allocator = vk_allocator,
             .swapchain = swapchain,
             .render_pass = render_pass,
             .framebuffers = framebuffers,
@@ -93,6 +79,8 @@ pub const EngineChap3 = struct {
 
     pub fn deinit(self: *Self) void {
         try self.swapchain.waitForAllFences();
+
+        self.triangle_mesh.deinit(self.gc);
 
         self.gc.vkd.freeCommandBuffers(self.gc.dev, self.pool, 1, @ptrCast([*]vk.CommandBuffer, &self.main_cmd_buffer));
         self.gc.vkd.destroyCommandPool(self.gc.dev, self.pool, null);
@@ -269,28 +257,88 @@ fn loadMeshes() !Mesh {
     return mesh;
 }
 
-fn uploadMesh(mesh: *Mesh, allocator: vkmem.VmaAllocator) void {
+fn uploadMesh(gc: *const GraphicsContext, pool: vk.CommandPool, mesh: *Mesh) !void {
     // allocate vertex buffer
-    var buffer_info = std.mem.zeroInit(vk.BufferCreateInfo, .{
+    const vert_size = @sizeOf(Vertex) * mesh.vertices.items.len;
+
+    mesh.vert_buffer.buffer = try gc.vkd.createBuffer(gc.dev, &.{
         .flags = .{},
-        .size = mesh.vertices.items.len * @sizeOf(Vertex),
-        .usage = .{ .vertex_buffer_bit = true },
-    });
-    buffer_info.flags = .{};
-    buffer_info.size = mesh.vertices.items.len * @sizeOf(Vertex);
-    buffer_info.usage = .{ .vertex_buffer_bit = true };
+        .size = vert_size,
+        .usage = .{ .transfer_dst_bit = true, .vertex_buffer_bit = true },
+        .sharing_mode = .exclusive,
+        .queue_family_index_count = 0,
+        .p_queue_family_indices = undefined,
+    }, null);
 
+    const mem_reqs = gc.vkd.getBufferMemoryRequirements(gc.dev, mesh.vert_buffer.buffer);
+    mesh.vert_buffer.memory = try gc.allocate(mem_reqs, .{ .device_local_bit = true });
 
-    // let the VMA library know that this data should be writeable by CPU, but also readable by GPU
-    var vma_malloc_info = std.mem.zeroes(vkmem.VmaAllocationCreateInfo);
-    vma_malloc_info.usage = vkmem.VMA_MEMORY_USAGE_CPU_TO_GPU;
+    try gc.vkd.bindBufferMemory(gc.dev, mesh.vert_buffer.buffer, mesh.vert_buffer.memory, 0);
 
-    // allocate the buffer
-    std.debug.print("---- {any}, {any}\n", .{ mesh.vert_buffer.buffer, buffer_info.size });
-    const res = vkmem.vmaCreateBuffer(allocator, &buffer_info, &vma_malloc_info, &mesh.vert_buffer.buffer, &mesh.vert_buffer.allocation, undefined,);
-    std.debug.assert(res == vk.Result.success);
+    // perform the upload
+    const staging_buffer = try gc.vkd.createBuffer(gc.dev, &.{
+        .flags = .{},
+        .size = vert_size,
+        .usage = .{ .transfer_src_bit = true },
+        .sharing_mode = .exclusive,
+        .queue_family_index_count = 0,
+        .p_queue_family_indices = undefined,
+    }, null);
+    defer gc.vkd.destroyBuffer(gc.dev, staging_buffer, null);
+
+    const staging_mem_reqs = gc.vkd.getBufferMemoryRequirements(gc.dev, staging_buffer);
+    const staging_memory = try gc.allocate(staging_mem_reqs, .{ .host_visible_bit = true, .host_coherent_bit = true });
+    defer gc.vkd.freeMemory(gc.dev, staging_memory, null);
+    try gc.vkd.bindBufferMemory(gc.dev, staging_buffer, staging_memory, 0);
+
+    {
+        const data = try gc.vkd.mapMemory(gc.dev, staging_memory, 0, vk.WHOLE_SIZE, .{});
+        defer gc.vkd.unmapMemory(gc.dev, staging_memory);
+
+        const gpu_vertices = @ptrCast([*]Vertex, @alignCast(@alignOf(Vertex), data));
+        for (mesh.vertices.items) |vertex, i| {
+            gpu_vertices[i] = vertex;
+        }
+    }
+
+    try copyBuffer(gc, pool, mesh.vert_buffer.buffer, staging_buffer, vert_size);
 }
 
+fn copyBuffer(gc: *const GraphicsContext, pool: vk.CommandPool, dst: vk.Buffer, src: vk.Buffer, size: vk.DeviceSize) !void {
+    var cmdbuf: vk.CommandBuffer = undefined;
+    try gc.vkd.allocateCommandBuffers(gc.dev, &.{
+        .command_pool = pool,
+        .level = .primary,
+        .command_buffer_count = 1,
+    }, @ptrCast([*]vk.CommandBuffer, &cmdbuf));
+    defer gc.vkd.freeCommandBuffers(gc.dev, pool, 1, @ptrCast([*]const vk.CommandBuffer, &cmdbuf));
+
+    try gc.vkd.beginCommandBuffer(cmdbuf, &.{
+        .flags = .{ .one_time_submit_bit = true },
+        .p_inheritance_info = null,
+    });
+
+    const region = vk.BufferCopy{
+        .src_offset = 0,
+        .dst_offset = 0,
+        .size = size,
+    };
+    gc.vkd.cmdCopyBuffer(cmdbuf, src, dst, 1, @ptrCast([*]const vk.BufferCopy, &region));
+
+    try gc.vkd.endCommandBuffer(cmdbuf);
+
+    const si = vk.SubmitInfo{
+        .wait_semaphore_count = 0,
+        .p_wait_semaphores = undefined,
+        .p_wait_dst_stage_mask = undefined,
+        .command_buffer_count = 1,
+        .p_command_buffers = @ptrCast([*]const vk.CommandBuffer, &cmdbuf),
+        .signal_semaphore_count = 0,
+        .p_signal_semaphores = undefined,
+    };
+    try gc.vkd.queueSubmit(gc.graphics_queue.handle, 1, @ptrCast([*]const vk.SubmitInfo, &si), .null_handle);
+    try gc.vkd.queueWaitIdle(gc.graphics_queue.handle);
+}
 
 
 

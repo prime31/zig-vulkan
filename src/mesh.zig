@@ -1,12 +1,16 @@
 const std = @import("std");
 const vk = @import("vulkan");
-const vkmem = @import("vk_mem_alloc.zig");
 
 const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 
 pub const AllocatedBuffer = struct {
     buffer: vk.Buffer,
-    allocation: vkmem.VmaAllocation,
+    memory: vk.DeviceMemory,
+
+    pub fn deinit(self: AllocatedBuffer, gc: *const GraphicsContext) void {
+        gc.vkd.freeMemory(gc.dev, self.memory, null);
+        gc.vkd.destroyBuffer(gc.dev, self.buffer, null);
+    }
 };
 
 pub const Vertex = struct {
@@ -51,5 +55,10 @@ pub const Mesh = struct {
             .vertices = std.ArrayList(Vertex).init(allocator),
             .vert_buffer = undefined,
         };
+    }
+
+    pub fn deinit(self: Mesh, gc: *const GraphicsContext) void {
+        self.vert_buffer.deinit(gc);
+        self.vertices.deinit();
     }
 };
