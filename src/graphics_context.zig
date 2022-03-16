@@ -3,7 +3,7 @@ const vk = @import("vulkan");
 const glfw = @import("glfw");
 const Allocator = std.mem.Allocator;
 
-const required_device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name} ++ if (@import("builtin").os.tag == .macos) [_][*:0]const u8{vk.extension_info.khr_portability_subset.name};
+const required_device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name} ++ if (@import("builtin").os.tag == .macos) [_][*:0]const u8{vk.extension_info.khr_portability_subset.name} else [_][*:0]const u8{};
 const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 
 const BaseDispatch = vk.BaseWrapper(allFuncs(vk.BaseCommandFlags));
@@ -69,6 +69,7 @@ const DeviceDispatch = vk.DeviceWrapper(.{
     .bindBufferMemory = true,
     .cmdBeginRenderPass = true,
     .cmdEndRenderPass = true,
+    .cmdPushConstants = true,
     .cmdBindPipeline = true,
     .cmdDraw = true,
     .cmdSetViewport = true,
@@ -99,7 +100,11 @@ pub const GraphicsContext = struct {
         const vk_proc = @ptrCast(fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, glfw.getInstanceProcAddress);
         self.vkb = try BaseDispatch.load(vk_proc);
 
-        if (enableValidationLayers and @import("builtin").mode == .Debug and !try checkValidationLayerSupport(self.vkb, allocator)) return error.ValidationNotAvailable;
+        var validate = enableValidationLayers;
+        if (enableValidationLayers and !try checkValidationLayerSupport(self.vkb, allocator)) {
+            std.debug.print("Disabling validation layers", .{});
+            validate = false;
+        }
         const glfw_exts = try glfw.getRequiredInstanceExtensions();
 
         const app_info = vk.ApplicationInfo{
@@ -113,8 +118,8 @@ pub const GraphicsContext = struct {
         self.instance = try self.vkb.createInstance(&.{
             .flags = .{},
             .p_application_info = &app_info,
-            .enabled_layer_count = if (enableValidationLayers) validation_layers.len else 0,
-            .pp_enabled_layer_names = if (enableValidationLayers) &validation_layers else undefined,
+            .enabled_layer_count = if (validate) validation_layers.len else 0,
+            .pp_enabled_layer_names = if (validate) &validation_layers else undefined,
             .enabled_extension_count = @intCast(u32, glfw_exts.len),
             .pp_enabled_extension_names = @ptrCast([*]const [*:0]const u8, &glfw_exts[0]),
         }, null);

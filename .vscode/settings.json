@@ -1,0 +1,5 @@
+{
+    "files.associations": {
+        "tinyobj_loader_c.h": "c"
+    }
+}

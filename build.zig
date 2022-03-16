@@ -129,6 +129,7 @@ pub fn build(b: *Builder) void {
 
         // vulken-mem
         linkVulkanMemoryAllocator(exe, vk_sdk_root);
+        linkTinyObjLoader(exe);
 
         const run_cmd = exe.run();
         run_cmd.step.dependOn(b.getInstallStep());
@@ -192,10 +193,13 @@ fn addShaderCompilationStep(b: *Builder, always_compile_shaders: bool) std.build
 
 fn linkVulkanMemoryAllocator(step: *std.build.LibExeObjStep, comptime sdk_root: []const u8) void {
     step.linkLibCpp();
-    step.addIncludeDir(sdk_root ++ "/include");
-    step.linkSystemLibrary("vulkan");
-
+    step.addIncludePath(sdk_root ++ "/include");
     step.addCSourceFile("vk_mem_allocator/vk_mem_alloc.cpp", &.{ "-Wno-nullability-completeness" });
+}
+
+fn linkTinyObjLoader(step: *std.build.LibExeObjStep) void {
+    step.addIncludePath("tinyobjloader");
+    step.addCSourceFile("tinyobjloader/tinyobj_loader_c.c", &.{"-std=c99"});
 }
 
 fn getAllExamples(b: *Builder, root_directory: []const u8) [][2][]const u8 {

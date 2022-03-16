@@ -8,14 +8,23 @@ const Engine = @import("vengine").EngineChap3;
 const c = @cImport({
     // these need to match what we have in vk_mem_alloc.cpp
     @cDefine("VMA_DYNAMIC_VULKAN_FUNCTIONS", "1");
+    @cDefine("VMA_STATIC_VULKAN_FUNCTIONS", "0");
     @cDefine("VMA_VULKAN_VERSION", "1002000");
     @cDefine("VMA_EXTERNAL_MEMORY", "0");
     @cInclude("vk_mem_alloc.h");
 });
 
+const t = @cImport({
+    @cInclude("tinyobj_loader_c.h");
+});
+
+const tiny = @import("../src/tinyobjectloader.zig");
+
+
 // https://vkguide.dev/docs/chapter-2/triangle_walkthrough/
 pub fn main() !void {
     // uncomment to generate cImport.zig
+    // std.debug.print("---- tiny: {any}\n", .{ t });
     // std.debug.print("---- alloc: {any}, funcs: {any}\n", .{ @sizeOf(c.VmaAllocatorCreateInfo), @sizeOf(c.VmaVulkanFunctions) });
 
     var engine = try Engine.init("chapter 3");

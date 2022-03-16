@@ -11,6 +11,14 @@ const PipelineBuilder = @import("../pipeline_builder.zig").PipelineBuilder;
 const Mesh = @import("../mesh.zig").Mesh;
 const Vertex = @import("../mesh.zig").Vertex;
 const Allocator = std.mem.Allocator;
+const Mat4 = @import("mat4.zig").Mat4;
+const Vec3 = @import("vec3.zig").Vec3;
+const Vec4 = @import("vec4.zig").Vec4;
+
+const MeshPushConstants = struct {
+    data: Vec4 = .{},
+    render_matrix: Mat4,
+};
 
 pub const EngineChap3 = struct {
     const Self = @This();
@@ -25,9 +33,9 @@ pub const EngineChap3 = struct {
     pool: vk.CommandPool,
     main_cmd_buffer: vk.CommandBuffer,
     pipeline_layout: vk.PipelineLayout,
-    pipeline: vk.Pipeline,
     mesh_pipeline: vk.Pipeline,
     triangle_mesh: Mesh,
+    frame_num: f32 = 0,
 
     pub fn init(app_name: [*:0]const u8) !Self {
         const allocator = std.heap.page_allocator;
@@ -73,7 +81,17 @@ pub const EngineChap3 = struct {
             .command_buffer_count = 1,
         }, @ptrCast([*]vk.CommandBuffer, &main_cmd_buffer));
 
-        const pipeline_layout = try gc.vkd.createPipelineLayout(gc.dev, &vkinit.pipelineLayoutCreateInfo(), null);
+        var push_constant = vk.PushConstantRange {
+            .stage_flags = .{ .vertex_bit = true },
+            .offset = 0,
+            .size = @sizeOf(MeshPushConstants),
+        };
+
+        var pip_layout_info = vkinit.pipelineLayoutCreateInfo();
+        pip_layout_info.push_constant_range_count = 1;
+        pip_layout_info.p_push_constant_ranges = @ptrCast([*] const vk.PushConstantRange, &push_constant);
+
+        const pipeline_layout = try gc.vkd.createPipelineLayout(gc.dev, &pip_layout_info, null);
         const pipeline = try createPipeline(gc, allocator, swapchain.extent, render_pass, pipeline_layout);
 
         var mesh = try loadMeshes();
@@ -90,7 +108,6 @@ pub const EngineChap3 = struct {
             .pool = pool,
             .main_cmd_buffer = main_cmd_buffer,
             .pipeline_layout = pipeline_layout,
-            .pipeline = pipeline,
             .mesh_pipeline = pipeline,
             .triangle_mesh = mesh,
         };
@@ -108,7 +125,7 @@ pub const EngineChap3 = struct {
         for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
         self.allocator.free(self.framebuffers);
 
-        self.gc.vkd.destroyPipeline(self.gc.dev, self.pipeline, null);
+        self.gc.vkd.destroyPipeline(self.gc.dev, self.mesh_pipeline, null);
         self.gc.vkd.destroyRenderPass(self.gc.dev, self.render_pass, null);
         self.gc.vkd.destroyPipelineLayout(self.gc.dev, self.pipeline_layout, null);
 
@@ -125,7 +142,7 @@ pub const EngineChap3 = struct {
         while (!self.window.shouldClose()) {
             // we only have one CommandBuffer so just wait on all the swapchain images
             try self.swapchain.waitForAllFences();
-            try recordCommandBuffer(self.main_cmd_buffer, self.gc, self.swapchain.extent, self.render_pass, self.framebuffers[self.swapchain.image_index], self.pipeline);
+            try recordCommandBuffer(self.main_cmd_buffer, self.gc, self.swapchain.extent, self.render_pass, self.framebuffers[self.swapchain.image_index], self.mesh_pipeline, self.triangle_mesh, self.pipeline_layout, self.frame_num);
 
             const state = self.swapchain.present(self.main_cmd_buffer) catch |err| switch (err) {
                 error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
@@ -142,6 +159,7 @@ pub const EngineChap3 = struct {
                 self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain);
             }
 
+            self.frame_num += 1;
             try glfw.pollEvents();
         }
     }
@@ -253,13 +271,18 @@ fn createPipeline(
     render_pass: vk.RenderPass,
     pipeline_layout: vk.PipelineLayout,
 ) !vk.Pipeline {
-    const vert = try createShaderModule(gc, @ptrCast([*]const u32, resources.tri_vert), resources.tri_vert.len);
-    const frag = try createShaderModule(gc, @ptrCast([*]const u32, resources.tri_frag), resources.tri_frag.len);
+    const vert = try createShaderModule(gc, @ptrCast([*]const u32, resources.tri_mesh_vert), resources.tri_mesh_vert.len);
+    const frag = try createShaderModule(gc, @ptrCast([*]const u32, resources.colored_tri_frag), resources.colored_tri_frag.len);
 
     defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
     defer gc.vkd.destroyShaderModule(gc.dev, frag, null);
 
     var builder = PipelineBuilder.init(allocator, extent, pipeline_layout);
+    builder.vertex_input_info.vertex_attribute_description_count = Vertex.attribute_description.len;
+    builder.vertex_input_info.p_vertex_attribute_descriptions = &Vertex.attribute_description;
+    builder.vertex_input_info.vertex_binding_description_count = 1;
+    builder.vertex_input_info.p_vertex_binding_descriptions = @ptrCast([*]const vk.VertexInputBindingDescription, &Vertex.binding_description);
+
     try builder.addShaderStage(createShaderStageCreateInfo(vert, .{ .vertex_bit = true }));
     try builder.addShaderStage(createShaderStageCreateInfo(frag, .{ .fragment_bit = true }));
     return try builder.build(gc, render_pass);
@@ -316,6 +339,9 @@ fn recordCommandBuffer(
     render_pass: vk.RenderPass,
     framebuffer: vk.Framebuffer,
     pipeline: vk.Pipeline,
+    mesh: Mesh,
+    pipeline_layout: vk.PipelineLayout,
+    frame_num: f32,
 ) !void {
     const clear = vk.ClearValue{
         .color = .{ .float_32 = .{ 0.2, 0.5, 0, 1 } },
@@ -325,6 +351,23 @@ fn recordCommandBuffer(
     const render_area = vk.Rect2D{
         .offset = .{ .x = 0, .y = 0 },
         .extent = extent,
+    };
+
+    // push constants
+    var cam_pos = Vec3 { .z = -2 };
+    var view = Mat4.createLookAt(cam_pos, Vec3.new(0.0, 0.0, 0.0), Vec3.new(0.0, 1.0, 0.0));
+    var proj = Mat4.createPerspective(70 * 0.0174533, 600.0 / 800.0, 0.1, 200);
+    proj.fields[1][1] *= -1;
+    var view_proj = Mat4.mul(proj, view);
+
+    var model = Mat4.createAngleAxis(.{ .y = 1 }, 25 * 0.0174533 * frame_num * 0.04);
+    var mvp = Mat4.mul(view_proj, model);
+    _ = cam_pos;
+    _ = model;
+    _ = view;
+
+    var constants = MeshPushConstants{
+        .render_matrix = mvp,
     };
 
     try gc.vkd.resetCommandBuffer(cmdbuf, .{});
@@ -341,7 +384,13 @@ fn recordCommandBuffer(
         .p_clear_values = @ptrCast([*]const vk.ClearValue, &clear),
     }, .@"inline");
     gc.vkd.cmdBindPipeline(cmdbuf, .graphics, pipeline);
-    gc.vkd.cmdDraw(cmdbuf, 3, 1, 0, 0);
+
+    // bind the mesh vertex buffer with offset 0
+    var offset: vk.DeviceSize = 0;
+    gc.vkd.cmdBindVertexBuffers(cmdbuf, 0, 1, @ptrCast([*]const vk.Buffer, &mesh.vert_buffer.buffer), @ptrCast([*]const vk.DeviceSize, &offset));
+
+    gc.vkd.cmdPushConstants(cmdbuf, pipeline_layout, .{ .vertex_bit = true }, 0, @sizeOf(MeshPushConstants), &constants);
+    gc.vkd.cmdDraw(cmdbuf, @intCast(u32, mesh.vertices.items.len), 1, 0, 0);
 
     gc.vkd.cmdEndRenderPass(cmdbuf);
     try gc.vkd.endCommandBuffer(cmdbuf);
