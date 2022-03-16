@@ -26,7 +26,7 @@ pub const EngineChap2 = struct {
     pipeline_index: u1 = 0,
 
     pub fn init(app_name: [*:0]const u8) !Self {
-        const allocator = std.heap.page_allocator;
+        const allocator = std.heap.c_allocator;
         try glfw.init(.{});
 
         var extent = vk.Extent2D{ .width = 800, .height = 600 };

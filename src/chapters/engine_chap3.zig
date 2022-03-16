@@ -38,7 +38,7 @@ pub const EngineChap3 = struct {
     frame_num: f32 = 0,
 
     pub fn init(app_name: [*:0]const u8) !Self {
-        const allocator = std.heap.page_allocator;
+        const allocator = std.heap.c_allocator;
         try glfw.init(.{});
 
         var extent = vk.Extent2D{ .width = 800, .height = 600 };
@@ -289,7 +289,7 @@ fn createPipeline(
 }
 
 fn loadMeshes() !Mesh {
-    var mesh = Mesh.init(std.heap.page_allocator);
+    var mesh = Mesh.init(std.heap.c_allocator);
 
     // vertex positions
     try mesh.vertices.append(.{ .position = .{ 1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0, 1, 0 } });

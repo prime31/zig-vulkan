@@ -19,7 +19,7 @@ pub fn main() !void {
     });
     defer window.destroy();
 
-    const allocator = std.heap.page_allocator;
+    const allocator = std.heap.c_allocator;
 
     const gc = try GraphicsContext.init(allocator, app_name, window, true);
     defer gc.deinit();
