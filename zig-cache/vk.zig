@@ -24884,7 +24884,6 @@ pub fn DeviceWrapper(comptime cmds: DeviceCommandFlags) type {
         pub const GetImageViewAddressNVXError = error{
             OutOfHostMemory,
             Unknown,
-            Unknown,
         };
         pub fn getImageViewAddressNVX(
             self: Self,

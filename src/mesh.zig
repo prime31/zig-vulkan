@@ -7,10 +7,15 @@ const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 
 pub const AllocatedBuffer = struct {
     buffer: vk.Buffer,
-    allocation: vkmem.VmaAllocation,
+    allocation: ?vkmem.VmaAllocation = null,
+    memory: ?vk.DeviceMemory = null,
 
-    pub fn deinit(self: AllocatedBuffer, vk_allocator: vkmem.VmaAllocator) void {
-        vkmem.vmaDestroyBuffer(vk_allocator, self.buffer, self.allocation);
+    pub fn deinit(self: AllocatedBuffer, gc: *const GraphicsContext, vk_allocator: vkmem.VmaAllocator) void {
+        if (self.allocation) |alloc| vkmem.vmaDestroyBuffer(vk_allocator, self.buffer, alloc);
+        if (self.memory) |mem| {
+            gc.vkd.freeMemory(gc.dev, mem, null);
+            gc.vkd.destroyBuffer(gc.dev, self.buffer, null);
+        }
     }
 };
 
@@ -52,12 +57,12 @@ pub const Mesh = struct {
     vert_buffer: AllocatedBuffer,
 
     pub fn init(allocator: std.mem.Allocator) Mesh {
-        // return initFromObj(allocator, "src/chapters/monkey_smooth.obj");
+        return initFromObj(allocator, "/Users/mikedesaro/zig-vulkan/src/chapters/monkey_smooth.obj");
 
-        return .{
-            .vertices = std.ArrayList(Vertex).init(allocator),
-            .vert_buffer = undefined,
-        };
+        // return .{
+        //     .vertices = std.ArrayList(Vertex).init(allocator),
+        //     .vert_buffer = undefined,
+        // };
     }
 
     pub fn initFromObj(allocator: std.mem.Allocator, filename: []const u8) Mesh {
@@ -67,36 +72,14 @@ pub const Mesh = struct {
         var materials: [*c]tiny.tinyobj_material_t = undefined;
         var num_materials: usize = 0;
 
-        const ret = tiny.tinyobj_parse_obj(&attrib, &shapes, &num_shapes, &materials,
-                          &num_materials, filename.ptr, getFileData, null, tiny.TINYOBJ_FLAG_TRIANGULATE);
+        const ret = tiny.tinyobj_parse_obj(&attrib, &shapes, &num_shapes, &materials, &num_materials, filename.ptr, getFileData, null, tiny.TINYOBJ_FLAG_TRIANGULATE);
         if (ret != tiny.TINYOBJ_SUCCESS) unreachable;
 
         var vertices = std.ArrayList(Vertex).init(allocator);
-        // for (i = 0; i < attrib.num_face_num_verts; i++) {
+
         var face_offset: usize = 0;
         var i: usize = 0;
         while (i < attrib.num_face_num_verts) : (i += 1) {
-            // var v: usize = 0;
-            // while (v < 3) : (v += 3) {
-            //     const idx = attrib.faces[face_offset + v];
-
-            //     const vx = attrib.vertices[3 * @intCast(usize, idx.v_idx) + 0];
-            //     const vy = attrib.vertices[3 * @intCast(usize, idx.v_idx) + 1];
-            //     const vz = attrib.vertices[3 * @intCast(usize, idx.v_idx) + 2];
-
-            //     const nx = attrib.normals[3 * @intCast(usize, idx.vn_idx) + 0];
-            //     const ny = attrib.normals[3 * @intCast(usize, idx.vn_idx) + 1];
-            //     const nz = attrib.normals[3 * @intCast(usize, idx.vn_idx) + 2];
-
-            //     // std.debug.print("{d}, {d}, {d} - {d}, {d}, {d}\n", .{ vx, vy, vz, nx, ny, nz });
-            //     vertices.append(.{
-            //         .position = [3]f32{vx, vy, vz},
-            //         .normal = [3]f32{nx, ny, nz},
-            //         .color = [3]f32{nx, ny, nz},
-            //     }) catch unreachable;
-            // }
-            // if (i >= 0) continue;
-
             std.debug.assert(@mod(attrib.face_num_verts[i], 3) == 0);
             var f: usize = 0;
             while (f < @divExact(attrib.face_num_verts[i], 3)) : (f += 1) {
@@ -106,38 +89,41 @@ pub const Mesh = struct {
 
                 var k: usize = 0;
                 while (k < 3) : (k += 1) {
-                    const f0 = idx0.v_idx;
-                    const f1 = idx1.v_idx;
-                    const f2 = idx2.v_idx;
+                    var f0 = @intCast(usize, idx0.v_idx);
+                    var f1 = @intCast(usize, idx1.v_idx);
+                    var f2 = @intCast(usize, idx2.v_idx);
 
-                    const vx = attrib.vertices[3 * @intCast(usize, f0) + 0];
-                    const vy = attrib.vertices[3 * @intCast(usize, f1) + 1];
-                    const vz = attrib.vertices[3 * @intCast(usize, f2) + 2];
+                    const vx = attrib.vertices[3 * f0 + k];
+                    const vy = attrib.vertices[3 * f1 + k];
+                    const vz = attrib.vertices[3 * f2 + k];
 
-                    const nx = attrib.normals[3 * @intCast(usize, f0) + 0];
-                    const ny = attrib.normals[3 * @intCast(usize, f1) + 1];
-                    const nz = attrib.normals[3 * @intCast(usize, f2) + 2];
+                    // normals
+                    f0 = @intCast(usize, idx0.vn_idx);
+                    f1 = @intCast(usize, idx1.vn_idx);
+                    f2 = @intCast(usize, idx2.vn_idx);
+
+                    const nx = attrib.normals[3 * f0 + k];
+                    const ny = attrib.normals[3 * f1 + k];
+                    const nz = attrib.normals[3 * f2 + k];
 
                     vertices.append(.{
-                        .position = [3]f32{vx, vy, vz},
-                        .normal = [3]f32{nx, ny, nz},
-                        .color = [3]f32{nx, ny, nz},
+                        .position = [3]f32{ vx, vy, vz },
+                        .normal = [3]f32{ nx, ny, nz },
+                        .color = [3]f32{ nx, ny, nz },
                     }) catch unreachable;
                 }
             }
             face_offset += @intCast(usize, attrib.face_num_verts[i]);
-            // std.debug.print("total verts: {d}\n", .{ face_offset });
         }
 
-        // std.debug.print("total verts: {d}\n", .{ vertices.items });
         return .{
             .vertices = vertices,
             .vert_buffer = undefined,
         };
     }
 
-    pub fn deinit(self: Mesh, vk_allocator: vkmem.VmaAllocator) void {
-        self.vert_buffer.deinit(vk_allocator);
+    pub fn deinit(self: Mesh, vk_allocator: vkmem.VmaAllocator, gc: *const GraphicsContext) void {
+        self.vert_buffer.deinit(gc, vk_allocator);
         self.vertices.deinit();
     }
 };
