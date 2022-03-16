@@ -4,7 +4,7 @@ const glfw = @import("glfw");
 const Allocator = std.mem.Allocator;
 
 const required_device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name} ++ if (@import("builtin").os.tag == .macos) [_][*:0]const u8{vk.extension_info.khr_portability_subset.name} else [_][*:0]const u8{};
-const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
+var validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 
 const BaseDispatch = vk.BaseWrapper(allFuncs(vk.BaseCommandFlags));
 
@@ -115,11 +115,19 @@ pub const GraphicsContext = struct {
             .api_version = vk.API_VERSION_1_1,
         };
 
+        // hack because zig cant properly handle `if (validate) &validation_layers else undefined`
+        var v_layers: [*]const [*:0]const u8 = undefined;
+        var v_layers_cnt: u32 = 0;
+        if (validate) {
+            v_layers = @ptrCast([*]const [*:0]const u8, &validation_layers);
+            v_layers_cnt = validation_layers.len;
+        }
+
         self.instance = try self.vkb.createInstance(&.{
             .flags = .{},
             .p_application_info = &app_info,
-            .enabled_layer_count = if (validate) validation_layers.len else 0,
-            .pp_enabled_layer_names = if (validate) &validation_layers else undefined,
+            .enabled_layer_count = v_layers_cnt,
+            .pp_enabled_layer_names = v_layers,
             .enabled_extension_count = @intCast(u32, glfw_exts.len),
             .pp_enabled_extension_names = @ptrCast([*]const [*:0]const u8, &glfw_exts[0]),
         }, null);
