@@ -52,7 +52,7 @@ pub const Mesh = struct {
     vert_buffer: AllocatedBuffer,
 
     pub fn init(allocator: std.mem.Allocator) Mesh {
-        _ = initFromObj(allocator, "src/chapters/monkey_smooth.obj");
+        // return initFromObj(allocator, "src/chapters/monkey_smooth.obj");
 
         return .{
             .vertices = std.ArrayList(Vertex).init(allocator),
@@ -76,43 +76,60 @@ pub const Mesh = struct {
         var face_offset: usize = 0;
         var i: usize = 0;
         while (i < attrib.num_face_num_verts) : (i += 1) {
-            var v: usize = 0;
-            while (v < 3) : (v += 3) {
-                const idx = attrib.faces[face_offset + v];
+            // var v: usize = 0;
+            // while (v < 3) : (v += 3) {
+            //     const idx = attrib.faces[face_offset + v];
 
-                const vx = attrib.vertices[3 * @intCast(usize, idx.v_idx) + 0];
-                const vy = attrib.vertices[3 * @intCast(usize, idx.v_idx) + 1];
-                const vz = attrib.vertices[3 * @intCast(usize, idx.v_idx) + 2];
+            //     const vx = attrib.vertices[3 * @intCast(usize, idx.v_idx) + 0];
+            //     const vy = attrib.vertices[3 * @intCast(usize, idx.v_idx) + 1];
+            //     const vz = attrib.vertices[3 * @intCast(usize, idx.v_idx) + 2];
 
-                const nx = attrib.normals[3 * @intCast(usize, idx.vn_idx) + 0];
-                const ny = attrib.normals[3 * @intCast(usize, idx.vn_idx) + 1];
-                const nz = attrib.normals[3 * @intCast(usize, idx.vn_idx) + 2];
+            //     const nx = attrib.normals[3 * @intCast(usize, idx.vn_idx) + 0];
+            //     const ny = attrib.normals[3 * @intCast(usize, idx.vn_idx) + 1];
+            //     const nz = attrib.normals[3 * @intCast(usize, idx.vn_idx) + 2];
 
-                std.debug.print("{d}, {d}, {d} - {d}, {d}, {d}\n", .{ vx, vy, vz, nx, ny, nz });
-                vertices.append(.{
-                    .position = [3]f32{vx, vy, vz},
-                    .normal = [3]f32{nx, ny, nz},
-                    .color = [3]f32{nx, ny, nz},
-                }) catch unreachable;
-            }
-            //for (f = 0; f < (size_t)attrib.face_num_verts[i] / 3; f++) {
-            // var f: usize = 0;
-            // while (f < attrib.face_num_verts[i] / 3) : (i += 1) {
-            //     var idx0 = attrib.faces[face_offset + 3 * f + 0];
-            //     var idx1 = attrib.faces[face_offset + 3 * f + 1];
-            //     var idx2 = attrib.faces[face_offset + 3 * f + 2];
-
-            //     //for (k = 0; k < 3; k++) {
-            //     var k: usize = 0;
-            //     while (k < 3) : (k += 3) {
-            //         const f0 = idx0.v_idx;
-            //         const f1 = idx1.v_idx;
-            //         const f2 = idx2.v_idx;
-            //     }
+            //     // std.debug.print("{d}, {d}, {d} - {d}, {d}, {d}\n", .{ vx, vy, vz, nx, ny, nz });
+            //     vertices.append(.{
+            //         .position = [3]f32{vx, vy, vz},
+            //         .normal = [3]f32{nx, ny, nz},
+            //         .color = [3]f32{nx, ny, nz},
+            //     }) catch unreachable;
             // }
+            // if (i >= 0) continue;
+
+            std.debug.assert(@mod(attrib.face_num_verts[i], 3) == 0);
+            var f: usize = 0;
+            while (f < @divExact(attrib.face_num_verts[i], 3)) : (f += 1) {
+                var idx0 = attrib.faces[face_offset + 3 * f + 0];
+                var idx1 = attrib.faces[face_offset + 3 * f + 1];
+                var idx2 = attrib.faces[face_offset + 3 * f + 2];
+
+                var k: usize = 0;
+                while (k < 3) : (k += 1) {
+                    const f0 = idx0.v_idx;
+                    const f1 = idx1.v_idx;
+                    const f2 = idx2.v_idx;
+
+                    const vx = attrib.vertices[3 * @intCast(usize, f0) + 0];
+                    const vy = attrib.vertices[3 * @intCast(usize, f1) + 1];
+                    const vz = attrib.vertices[3 * @intCast(usize, f2) + 2];
+
+                    const nx = attrib.normals[3 * @intCast(usize, f0) + 0];
+                    const ny = attrib.normals[3 * @intCast(usize, f1) + 1];
+                    const nz = attrib.normals[3 * @intCast(usize, f2) + 2];
+
+                    vertices.append(.{
+                        .position = [3]f32{vx, vy, vz},
+                        .normal = [3]f32{nx, ny, nz},
+                        .color = [3]f32{nx, ny, nz},
+                    }) catch unreachable;
+                }
+            }
             face_offset += @intCast(usize, attrib.face_num_verts[i]);
+            // std.debug.print("total verts: {d}\n", .{ face_offset });
         }
 
+        // std.debug.print("total verts: {d}\n", .{ vertices.items });
         return .{
             .vertices = vertices,
             .vert_buffer = undefined,
@@ -127,8 +144,6 @@ pub const Mesh = struct {
 
 fn getFileData(ctx: ?*anyopaque, filename: [*c]const u8, is_mtl: c_int, obj_filename: [*c]const u8, data: [*c][*c]u8, len: [*c]usize) callconv(.C) void {
     _ = ctx;
-    _ = is_mtl;
-    _ = obj_filename;
 
     var file: std.fs.File = undefined;
 

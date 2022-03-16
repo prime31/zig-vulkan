@@ -344,7 +344,7 @@ fn recordCommandBuffer(
     frame_num: f32,
 ) !void {
     const clear = vk.ClearValue{
-        .color = .{ .float_32 = .{ 0.2, 0.5, 0, 1 } },
+        .color = .{ .float_32 = .{ 0.6, 0.5, 0, 1 } },
     };
 
     // This needs to be a separate definition - see https://github.com/ziglang/zig/issues/7627.
@@ -362,9 +362,6 @@ fn recordCommandBuffer(
 
     var model = Mat4.createAngleAxis(.{ .y = 1 }, 25 * 0.0174533 * frame_num * 0.04);
     var mvp = Mat4.mul(view_proj, model);
-    _ = cam_pos;
-    _ = model;
-    _ = view;
 
     var constants = MeshPushConstants{
         .render_matrix = mvp,
