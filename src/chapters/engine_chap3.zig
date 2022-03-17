@@ -154,7 +154,7 @@ pub const EngineChap3 = struct {
 
         self.depth_image.deinit(self.vk_allocator);
         self.gc.vkd.destroyImageView(self.gc.dev, self.depth_image_view, null);
-        self.triangle_mesh.deinit(self.vk_allocator, self.gc);
+        self.triangle_mesh.deinit(self.vk_allocator);
         vkmem.vmaDestroyAllocator(self.vk_allocator);
 
         self.gc.vkd.freeCommandBuffers(self.gc.dev, self.pool, 1, @ptrCast([*]vk.CommandBuffer, &self.main_cmd_buffer));
@@ -390,28 +390,26 @@ fn uploadMesh(mesh: *Mesh, allocator: vkmem.VmaAllocator) void {
     vma_malloc_info.usage = vkmem.VMA_MEMORY_USAGE_CPU_TO_GPU;
 
     // allocate the buffer
-    var allocation: vkmem.VmaAllocation = undefined;
     var res = vkmem.vmaCreateBuffer(
         allocator,
         &buffer_info,
         &vma_malloc_info,
         &mesh.vert_buffer.buffer,
-        &allocation,
+        &mesh.vert_buffer.allocation,
         null,
     );
     std.debug.assert(res == vk.Result.success);
-    mesh.vert_buffer.allocation = allocation;
 
     // copy vertex data
     var data: *anyopaque = undefined;
-    res = vkmem.vmaMapMemory(allocator, mesh.vert_buffer.allocation.?, @ptrCast([*c]?*anyopaque, &data));
+    res = vkmem.vmaMapMemory(allocator, mesh.vert_buffer.allocation, @ptrCast([*c]?*anyopaque, &data));
     std.debug.assert(res == vk.Result.success);
 
     const gpu_vertices = @ptrCast([*]Vertex, @alignCast(@alignOf(Vertex), data));
     std.mem.copy(Vertex, gpu_vertices[0..mesh.vertices.items.len], mesh.vertices.items);
 
     // TODO: why is this necessary on x64 mac but not an arm?
-    _ = vkmem.vmaFlushAllocation(allocator, allocation, 0, mesh.vertices.items.len * @sizeOf(Vertex));
+    _ = vkmem.vmaFlushAllocation(allocator, mesh.vert_buffer.allocation, 0, mesh.vertices.items.len * @sizeOf(Vertex));
     vkmem.vmaUnmapMemory(allocator, mesh.vert_buffer.allocation.?);
 }
 

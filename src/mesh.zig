@@ -7,15 +7,10 @@ const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 
 pub const AllocatedBuffer = struct {
     buffer: vk.Buffer,
-    allocation: ?vkmem.VmaAllocation = null,
-    memory: ?vk.DeviceMemory = null,
+    allocation: vkmem.VmaAllocation,
 
-    pub fn deinit(self: AllocatedBuffer, gc: *const GraphicsContext, vk_allocator: vkmem.VmaAllocator) void {
+    pub fn deinit(self: AllocatedBuffer, vk_allocator: vkmem.VmaAllocator) void {
         if (self.allocation) |alloc| vkmem.vmaDestroyBuffer(vk_allocator, self.buffer, alloc);
-        if (self.memory) |mem| {
-            gc.vkd.freeMemory(gc.dev, mem, null);
-            gc.vkd.destroyBuffer(gc.dev, self.buffer, null);
-        }
     }
 };
 
@@ -136,8 +131,8 @@ pub const Mesh = struct {
         };
     }
 
-    pub fn deinit(self: Mesh, vk_allocator: vkmem.VmaAllocator, gc: *const GraphicsContext) void {
-        self.vert_buffer.deinit(gc, vk_allocator);
+    pub fn deinit(self: Mesh, vk_allocator: vkmem.VmaAllocator) void {
+        self.vert_buffer.deinit(vk_allocator);
         self.vertices.deinit();
     }
 };
