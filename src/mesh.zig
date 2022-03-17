@@ -57,12 +57,10 @@ pub const Mesh = struct {
     vert_buffer: AllocatedBuffer,
 
     pub fn init(allocator: std.mem.Allocator) Mesh {
-        return initFromObj(allocator, "src/chapters/monkey_smooth.obj");
-
-        // return .{
-        //     .vertices = std.ArrayList(Vertex).init(allocator),
-        //     .vert_buffer = undefined,
-        // };
+        return .{
+            .vertices = std.ArrayList(Vertex).init(allocator),
+            .vert_buffer = undefined,
+        };
     }
 
     pub fn initFromObj(allocator: std.mem.Allocator, filename: []const u8) Mesh {
@@ -74,6 +72,10 @@ pub const Mesh = struct {
 
         const ret = tiny.tinyobj_parse_obj(&attrib, &shapes, &num_shapes, &materials, &num_materials, filename.ptr, getFileData, null, tiny.TINYOBJ_FLAG_TRIANGULATE);
         if (ret != tiny.TINYOBJ_SUCCESS) unreachable;
+
+        defer tiny.tinyobj_shapes_free(shapes, num_shapes);
+        defer tiny.tinyobj_materials_free(materials, num_materials);
+        defer tiny.tinyobj_attrib_free(&attrib);
 
         var vertices = std.ArrayList(Vertex).init(allocator);
         var tmp_verts: [3]Vertex = undefined;

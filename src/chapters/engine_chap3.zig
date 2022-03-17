@@ -292,7 +292,7 @@ fn createPipeline(
 }
 
 fn loadMeshes() !Mesh {
-    var mesh = Mesh.init(gpa);
+    var mesh = Mesh.initFromObj(gpa, "src/chapters/monkey_smooth.obj");
 
     // vertex positions
     // try mesh.vertices.append(.{ .position = .{ 1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0, 1, 0 } });
