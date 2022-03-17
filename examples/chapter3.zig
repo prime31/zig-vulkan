@@ -1,7 +1,7 @@
 const std = @import("std");
 const glfw = @import("glfw");
 const vk = @import("vk");
-const vkmem = @import("vkmem");
+// const vkmem = @import("vk_mem_alloc.zig");
 
 const Engine = @import("vengine").EngineChap3;
 
@@ -20,12 +20,38 @@ const t = @cImport({
 
 const tiny = @import("../src/tinyobjectloader.zig");
 
+const structs = [_][]const u8{
+    "struct_VmaDeviceMemoryCallbacks",
+    "struct_VmaVulkanFunctions",
+    "struct_VmaAllocatorCreateInfo",
+    "struct_VmaAllocatorInfo",
+    "struct_VmaStatistics",
+    "struct_VmaDetailedStatistics",
+    "struct_VmaTotalStatistics",
+    "struct_VmaBudget",
+    "struct_VmaAllocationCreateInfo",
+    "struct_VmaPoolCreateInfo",
+    "struct_VmaAllocationInfo",
+    "struct_VmaDefragmentationInfo",
+    "struct_VmaDefragmentationMove",
+    "struct_VmaDefragmentationPassMoveInfo",
+    "struct_VmaDefragmentationStats",
+    "struct_VmaVirtualBlockCreateInfo",
+    "struct_VmaVirtualAllocationCreateInfo",
+    "struct_VmaVirtualAllocationInfo",
+};
 
 // https://vkguide.dev/docs/chapter-2/triangle_walkthrough/
 pub fn main() !void {
     // uncomment to generate cImport.zig
     // std.debug.print("---- tiny: {any}\n", .{ t });
     // std.debug.print("---- alloc: {any}, funcs: {any}\n", .{ @sizeOf(c.VmaAllocatorCreateInfo), @sizeOf(c.VmaVulkanFunctions) });
+
+    // print struct sizes
+    // inline for (structs) |s| {
+    //     std.debug.print("{s}: {d}\n", .{ s, @sizeOf(@field(vkmem, s)) });
+    // }
+    // std.debug.print("---- alloc: {any}, funcs: {any}\n", .{ @sizeOf(vkmem.VmaAllocatorCreateInfo), @sizeOf(vkmem.VmaVulkanFunctions) });
 
     var engine = try Engine.init("chapter 3");
     defer engine.deinit();
