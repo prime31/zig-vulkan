@@ -158,61 +158,55 @@ pub fn pipelineLayoutCreateInfo() vk.PipelineLayoutCreateInfo {
     };
 }
 
-// VkImageCreateInfo vkinit::image_create_info(VkFormat format, VkImageUsageFlags usageFlags, VkExtent3D extent)
-// {
-// 	VkImageCreateInfo info = { };
-// 	info.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-// 	info.pNext = nullptr;
+pub fn imageCreateInfo(format: vk.Format, extent: vk.Extent3D, usage_flags: vk.ImageUsageFlags) vk.ImageCreateInfo {
+    return .{
+        .flags = .{},
+        .image_type = .@"2d",
+        .format = format,
+        .extent = extent,
+        .mip_levels = 1,
+        .array_layers = 1,
+        .samples = .{ .@"1_bit" = true },
+        .tiling = .optimal,
+        .usage = usage_flags,
+        .sharing_mode = .exclusive,
+        .queue_family_index_count = 0,
+        .p_queue_family_indices = undefined,
+        .initial_layout = .@"undefined",
+    };
+}
 
-// 	info.imageType = VK_IMAGE_TYPE_2D;
+pub fn imageViewCreateInfo(format: vk.Format, image: vk.Image, aspect_flags: vk.ImageAspectFlags) vk.ImageViewCreateInfo {
+    return .{
+        .flags = .{},
+        .image = image,
+        .view_type = .@"2d",
+        .format = format,
+        .components = .{ .r = .identity, .g = .identity, .b = .identity, .a = .identity },
+        .subresource_range = .{
+            .aspect_mask = aspect_flags,
+            .base_mip_level = 0,
+            .level_count = 1,
+            .base_array_layer = 0,
+            .layer_count = 1,
+        },
+    };
+}
 
-// 	info.format = format;
-// 	info.extent = extent;
-
-// 	info.mipLevels = 1;
-// 	info.arrayLayers = 1;
-// 	info.samples = VK_SAMPLE_COUNT_1_BIT;
-// 	info.tiling = VK_IMAGE_TILING_OPTIMAL;
-// 	info.usage = usageFlags;
-
-// 	return info;
-// }
-
-// VkImageViewCreateInfo vkinit::imageview_create_info(VkFormat format, VkImage image, VkImageAspectFlags aspectFlags)
-// {
-// 	//build a image-view for the depth image to use for rendering
-// 	VkImageViewCreateInfo info = {};
-// 	info.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-// 	info.pNext = nullptr;
-
-// 	info.viewType = VK_IMAGE_VIEW_TYPE_2D;
-// 	info.image = image;
-// 	info.format = format;
-// 	info.subresourceRange.baseMipLevel = 0;
-// 	info.subresourceRange.levelCount = 1;
-// 	info.subresourceRange.baseArrayLayer = 0;
-// 	info.subresourceRange.layerCount = 1;
-// 	info.subresourceRange.aspectMask = aspectFlags;
-
-// 	return info;
-// }
-
-// VkPipelineDepthStencilStateCreateInfo vkinit::depth_stencil_create_info(bool bDepthTest, bool bDepthWrite, VkCompareOp compareOp)
-// {
-// 	VkPipelineDepthStencilStateCreateInfo info = {};
-// 	info.sType = VK_STRUCTURE_TYPE_PIPELINE_DEPTH_STENCIL_STATE_CREATE_INFO;
-// 	info.pNext = nullptr;
-
-// 	info.depthTestEnable = bDepthTest ? VK_TRUE : VK_FALSE;
-// 	info.depthWriteEnable = bDepthWrite ? VK_TRUE : VK_FALSE;
-// 	info.depthCompareOp = bDepthTest ? compareOp : VK_COMPARE_OP_ALWAYS;
-// 	info.depthBoundsTestEnable = VK_FALSE;
-// 	info.minDepthBounds = 0.0f; // Optional
-// 	info.maxDepthBounds = 1.0f; // Optional
-// 	info.stencilTestEnable = VK_FALSE;
-
-// 	return info;
-// }
+pub fn pipelineDepthStencilCreateInfo(depth_test: bool, depth_write: bool, compare_op: vk.CompareOp) vk.PipelineDepthStencilStateCreateInfo {
+    return .{
+        .flags = .{},
+        .depth_test_enable = if (depth_test) vk.TRUE else vk.FALSE,
+        .depth_write_enable = if (depth_write) vk.TRUE else vk.FALSE,
+        .depth_compare_op = if (depth_test) compare_op else .always,
+        .depth_bounds_test_enable = vk.FALSE,
+        .stencil_test_enable = vk.FALSE,
+        .front = std.mem.zeroes(vk.StencilOpState),
+        .back = std.mem.zeroes(vk.StencilOpState),
+        .min_depth_bounds = 0,
+        .max_depth_bounds = 1,
+    };
+}
 
 // VkDescriptorSetLayoutBinding vkinit::descriptorset_layout_binding(VkDescriptorType type, VkShaderStageFlags stageFlags, uint32_t binding)
 // {

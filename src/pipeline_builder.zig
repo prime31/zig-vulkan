@@ -14,6 +14,7 @@ pub const PipelineBuilder = struct {
     color_blend_attachment: vk.PipelineColorBlendAttachmentState,
     multisampling: vk.PipelineMultisampleStateCreateInfo,
     pipeline_layout: vk.PipelineLayout,
+    depth_stencil: ?vk.PipelineDepthStencilStateCreateInfo = null,
 
     pub fn init(allocator: std.mem.Allocator, extent: vk.Extent2D, pipeline_layout: vk.PipelineLayout) PipelineBuilder {
         // build viewport and scissor from the swapchain extents
@@ -89,7 +90,7 @@ pub const PipelineBuilder = struct {
             .p_viewport_state = &viewport_state,
             .p_rasterization_state = &self.rasterizer,
             .p_multisample_state = &self.multisampling,
-            .p_depth_stencil_state = null,
+            .p_depth_stencil_state = if (self.depth_stencil) |*ds| ds else null,
             .p_color_blend_state = &color_blending,
             .p_dynamic_state = null,
             .layout = self.pipeline_layout,
