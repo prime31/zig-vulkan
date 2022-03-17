@@ -307,7 +307,7 @@ fn createFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_p
     errdefer for (framebuffers[0..i]) |fb| gc.vkd.destroyFramebuffer(gc.dev, fb, null);
 
     for (framebuffers) |*fb| {
-        var attachments = [2]vk.ImageView{swapchain.swap_images[i].view, depth_image_view};
+        var attachments = [2]vk.ImageView{ swapchain.swap_images[i].view, depth_image_view };
         fb.* = try gc.vkd.createFramebuffer(gc.dev, &.{
             .flags = .{},
             .render_pass = render_pass,
@@ -391,9 +391,7 @@ fn uploadMesh(mesh: *Mesh, allocator: vkmem.VmaAllocator) void {
     vma_malloc_info.usage = vkmem.VMA_MEMORY_USAGE_CPU_TO_GPU;
 
     // allocate the buffer
-    //pub extern fn vmaCreateBuffer(allocator: VmaAllocator, pBufferCreateInfo: [*c]const VkBufferCreateInfo, pAllocationCreateInfo: [*c]const VmaAllocationCreateInfo, pBuffer: [*c]VkBuffer, pAllocation: [*c]VmaAllocation, pAllocationInfo: [*c]VmaAllocationInfo) VkResult;
     var allocation: vkmem.VmaAllocation = undefined;
-    // var allocation_info: VmaAllocationInfo = null;
     var res = vkmem.vmaCreateBuffer(
         allocator,
         &buffer_info,
@@ -434,7 +432,7 @@ fn recordCommandBuffer(
         .depth_stencil = .{ .depth = 1, .stencil = 0 },
     };
 
-    const clear_values = [_]vk.ClearValue{clear, depth_clear};
+    const clear_values = [_]vk.ClearValue{ clear, depth_clear };
 
     // This needs to be a separate definition - see https://github.com/ziglang/zig/issues/7627.
     const render_area = vk.Rect2D{
