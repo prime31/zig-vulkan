@@ -194,7 +194,8 @@ fn addShaderCompilationStep(b: *Builder, always_compile_shaders: bool) std.build
 fn linkVulkanMemoryAllocator(step: *std.build.LibExeObjStep, comptime sdk_root: []const u8) void {
     step.linkLibCpp();
     step.addIncludePath(sdk_root ++ "/include");
-    step.addCSourceFile("vk_mem_allocator/vk_mem_alloc.cpp", &.{ "-Wno-nullability-completeness" });
+    step.addIncludePath("vk_mem_allocator");
+    step.addCSourceFile("vk_mem_allocator/vk_mem_alloc.cpp", &.{"-Wno-nullability-completeness"});
 }
 
 fn linkTinyObjLoader(step: *std.build.LibExeObjStep) void {

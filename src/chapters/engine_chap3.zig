@@ -97,8 +97,8 @@ pub const EngineChap3 = struct {
         const pipeline = try createPipeline(gc, gpa, swapchain.extent, render_pass, pipeline_layout);
 
         var mesh = try loadMeshes();
-        // uploadMesh(&mesh, vk_allocator);
-        try uploadMeshNonVma(gc, pool, &mesh);
+        uploadMesh(&mesh, vk_allocator);
+        // try uploadMeshNonVma(gc, pool, &mesh);
 
         return Self{
             .allocator = gpa,
@@ -315,28 +315,28 @@ fn uploadMesh(mesh: *Mesh, allocator: vkmem.VmaAllocator) void {
     vma_malloc_info.usage = vkmem.VMA_MEMORY_USAGE_CPU_TO_GPU;
 
     // allocate the buffer
+    //pub extern fn vmaCreateBuffer(allocator: VmaAllocator, pBufferCreateInfo: [*c]const VkBufferCreateInfo, pAllocationCreateInfo: [*c]const VmaAllocationCreateInfo, pBuffer: [*c]VkBuffer, pAllocation: [*c]VmaAllocation, pAllocationInfo: [*c]VmaAllocationInfo) VkResult;
+    var allocation: vkmem.VmaAllocation = undefined;
+    // var allocation_info: VmaAllocationInfo = null;
     var res = vkmem.vmaCreateBuffer(
         allocator,
         &buffer_info,
         &vma_malloc_info,
         &mesh.vert_buffer.buffer,
-        &mesh.vert_buffer.allocation,
-        undefined,
+        &allocation,
+        null,
     );
     std.debug.assert(res == vk.Result.success);
+    mesh.vert_buffer.allocation = allocation;
 
     // copy vertex data
     var data: *anyopaque = undefined;
-    res = vkmem.vmaMapMemory(allocator, mesh.vert_buffer.allocation, @ptrCast([*c]?*anyopaque, &data));
+    res = vkmem.vmaMapMemory(allocator, mesh.vert_buffer.allocation.?, @ptrCast([*c]?*anyopaque, &data));
     std.debug.assert(res == vk.Result.success);
 
     const gpu_vertices = @ptrCast([*]Vertex, @alignCast(@alignOf(Vertex), data));
     std.mem.copy(Vertex, gpu_vertices[0..mesh.vertices.items.len], mesh.vertices.items);
-    for (mesh.vertices.items) |v, i| {
-        gpu_vertices[i] = v;
-    }
-    vkmem.vmaUnmapMemory(allocator, mesh.vert_buffer.allocation);
-    std.debug.print("any: {any}, {any}\n", .{ data, gpu_vertices });
+    vkmem.vmaUnmapMemory(allocator, mesh.vert_buffer.allocation.?);
 }
 
 fn recordCommandBuffer(

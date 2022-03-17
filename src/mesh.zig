@@ -57,7 +57,7 @@ pub const Mesh = struct {
     vert_buffer: AllocatedBuffer,
 
     pub fn init(allocator: std.mem.Allocator) Mesh {
-        return initFromObj(allocator, "/Users/mikedesaro/zig-vulkan/src/chapters/monkey_smooth.obj");
+        return initFromObj(allocator, "src/chapters/monkey_smooth.obj");
 
         // return .{
         //     .vertices = std.ArrayList(Vertex).init(allocator),
@@ -76,10 +76,12 @@ pub const Mesh = struct {
         if (ret != tiny.TINYOBJ_SUCCESS) unreachable;
 
         var vertices = std.ArrayList(Vertex).init(allocator);
+        var tmp_verts: [3]Vertex = undefined;
 
         var face_offset: usize = 0;
         var i: usize = 0;
         while (i < attrib.num_face_num_verts) : (i += 1) {
+            // we only deal with tris, no quads
             std.debug.assert(@mod(attrib.face_num_verts[i], 3) == 0);
             var f: usize = 0;
             while (f < @divExact(attrib.face_num_verts[i], 3)) : (f += 1) {
@@ -93,24 +95,34 @@ pub const Mesh = struct {
                     var f1 = @intCast(usize, idx1.v_idx);
                     var f2 = @intCast(usize, idx2.v_idx);
 
-                    const vx = attrib.vertices[3 * f0 + k];
-                    const vy = attrib.vertices[3 * f1 + k];
-                    const vz = attrib.vertices[3 * f2 + k];
+                    tmp_verts[0].position[k] = attrib.vertices[3 * f0 + k];
+                    tmp_verts[1].position[k] = attrib.vertices[3 * f1 + k];
+                    tmp_verts[2].position[k] = attrib.vertices[3 * f2 + k];
 
                     // normals
                     f0 = @intCast(usize, idx0.vn_idx);
                     f1 = @intCast(usize, idx1.vn_idx);
                     f2 = @intCast(usize, idx2.vn_idx);
 
-                    const nx = attrib.normals[3 * f0 + k];
-                    const ny = attrib.normals[3 * f1 + k];
-                    const nz = attrib.normals[3 * f2 + k];
+                    tmp_verts[0].normal[k] = attrib.normals[3 * f0 + k];
+                    tmp_verts[1].normal[k] = attrib.normals[3 * f1 + k];
+                    tmp_verts[2].normal[k] = attrib.normals[3 * f2 + k];
 
-                    vertices.append(.{
-                        .position = [3]f32{ vx, vy, vz },
-                        .normal = [3]f32{ nx, ny, nz },
-                        .color = [3]f32{ nx, ny, nz },
-                    }) catch unreachable;
+                    // color either from material or normal
+                    if (attrib.material_ids[i] >= 0) {
+                        const mat_id = @intCast(usize, attrib.material_ids[i]);
+                        tmp_verts[0].color[k] = materials[mat_id].diffuse[0];
+                        tmp_verts[1].color[k] = materials[mat_id].diffuse[1];
+                        tmp_verts[2].color[k] = materials[mat_id].diffuse[2];
+                    } else {
+                        tmp_verts[0].color[k] = tmp_verts[0].normal[k];
+                        tmp_verts[1].color[k] = tmp_verts[1].normal[k];
+                        tmp_verts[2].color[k] = tmp_verts[2].normal[k];
+                    }
+                }
+
+                for (tmp_verts) |v| {
+                    vertices.append(v) catch unreachable;
                 }
             }
             face_offset += @intCast(usize, attrib.face_num_verts[i]);
