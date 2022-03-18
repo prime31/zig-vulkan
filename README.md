@@ -2,6 +2,16 @@
 
 <p align="center"><img height="300" src="https://developer.nvidia.com/sites/default/files/akamai/Vulcan-1-3.png" /></p>
 
+## TODO
+Some API ideas: [Volkano](https://github.com/vulkano-rs/vulkano)
+- higher-level api:
+    - buffers: CpuAccessibleBuffer, GpuAccessibleBuffer, etc
+    -
+
+- higher-level helpers:
+    - vertex_input_state: blahGetVertexInputState(VertexT)
+
+
 ## Getting started
 
 ### Install the Vulkan SDK
@@ -21,9 +31,9 @@ On macOS, you may e.g. place the following in your `~/.zprofile` file though the
 export PATH=$PATH:$HOME/VulkanSDK/1.3.xxx/macOS/bin/
 ```
 
-### Run the example
+### Run an example
 ```sh
-zig build clear
+zig build --help
 ```
 
 ### Cross compilation

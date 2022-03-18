@@ -1,5 +1,7 @@
 const vk = @import("vulkan");
 
+// https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/index.html
+
 // zigified API
 pub const VukanMemoryAllocator = struct {
     const Self = @This();

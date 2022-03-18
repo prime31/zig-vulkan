@@ -375,12 +375,14 @@ fn uploadMesh(mesh: *Mesh, allocator: vma.VmaAllocator) void {
     var buffer_info = std.mem.zeroInit(vk.BufferCreateInfo, .{
         .flags = .{},
         .size = mesh.vertices.items.len * @sizeOf(Vertex),
-        .usage = .{ .vertex_buffer_bit = true },
+        .usage = .{ .vertex_buffer_bit = true, .transfer_dst_bit = true },
     });
 
     // let the VMA library know that this data should be writeable by CPU, but also readable by GPU
     var vma_malloc_info = std.mem.zeroes(vma.VmaAllocationCreateInfo);
-    vma_malloc_info.usage = vma.VMA_MEMORY_USAGE_CPU_TO_GPU;
+    vma_malloc_info.usage = vma.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    vma_malloc_info.requiredFlags = .{ .host_visible_bit = true, .host_coherent_bit = true };
+    vma_malloc_info.flags = vma.VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT | vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
     // allocate the buffer
     var res = vma.vmaCreateBuffer(
@@ -401,8 +403,6 @@ fn uploadMesh(mesh: *Mesh, allocator: vma.VmaAllocator) void {
     const gpu_vertices = @ptrCast([*]Vertex, @alignCast(@alignOf(Vertex), data));
     std.mem.copy(Vertex, gpu_vertices[0..mesh.vertices.items.len], mesh.vertices.items);
 
-    // TODO: why is this necessary on x64 mac but not an arm?
-    _ = vma.vmaFlushAllocation(allocator, mesh.vert_buffer.allocation, 0, mesh.vertices.items.len * @sizeOf(Vertex));
     vma.vmaUnmapMemory(allocator, mesh.vert_buffer.allocation);
 }
 

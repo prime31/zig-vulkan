@@ -375,13 +375,18 @@ fn uploadMesh(mesh: *Mesh, allocator: vma.VmaAllocator) void {
     var buffer_info = std.mem.zeroInit(vk.BufferCreateInfo, .{
         .flags = .{},
         .size = mesh.vertices.items.len * @sizeOf(Vertex),
-        .usage = .{ .vertex_buffer_bit = true },
+        .usage = .{ .vertex_buffer_bit = true, .transfer_dst_bit = true },
     });
 
     // let the VMA library know that this data should be writeable by CPU, but also readable by GPU
+    // var vma_malloc_info = std.mem.zeroes(vma.VmaAllocationCreateInfo);
+    // vma_malloc_info.usage = vma.VMA_MEMORY_USAGE_CPU_TO_GPU;
+    // vma_malloc_info.requiredFlags = .{ .host_coherent_bit = true }; // TODO: VMA bug? it should be set by VMA...
+
     var vma_malloc_info = std.mem.zeroes(vma.VmaAllocationCreateInfo);
-    vma_malloc_info.usage = vma.VMA_MEMORY_USAGE_CPU_TO_GPU;
-    vma_malloc_info.requiredFlags = .{ .host_coherent_bit = true }; // TODO: VMA bug? it should be set by VMA...
+    vma_malloc_info.usage = vma.VMA_MEMORY_USAGE_AUTO;
+    vma_malloc_info.requiredFlags = .{ .host_visible_bit = true, .host_coherent_bit = true };
+    vma_malloc_info.flags = vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT; // VMA_ALLOCATION_CREATE_HOST_ACCESS_RANDOM_BIT
 
     // allocate the buffer
     var res = vma.vmaCreateBuffer(
