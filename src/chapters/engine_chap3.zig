@@ -381,6 +381,7 @@ fn uploadMesh(mesh: *Mesh, allocator: vma.VmaAllocator) void {
     // let the VMA library know that this data should be writeable by CPU, but also readable by GPU
     var vma_malloc_info = std.mem.zeroes(vma.VmaAllocationCreateInfo);
     vma_malloc_info.usage = vma.VMA_MEMORY_USAGE_CPU_TO_GPU;
+    vma_malloc_info.requiredFlags = .{ .host_coherent_bit = true }; // TODO: VMA bug? it should be set by VMA...
 
     // allocate the buffer
     var res = vma.vmaCreateBuffer(
@@ -402,7 +403,7 @@ fn uploadMesh(mesh: *Mesh, allocator: vma.VmaAllocator) void {
     std.mem.copy(Vertex, gpu_vertices[0..mesh.vertices.items.len], mesh.vertices.items);
 
     // TODO: why is this necessary on x64 mac but not an arm?
-    _ = vma.vmaFlushAllocation(allocator, mesh.vert_buffer.allocation, 0, mesh.vertices.items.len * @sizeOf(Vertex));
+    // _ = vma.vmaFlushAllocation(allocator, mesh.vert_buffer.allocation, 0, mesh.vertices.items.len * @sizeOf(Vertex));
     vma.vmaUnmapMemory(allocator, mesh.vert_buffer.allocation);
 }
 
