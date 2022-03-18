@@ -34,7 +34,7 @@ const MeshPushConstants = struct {
     render_matrix: Mat4,
 };
 
-pub const EngineChap3 = struct {
+pub const EngineChap3s = struct {
     const Self = @This();
 
     allocator: Allocator,
