@@ -403,7 +403,7 @@ fn uploadMesh(mesh: *Mesh, allocator: vma.VmaAllocator) void {
 
     // TODO: why is this necessary on x64 mac but not an arm?
     _ = vma.vmaFlushAllocation(allocator, mesh.vert_buffer.allocation, 0, mesh.vertices.items.len * @sizeOf(Vertex));
-    vma.vmaUnmapMemory(allocator, mesh.vert_buffer.allocation.?);
+    vma.vmaUnmapMemory(allocator, mesh.vert_buffer.allocation);
 }
 
 fn recordCommandBuffer(
