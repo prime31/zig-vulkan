@@ -3,6 +3,9 @@
 <p align="center"><img height="300" src="https://developer.nvidia.com/sites/default/files/akamai/Vulcan-1-3.png" /></p>
 
 ## TODO
+Checkout math lib: [Zalgebra](https://github.com/kooparse/zalgebra)
+
+Checkout abstractions here too: [Another Vulkan Zig](https://github.com/maxxnino/another-vulkan-zig)
 Some API ideas: [Volkano](https://github.com/vulkano-rs/vulkano)
 - higher-level api:
     - buffers: CpuAccessibleBuffer, GpuAccessibleBuffer, etc
@@ -11,6 +14,9 @@ Some API ideas: [Volkano](https://github.com/vulkano-rs/vulkano)
 - higher-level helpers:
     - vertex_input_state: blahGetVertexInputState(VertexT)
 
+
+Future
+- add SDL toggle [sdltest](https://github.com/SpexGuy/sdltest)
 
 ## Getting started
 

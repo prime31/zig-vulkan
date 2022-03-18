@@ -1,9 +1,11 @@
 const vk = @import("vulkan");
 
+// https://github.com/SpexGuy/Zig-VMA/blob/main/vma.zig
+
 // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/index.html
 
 // zigified API
-pub const VukanMemoryAllocator = struct {
+pub const Allocator = struct {
     const Self = @This();
 
     allocator: VmaAllocator,

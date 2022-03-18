@@ -206,7 +206,7 @@ fn linkVulkanMemoryAllocator(step: *std.build.LibExeObjStep, comptime sdk_root: 
     step.linkLibCpp();
     step.addIncludePath(sdk_root ++ "/include");
     step.addIncludePath("libs/vma");
-    step.addCSourceFile("libs/vma/vk_mem_alloc.cpp", &.{"-Wno-nullability-completeness"});
+    step.addCSourceFile("libs/vma/vk_mem_alloc.cpp", &.{ "-Wno-nullability-completeness", "-std=c++14" });
 }
 
 fn linkTinyObjLoader(step: *std.build.LibExeObjStep) void {
