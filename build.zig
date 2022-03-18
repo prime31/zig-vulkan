@@ -103,6 +103,17 @@ pub fn build(b: *Builder) void {
         .path = .{ .path = "libs/mach-glfw/src/main.zig" },
     };
 
+    const tinyobjloader_pkg = std.build.Pkg{
+        .name = "tiny",
+        .path = .{ .path = "libs/tinyobjloader/tinyobjloader.zig" },
+    };
+
+    const vma_pkg = std.build.Pkg{
+        .name = "vma",
+        .path = .{ .path = "libs/vma/vma.zig" },
+        .dependencies = &[_]std.build.Pkg{vulkan_pkg},
+    };
+
     const examples = getAllExamples(b, "examples");
     for (examples) |example| {
         const name = example[0];
@@ -119,12 +130,12 @@ pub fn build(b: *Builder) void {
 
         // mach-glfw
         exe.addPackage(glfw_pkg);
-        glfw.link(b, exe, .{});
+        glfw.link(b, exe, .{ .opengl = false });
 
         exe.addPackage(.{
             .name = "vengine",
             .path = .{ .path = "src/v.zig" },
-            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg },
+            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobjloader_pkg, vma_pkg },
         });
 
         // vulken-mem
@@ -194,13 +205,13 @@ fn addShaderCompilationStep(b: *Builder, always_compile_shaders: bool) std.build
 fn linkVulkanMemoryAllocator(step: *std.build.LibExeObjStep, comptime sdk_root: []const u8) void {
     step.linkLibCpp();
     step.addIncludePath(sdk_root ++ "/include");
-    step.addIncludePath("vk_mem_allocator");
-    step.addCSourceFile("vk_mem_allocator/vk_mem_alloc.cpp", &.{"-Wno-nullability-completeness"});
+    step.addIncludePath("libs/vma");
+    step.addCSourceFile("libs/vma/vk_mem_alloc.cpp", &.{"-Wno-nullability-completeness"});
 }
 
 fn linkTinyObjLoader(step: *std.build.LibExeObjStep) void {
-    step.addIncludePath("tinyobjloader");
-    step.addCSourceFile("tinyobjloader/tinyobj_loader_c.c", &.{"-std=c99"});
+    step.addIncludePath("libs/tinyobjloader");
+    step.addCSourceFile("libs/tinyobjloader/tinyobj_loader_c.c", &.{"-std=c99"});
 }
 
 fn getAllExamples(b: *Builder, root_directory: []const u8) [][2][]const u8 {

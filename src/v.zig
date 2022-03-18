@@ -12,5 +12,3 @@ pub usingnamespace @import("vk_objs/offscreen_pass.zig");
 // engines per chapter
 pub usingnamespace @import("chapters/engine_chap2.zig");
 pub usingnamespace @import("chapters/engine_chap3.zig");
-pub usingnamespace @import("chapters/engine_chap3a.zig");
-

@@ -1,16 +1,16 @@
 const std = @import("std");
 const vk = @import("vulkan");
-const vkmem = @import("vk_mem_alloc.zig");
-const tiny = @import("tinyobjloader.zig");
+const vma = @import("vma");
+const tiny = @import("tiny");
 
 const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 
 pub const AllocatedBuffer = struct {
     buffer: vk.Buffer,
-    allocation: vkmem.VmaAllocation,
+    allocation: vma.VmaAllocation,
 
-    pub fn deinit(self: AllocatedBuffer, vk_allocator: vkmem.VmaAllocator) void {
-        if (self.allocation) |alloc| vkmem.vmaDestroyBuffer(vk_allocator, self.buffer, alloc);
+    pub fn deinit(self: AllocatedBuffer, vk_allocator: vma.VmaAllocator) void {
+        if (self.allocation) |alloc| vma.vmaDestroyBuffer(vk_allocator, self.buffer, alloc);
     }
 };
 
@@ -131,7 +131,7 @@ pub const Mesh = struct {
         };
     }
 
-    pub fn deinit(self: Mesh, vk_allocator: vkmem.VmaAllocator) void {
+    pub fn deinit(self: Mesh, vk_allocator: vma.VmaAllocator) void {
         self.vert_buffer.deinit(vk_allocator);
         self.vertices.deinit();
     }

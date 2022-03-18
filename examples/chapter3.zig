@@ -1,7 +1,6 @@
 const std = @import("std");
 const glfw = @import("glfw");
 const vk = @import("vk");
-// const vkmem = @import("vk_mem_alloc.zig");
 
 const Engine = @import("vengine").EngineChap3;
 
@@ -51,7 +50,7 @@ pub fn main() !void {
     // inline for (structs) |s| {
     //     std.debug.print("{s}: {d}\n", .{ s, @sizeOf(@field(vkmem, s)) });
     // }
-    // std.debug.print("---- alloc: {any}, funcs: {any}\n", .{ @sizeOf(vkmem.VmaAllocatorCreateInfo), @sizeOf(vkmem.VmaVulkanFunctions) });
+    // std.debug.print("---- alloc: {any}, funcs: {any}\n", .{ @sizeOf(vma.VmaAllocatorCreateInfo), @sizeOf(vma.VmaVulkanFunctions) });
 
     var engine = try Engine.init("chapter 3");
     defer engine.deinit();

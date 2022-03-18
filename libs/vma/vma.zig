@@ -1,6 +1,72 @@
-// manually added translation layer
 const vk = @import("vulkan");
 
+// zigified API
+pub const VukanMemoryAllocator = struct {
+    const Self = @This();
+
+    allocator: VmaAllocator,
+
+    pub fn init(alloc_create_info: *VmaAllocatorCreateInfo) !Self {
+        var allocator: VmaAllocator = undefined;
+        const res = vmaCreateAllocator(alloc_create_info, &allocator);
+        if (res != vk.Result.success) return error.Unknown;
+
+        return .{ .allocator = allocator };
+    }
+
+    pub fn deinit(self: Self) void {
+        vmaDestroyAllocator(self.allocator);
+    }
+
+    // TODO: return an AllocatedBuffer replacing the `buffer` and `allocation` ref params
+    pub fn createBuffer(self: Self, buffer_create_info: *const vk.BufferCreateInfo, alloc_info: *const VmaAllocationCreateInfo, buffer: *vk.Buffer, allocation: *VmaAllocation, allocation_info: ?*VmaAllocationInfo) !void {
+        const a_info = if (allocation_info) |ai| ai else null;
+        const res = vmaCreateBuffer(
+            self.allocator,
+            buffer_create_info,
+            alloc_info,
+            &buffer,
+            &allocation,
+            a_info,
+        );
+        if (res != vk.Result.success) return error.Unknown;
+    }
+
+    pub fn destroyBuffer(self: Self, buffer: vk.Buffer, allocation: VmaAllocation) void {
+        vmaDestroyBuffer(self.allocator, buffer, allocation);
+    }
+
+    // TODO: return an AllocatedImage replacing the `image` and `allocation` ref params
+    pub fn createImage(self: Self, img_create_info: *const vk.ImageCreateInfo, vma_malloc_info: *const VmaAllocationCreateInfo, image: *vk.Image, allocation: *VmaAllocation, allocation_info: ?*VmaAllocationInfo) !void {
+        const a_info = if (allocation_info) |ai| ai else null;
+        const res = vmaCreateImage(self.allocator, img_create_info, vma_malloc_info, image, allocation, a_info);
+        if (res != vk.Result.success) return error.Unknown;
+    }
+
+    pub fn destroyImage(self: Self, image: vk.Image, allocation: VmaAllocation) void {
+        vmaDestroyImage(self.allocator, image, allocation);
+    }
+
+    pub fn mapMemory(self: Self, comptime T: type, allocation: VmaAllocation) ![*]T {
+        var pp_data: ?*anyopaque = undefined;
+        const res = vmaMapMemory(self.allocator, allocation, @ptrCast([*c]?*anyopaque, &pp_data));
+        if (res != vk.Result.success) return error.Unknown;
+
+        return @ptrCast([*]T, @alignCast(@alignOf(T), pp_data));
+    }
+
+    pub fn unmapMemory(self: Self, allocation: VmaAllocation) void {
+        vmaUnmapMemory(self.allocator, allocation);
+    }
+
+    pub fn flushAllocation(self: Self, allocation: VmaAllocation, offset: vk.DeviceSize, size: vk.DeviceSize) !void {
+        const res = vmaFlushAllocation(self.allocator, allocation, offset, size);
+        if (res != vk.Result.success) return error.Unknown;
+    }
+};
+
+
+// manually added translation layer
 const VkFlags = vk.Flags;
 const VkResult = vk.Result;
 const VkDeviceMemory = vk.DeviceMemory;

@@ -1,6 +1,6 @@
 const std = @import("std");
 const vk = @import("vulkan");
-const vkmem = @import("../vk_mem_alloc.zig");
+const vma = @import("vma");
 const resources = @import("resources");
 const glfw = @import("glfw");
 const vkinit = @import("../vkinit.zig");
@@ -17,10 +17,10 @@ const Vec4 = @import("vec4.zig").Vec4;
 
 pub const AllocatedImage = struct {
     image: vk.Image,
-    allocation: vkmem.VmaAllocation,
+    allocation: vma.VmaAllocation,
 
-    pub fn deinit(self: AllocatedImage, vk_allocator: vkmem.VmaAllocator) void {
-        vkmem.vmaDestroyImage(vk_allocator, self.image, self.allocation);
+    pub fn deinit(self: AllocatedImage, vk_allocator: vma.VmaAllocator) void {
+        vma.vmaDestroyImage(vk_allocator, self.image, self.allocation);
     }
 };
 
@@ -40,7 +40,7 @@ pub const EngineChap3 = struct {
     allocator: Allocator,
     window: glfw.Window,
     gc: *GraphicsContext,
-    vk_allocator: vkmem.VmaAllocator,
+    vk_allocator: vma.VmaAllocator,
     swapchain: Swapchain,
     render_pass: vk.RenderPass,
     framebuffers: []vk.Framebuffer,
@@ -65,10 +65,10 @@ pub const EngineChap3 = struct {
         gc.* = try GraphicsContext.init(gpa, app_name, window, true);
 
         // initialize the memory allocator
-        var allocator_info = std.mem.zeroInit(vkmem.VmaAllocatorCreateInfo, .{
+        var allocator_info = std.mem.zeroInit(vma.VmaAllocatorCreateInfo, .{
             .physicalDevice = gc.pdev,
             .device = gc.dev,
-            .pVulkanFunctions = &std.mem.zeroInit(vkmem.VmaVulkanFunctions, .{
+            .pVulkanFunctions = &std.mem.zeroInit(vma.VmaVulkanFunctions, .{
                 .vkGetInstanceProcAddr = gc.vkb.dispatch.vkGetInstanceProcAddr,
                 .vkGetDeviceProcAddr = gc.vki.dispatch.vkGetDeviceProcAddr,
             }),
@@ -76,8 +76,8 @@ pub const EngineChap3 = struct {
             .vulkanApiVersion = vk.API_VERSION_1_2,
         });
 
-        var vk_allocator: vkmem.VmaAllocator = undefined;
-        const alloc_res = vkmem.vmaCreateAllocator(&allocator_info, &vk_allocator);
+        var vk_allocator: vma.VmaAllocator = undefined;
+        const alloc_res = vma.vmaCreateAllocator(&allocator_info, &vk_allocator);
         std.debug.assert(alloc_res == vk.Result.success);
 
         // swapchain
@@ -91,11 +91,11 @@ pub const EngineChap3 = struct {
 
         // we want to allocate it from GPU local memory
         const mem_prop_bits = vk.MemoryPropertyFlags{ .device_local_bit = true };
-        var vma_malloc_info = std.mem.zeroInit(vkmem.VmaAllocationCreateInfo, .{
-            .usage = vkmem.VMA_MEMORY_USAGE_GPU_ONLY,
+        var vma_malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
+            .usage = vma.VMA_MEMORY_USAGE_GPU_ONLY,
             .flags = mem_prop_bits.toInt(),
         });
-        const res = vkmem.vmaCreateImage(vk_allocator, &dimg_info, &vma_malloc_info, &depth_image.image, &depth_image.allocation, null);
+        const res = vma.vmaCreateImage(vk_allocator, &dimg_info, &vma_malloc_info, &depth_image.image, &depth_image.allocation, null);
         std.debug.assert(res == .success);
 
         const dview_info = vkinit.imageViewCreateInfo(depth_format, depth_image.image, .{ .depth_bit = true });
@@ -155,7 +155,7 @@ pub const EngineChap3 = struct {
         self.depth_image.deinit(self.vk_allocator);
         self.gc.vkd.destroyImageView(self.gc.dev, self.depth_image_view, null);
         self.triangle_mesh.deinit(self.vk_allocator);
-        vkmem.vmaDestroyAllocator(self.vk_allocator);
+        vma.vmaDestroyAllocator(self.vk_allocator);
 
         self.gc.vkd.freeCommandBuffers(self.gc.dev, self.pool, 1, @ptrCast([*]vk.CommandBuffer, &self.main_cmd_buffer));
         self.gc.vkd.destroyCommandPool(self.gc.dev, self.pool, null);
@@ -367,17 +367,10 @@ fn createPipeline(
 }
 
 fn loadMeshes() !Mesh {
-    var mesh = Mesh.initFromObj(gpa, "src/chapters/monkey_smooth.obj");
-
-    // vertex positions
-    // try mesh.vertices.append(.{ .position = .{ 1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0, 1, 0 } });
-    // try mesh.vertices.append(.{ .position = .{ -1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0, 1, 0 } });
-    // try mesh.vertices.append(.{ .position = .{ 0, -1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0, 1, 0 } });
-
-    return mesh;
+    return Mesh.initFromObj(gpa, "src/chapters/monkey_smooth.obj");
 }
 
-fn uploadMesh(mesh: *Mesh, allocator: vkmem.VmaAllocator) void {
+fn uploadMesh(mesh: *Mesh, allocator: vma.VmaAllocator) void {
     // allocate vertex buffer
     var buffer_info = std.mem.zeroInit(vk.BufferCreateInfo, .{
         .flags = .{},
@@ -386,11 +379,11 @@ fn uploadMesh(mesh: *Mesh, allocator: vkmem.VmaAllocator) void {
     });
 
     // let the VMA library know that this data should be writeable by CPU, but also readable by GPU
-    var vma_malloc_info = std.mem.zeroes(vkmem.VmaAllocationCreateInfo);
-    vma_malloc_info.usage = vkmem.VMA_MEMORY_USAGE_CPU_TO_GPU;
+    var vma_malloc_info = std.mem.zeroes(vma.VmaAllocationCreateInfo);
+    vma_malloc_info.usage = vma.VMA_MEMORY_USAGE_CPU_TO_GPU;
 
     // allocate the buffer
-    var res = vkmem.vmaCreateBuffer(
+    var res = vma.vmaCreateBuffer(
         allocator,
         &buffer_info,
         &vma_malloc_info,
@@ -402,15 +395,15 @@ fn uploadMesh(mesh: *Mesh, allocator: vkmem.VmaAllocator) void {
 
     // copy vertex data
     var data: *anyopaque = undefined;
-    res = vkmem.vmaMapMemory(allocator, mesh.vert_buffer.allocation, @ptrCast([*c]?*anyopaque, &data));
+    res = vma.vmaMapMemory(allocator, mesh.vert_buffer.allocation, @ptrCast([*c]?*anyopaque, &data));
     std.debug.assert(res == vk.Result.success);
 
     const gpu_vertices = @ptrCast([*]Vertex, @alignCast(@alignOf(Vertex), data));
     std.mem.copy(Vertex, gpu_vertices[0..mesh.vertices.items.len], mesh.vertices.items);
 
     // TODO: why is this necessary on x64 mac but not an arm?
-    _ = vkmem.vmaFlushAllocation(allocator, mesh.vert_buffer.allocation, 0, mesh.vertices.items.len * @sizeOf(Vertex));
-    vkmem.vmaUnmapMemory(allocator, mesh.vert_buffer.allocation.?);
+    _ = vma.vmaFlushAllocation(allocator, mesh.vert_buffer.allocation, 0, mesh.vertices.items.len * @sizeOf(Vertex));
+    vma.vmaUnmapMemory(allocator, mesh.vert_buffer.allocation.?);
 }
 
 fn recordCommandBuffer(
