@@ -24,6 +24,24 @@ const AllocatedImage = struct {
     }
 };
 
+const Material = struct {
+    pipeline: vk.Pipeline,
+    pipeline_layout: vk.PipelineLayout,
+
+    pub fn init(pipeline: vk.Pipeline, pipeline_layout: vk.PipelineLayout) Material {
+        return .{
+            .pipeline = pipeline,
+            .pipeline_layout = pipeline_layout,
+        };
+    }
+};
+
+const RenderObject = struct {
+    mesh: *Mesh,
+    material: *Material,
+    transform_matrix: Mat4,
+};
+
 var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
 const gpa = general_purpose_allocator.allocator();
 
@@ -46,12 +64,12 @@ pub const EngineChap3s = struct {
     framebuffers: []vk.Framebuffer,
     pool: vk.CommandPool,
     main_cmd_buffer: vk.CommandBuffer,
-    pipeline_layout: vk.PipelineLayout,
-    mesh_pipeline: vk.Pipeline,
-    triangle_mesh: Mesh,
     frame_num: f32 = 0,
     depth_image: AllocatedImage,
     depth_image_view: vk.ImageView,
+    renderables: std.ArrayList(RenderObject),
+    materials: std.StringHashMap(Material),
+    meshes: std.StringHashMap(Mesh),
 
     pub fn init(app_name: [*:0]const u8) !Self {
         try glfw.init(.{});
@@ -115,22 +133,6 @@ pub const EngineChap3s = struct {
             .command_buffer_count = 1,
         }, @ptrCast([*]vk.CommandBuffer, &main_cmd_buffer));
 
-        var push_constant = vk.PushConstantRange{
-            .stage_flags = .{ .vertex_bit = true },
-            .offset = 0,
-            .size = @sizeOf(MeshPushConstants),
-        };
-
-        var pip_layout_info = vkinit.pipelineLayoutCreateInfo();
-        pip_layout_info.push_constant_range_count = 1;
-        pip_layout_info.p_push_constant_ranges = @ptrCast([*]const vk.PushConstantRange, &push_constant);
-
-        const pipeline_layout = try gc.vkd.createPipelineLayout(gc.dev, &pip_layout_info, null);
-        const pipeline = try createPipeline(gc, gpa, swapchain.extent, render_pass, pipeline_layout);
-
-        var mesh = try loadMeshes();
-        uploadMesh(&mesh, vk_allocator);
-
         return Self{
             .allocator = gpa,
             .window = window,
@@ -141,11 +143,11 @@ pub const EngineChap3s = struct {
             .framebuffers = framebuffers,
             .pool = pool,
             .main_cmd_buffer = main_cmd_buffer,
-            .pipeline_layout = pipeline_layout,
-            .mesh_pipeline = pipeline,
-            .triangle_mesh = mesh,
             .depth_image = depth_image,
             .depth_image_view = depth_image_view,
+            .renderables = std.ArrayList(RenderObject).init(gpa),
+            .materials = std.StringHashMap(Material).init(gpa),
+            .meshes = std.StringHashMap(Mesh).init(gpa),
         };
     }
 
@@ -154,7 +156,9 @@ pub const EngineChap3s = struct {
 
         self.depth_image.deinit(self.vk_allocator);
         self.gc.vkd.destroyImageView(self.gc.dev, self.depth_image_view, null);
-        self.triangle_mesh.deinit(self.vk_allocator);
+
+        var iter = self.meshes.valueIterator();
+        while (iter.next()) |mesh| mesh.*.deinit(self.vk_allocator);
         vma.vmaDestroyAllocator(self.vk_allocator);
 
         self.gc.vkd.freeCommandBuffers(self.gc.dev, self.pool, 1, @ptrCast([*]vk.CommandBuffer, &self.main_cmd_buffer));
@@ -163,9 +167,12 @@ pub const EngineChap3s = struct {
         for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
         self.allocator.free(self.framebuffers);
 
-        self.gc.vkd.destroyPipeline(self.gc.dev, self.mesh_pipeline, null);
+        var mat_iter = self.materials.valueIterator();
+        while (mat_iter.next()) |mat| {
+            self.gc.vkd.destroyPipeline(self.gc.dev, mat.pipeline, null);
+            self.gc.vkd.destroyPipelineLayout(self.gc.dev, mat.pipeline_layout, null);
+        }
         self.gc.vkd.destroyRenderPass(self.gc.dev, self.render_pass, null);
-        self.gc.vkd.destroyPipelineLayout(self.gc.dev, self.pipeline_layout, null);
 
         self.swapchain.deinit();
 
@@ -174,13 +181,23 @@ pub const EngineChap3s = struct {
 
         self.window.destroy();
         glfw.terminate();
+
+        self.renderables.deinit();
+        self.materials.deinit();
+        self.meshes.deinit();
+    }
+
+    pub fn loadContent(self: *Self) !void {
+        try self.loadMeshes();
+        try self.initPipelines();
+        try self.initScene();
     }
 
     pub fn run(self: *Self) !void {
         while (!self.window.shouldClose()) {
             // we only have one CommandBuffer so just wait on all the swapchain images
             try self.swapchain.waitForAllFences();
-            try recordCommandBuffer(self.main_cmd_buffer, self.gc, self.swapchain.extent, self.render_pass, self.framebuffers[self.swapchain.image_index], self.mesh_pipeline, self.triangle_mesh, self.pipeline_layout, self.frame_num);
+            try self.draw(self.framebuffers[self.swapchain.image_index]);
 
             const state = self.swapchain.present(self.main_cmd_buffer) catch |err| switch (err) {
                 error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
@@ -189,16 +206,169 @@ pub const EngineChap3s = struct {
 
             if (state == .suboptimal) {
                 const size = try self.window.getSize();
-                var extent = vk.Extent2D{ .width = @intCast(u32, size.width), .height = @intCast(u32, size.height) };
+                var extent = vk.Extent2D{ .width = size.width, .height = size.height };
                 try self.swapchain.recreate(extent);
 
                 for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
                 self.allocator.free(self.framebuffers);
+
+                self.depth_image.deinit(self.vk_allocator);
+                self.gc.vkd.destroyImageView(self.gc.dev, self.depth_image_view, null);
+
+                const depth_extent = vk.Extent3D{ .width = self.swapchain.extent.width, .height = self.swapchain.extent.height, .depth = 1 };
+                const dimg_info = vkinit.imageCreateInfo(depth_format, depth_extent, .{ .depth_stencil_attachment_bit = true });
+
+                // we want to allocate it from GPU local memory
+                const mem_prop_bits = vk.MemoryPropertyFlags{ .device_local_bit = true };
+                var vma_malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
+                    .usage = vma.VMA_MEMORY_USAGE_GPU_ONLY,
+                    .flags = mem_prop_bits.toInt(),
+                });
+                const res = vma.vmaCreateImage(self.vk_allocator, &dimg_info, &vma_malloc_info, &self.depth_image.image, &self.depth_image.allocation, null);
+                std.debug.assert(res == .success);
+
+                const dview_info = vkinit.imageViewCreateInfo(depth_format, self.depth_image.image, .{ .depth_bit = true });
+                self.depth_image_view = try self.gc.vkd.createImageView(self.gc.dev, &dview_info, null);
                 self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain, self.depth_image_view);
             }
 
             self.frame_num += 1;
             try glfw.pollEvents();
+        }
+    }
+
+    fn loadMeshes(self: *Self) !void {
+        var tri_mesh = Mesh.init(gpa);
+        try tri_mesh.vertices.append(.{ .position = .{ 1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0, 1, 0 } });
+        try tri_mesh.vertices.append(.{ .position = .{ -1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0, 1, 0 } });
+        try tri_mesh.vertices.append(.{ .position = .{ 0, -1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0, 1, 0 } });
+
+        var monkey_mesh = Mesh.initFromObj(gpa, "src/chapters/monkey_smooth.obj");
+
+        uploadMesh(&tri_mesh, self.vk_allocator);
+        uploadMesh(&monkey_mesh, self.vk_allocator);
+
+        try self.meshes.put("triangle", tri_mesh);
+        try self.meshes.put("monkey", monkey_mesh);
+    }
+
+    fn initPipelines(self: *Self) !void {
+        var push_constant = vk.PushConstantRange{
+            .stage_flags = .{ .vertex_bit = true },
+            .offset = 0,
+            .size = @sizeOf(MeshPushConstants),
+        };
+
+        var pip_layout_info = vkinit.pipelineLayoutCreateInfo();
+        pip_layout_info.push_constant_range_count = 1;
+        pip_layout_info.p_push_constant_ranges = @ptrCast([*]const vk.PushConstantRange, &push_constant);
+
+        const pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
+        const pipeline = try createPipeline(self.gc, self.allocator, self.swapchain.extent, self.render_pass, pipeline_layout);
+        const material = Material{
+            .pipeline = pipeline,
+            .pipeline_layout = pipeline_layout,
+        };
+        try self.materials.put("defaultmesh", material);
+    }
+
+    fn initScene(self: *Self) !void {
+        var mesh_material = self.materials.getPtr("defaultmesh").?;
+
+        var monkey = RenderObject{
+            .mesh = self.meshes.getPtr("monkey").?,
+            .material = mesh_material,
+            .transform_matrix = Mat4.identity,
+        };
+        try self.renderables.append(monkey);
+
+        var x: f32 = 0;
+        while (x < 20) : (x += 1) {
+            var y: f32 = 0;
+            while (y < 20) : (y += 1) {
+                var matrix = Mat4.createTranslation(.{ .x = x, .y = 0, .z = y });
+                var scale_matrix = Mat4.createScale(.{ .x = 0.2, .y = 0.2, .z = 0.2 });
+
+                var object = RenderObject{
+                    .mesh = self.meshes.getPtr("triangle").?,
+                    .material = mesh_material,
+                    .transform_matrix = Mat4.mul(matrix, scale_matrix),
+                };
+                try self.renderables.append(object);
+            }
+        }
+    }
+
+    fn draw(self: *Self, framebuffer: vk.Framebuffer) !void {
+        const clear = vk.ClearValue{
+            .color = .{ .float_32 = .{ 0.6, 0.5, 0, 1 } },
+        };
+
+        const depth_clear = vk.ClearValue{
+            .depth_stencil = .{ .depth = 1, .stencil = 0 },
+        };
+
+        const clear_values = [_]vk.ClearValue{ clear, depth_clear };
+
+        // This needs to be a separate definition - see https://github.com/ziglang/zig/issues/7627.
+        const render_area = vk.Rect2D{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = self.swapchain.extent,
+        };
+
+        try self.gc.vkd.resetCommandBuffer(self.main_cmd_buffer, .{});
+        try self.gc.vkd.beginCommandBuffer(self.main_cmd_buffer, &.{
+            .flags = .{ .one_time_submit_bit = true },
+            .p_inheritance_info = null,
+        });
+
+        self.gc.vkd.cmdBeginRenderPass(self.main_cmd_buffer, &.{
+            .render_pass = self.render_pass,
+            .framebuffer = framebuffer,
+            .render_area = render_area,
+            .clear_value_count = clear_values.len,
+            .p_clear_values = @ptrCast([*]const vk.ClearValue, &clear_values),
+        }, .@"inline");
+        try self.drawRenderObjects();
+        self.gc.vkd.cmdEndRenderPass(self.main_cmd_buffer);
+        try self.gc.vkd.endCommandBuffer(self.main_cmd_buffer);
+    }
+
+    fn drawRenderObjects(self: Self) !void {
+        // push constants
+        var cam_pos = Vec3{ .y = 1, .z = 20 };
+        var view = Mat4.createLookAt(cam_pos, Vec3.new(8, 0.0, 0.0), Vec3.new(0.0, 1.0, 0.0));
+        var proj = Mat4.createPerspective(70 * 0.0174533, @intToFloat(f32, self.swapchain.extent.width) / @intToFloat(f32, self.swapchain.extent.height), 0.1, 200);
+        proj.fields[1][1] *= -1;
+        var view_proj = Mat4.mul(proj, view);
+
+        var last_mesh: *Mesh = @intToPtr(*Mesh, @ptrToInt(&self));
+        var last_material: *Material = @intToPtr(*Material, @ptrToInt(&self));
+
+        for (self.renderables.items) |*object| {
+            // only bind the pipeline if it doesnt match with the already bound one
+            if (object.material != last_material) {
+                last_material = object.material;
+                self.gc.vkd.cmdBindPipeline(self.main_cmd_buffer, .graphics, object.material.pipeline);
+            }
+
+            var model = object.transform_matrix;
+            var mvp = Mat4.mul(view_proj, model);
+
+            var constants = MeshPushConstants{
+                .render_matrix = mvp,
+            };
+            self.gc.vkd.cmdPushConstants(self.main_cmd_buffer, object.material.pipeline_layout, .{ .vertex_bit = true }, 0, @sizeOf(MeshPushConstants), &constants);
+
+            // only bind the mesh if its a different one from last bind
+            if (object.mesh != last_mesh) {
+                last_mesh = object.mesh;
+                // bind the mesh vertex buffer with offset 0
+                var offset: vk.DeviceSize = 0;
+                self.gc.vkd.cmdBindVertexBuffers(self.main_cmd_buffer, 0, 1, @ptrCast([*]const vk.Buffer, &object.mesh.vert_buffer.buffer), @ptrCast([*]const vk.DeviceSize, &offset));
+            }
+
+            self.gc.vkd.cmdDraw(self.main_cmd_buffer, @intCast(u32, object.mesh.vertices.items.len), 1, 0, 0);
         }
     }
 };
@@ -347,7 +517,7 @@ fn createPipeline(
     render_pass: vk.RenderPass,
     pipeline_layout: vk.PipelineLayout,
 ) !vk.Pipeline {
-    const vert = try createShaderModule(gc, @ptrCast([*]const u32, resources.tri_mesh_vert), resources.tri_mesh_vert.len);
+    const vert = try createShaderModule(gc, @ptrCast([*]const u32, resources.tri_mesh_pushconstants_vert), resources.tri_mesh_pushconstants_vert.len);
     const frag = try createShaderModule(gc, @ptrCast([*]const u32, resources.colored_tri_frag), resources.colored_tri_frag.len);
 
     defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
@@ -364,10 +534,6 @@ fn createPipeline(
     try builder.addShaderStage(createShaderStageCreateInfo(vert, .{ .vertex_bit = true }));
     try builder.addShaderStage(createShaderStageCreateInfo(frag, .{ .fragment_bit = true }));
     return try builder.build(gc, render_pass);
-}
-
-fn loadMeshes() !Mesh {
-    return Mesh.initFromObj(gpa, "src/chapters/monkey_smooth.obj");
 }
 
 fn uploadMesh(mesh: *Mesh, allocator: vma.VmaAllocator) void {
@@ -404,71 +570,4 @@ fn uploadMesh(mesh: *Mesh, allocator: vma.VmaAllocator) void {
     std.mem.copy(Vertex, gpu_vertices[0..mesh.vertices.items.len], mesh.vertices.items);
 
     vma.vmaUnmapMemory(allocator, mesh.vert_buffer.allocation);
-}
-
-fn recordCommandBuffer(
-    cmdbuf: vk.CommandBuffer,
-    gc: *const GraphicsContext,
-    extent: vk.Extent2D,
-    render_pass: vk.RenderPass,
-    framebuffer: vk.Framebuffer,
-    pipeline: vk.Pipeline,
-    mesh: Mesh,
-    pipeline_layout: vk.PipelineLayout,
-    frame_num: f32,
-) !void {
-    const clear = vk.ClearValue{
-        .color = .{ .float_32 = .{ 0.6, 0.5, 0, 1 } },
-    };
-
-    const depth_clear = vk.ClearValue{
-        .depth_stencil = .{ .depth = 1, .stencil = 0 },
-    };
-
-    const clear_values = [_]vk.ClearValue{ clear, depth_clear };
-
-    // This needs to be a separate definition - see https://github.com/ziglang/zig/issues/7627.
-    const render_area = vk.Rect2D{
-        .offset = .{ .x = 0, .y = 0 },
-        .extent = extent,
-    };
-
-    // push constants
-    var cam_pos = Vec3{ .z = -3 };
-    var view = Mat4.createLookAt(cam_pos, Vec3.new(0.0, 0.0, 0.0), Vec3.new(0.0, 1.0, 0.0));
-    var proj = Mat4.createPerspective(70 * 0.0174533, 1600 / 1200, 0.1, 200);
-    proj.fields[1][1] *= -1;
-    var view_proj = Mat4.mul(proj, view);
-
-    var model = Mat4.createAngleAxis(.{ .y = 1 }, 25 * 0.0174533 * frame_num * 0.04);
-    var mvp = Mat4.mul(view_proj, model);
-
-    var constants = MeshPushConstants{
-        .render_matrix = mvp,
-    };
-
-    try gc.vkd.resetCommandBuffer(cmdbuf, .{});
-    try gc.vkd.beginCommandBuffer(cmdbuf, &.{
-        .flags = .{ .one_time_submit_bit = true },
-        .p_inheritance_info = null,
-    });
-
-    gc.vkd.cmdBeginRenderPass(cmdbuf, &.{
-        .render_pass = render_pass,
-        .framebuffer = framebuffer,
-        .render_area = render_area,
-        .clear_value_count = clear_values.len,
-        .p_clear_values = @ptrCast([*]const vk.ClearValue, &clear_values),
-    }, .@"inline");
-    gc.vkd.cmdBindPipeline(cmdbuf, .graphics, pipeline);
-
-    // bind the mesh vertex buffer with offset 0
-    var offset: vk.DeviceSize = 0;
-    gc.vkd.cmdBindVertexBuffers(cmdbuf, 0, 1, @ptrCast([*]const vk.Buffer, &mesh.vert_buffer.buffer), @ptrCast([*]const vk.DeviceSize, &offset));
-
-    gc.vkd.cmdPushConstants(cmdbuf, pipeline_layout, .{ .vertex_bit = true }, 0, @sizeOf(MeshPushConstants), &constants);
-    gc.vkd.cmdDraw(cmdbuf, @intCast(u32, mesh.vertices.items.len), 1, 0, 0);
-
-    gc.vkd.cmdEndRenderPass(cmdbuf);
-    try gc.vkd.endCommandBuffer(cmdbuf);
 }

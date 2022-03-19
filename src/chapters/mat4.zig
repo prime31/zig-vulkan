@@ -60,6 +60,14 @@ pub const Mat4 = extern struct {
         return result;
     }
 
+    pub fn createScale(translation: Vec3) Mat4 {
+        var result = identity;
+        result.fields[0][0] = translation.x;
+        result.fields[1][1] = translation.y;
+        result.fields[2][2] = translation.z;
+        return result;
+    }
+
     pub fn createLook(eye: Vec3, direction: Vec3, up: Vec3) Mat4 {
         const f = direction.normalize();
         const s = Vec3.cross(up, f).normalize();
