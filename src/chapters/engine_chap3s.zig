@@ -264,7 +264,7 @@ pub const EngineChap3s = struct {
         pip_layout_info.p_push_constant_ranges = @ptrCast([*]const vk.PushConstantRange, &push_constant);
 
         const pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
-        const pipeline = try createPipeline(self.gc, self.allocator, self.swapchain.extent, self.render_pass, pipeline_layout);
+        const pipeline = try createPipeline(self.gc, self.allocator, self.render_pass, pipeline_layout);
         const material = Material{
             .pipeline = pipeline,
             .pipeline_layout = pipeline_layout,
@@ -295,6 +295,16 @@ pub const EngineChap3s = struct {
                     .transform_matrix = Mat4.mul(matrix, scale_matrix),
                 };
                 try self.renderables.append(object);
+
+                matrix = Mat4.createTranslation(.{ .x = x, .y = 0.8, .z = y });
+                scale_matrix = Mat4.createScale(.{ .x = 0.1, .y = 0.1, .z = 0.1 });
+
+                object = RenderObject{
+                    .mesh = self.meshes.getPtr("triangle").?,
+                    .material = mesh_material,
+                    .transform_matrix = Mat4.mul(matrix, scale_matrix),
+                };
+                try self.renderables.append(object);
             }
         }
     }
@@ -316,11 +326,23 @@ pub const EngineChap3s = struct {
             .extent = self.swapchain.extent,
         };
 
+        const viewport = vk.Viewport{
+            .x = 0,
+            .y = 0,
+            .width = @intToFloat(f32, self.swapchain.extent.width),
+            .height = @intToFloat(f32, self.swapchain.extent.height),
+            .min_depth = 0,
+            .max_depth = 1,
+        };
+
         try self.gc.vkd.resetCommandBuffer(self.main_cmd_buffer, .{});
         try self.gc.vkd.beginCommandBuffer(self.main_cmd_buffer, &.{
             .flags = .{ .one_time_submit_bit = true },
             .p_inheritance_info = null,
         });
+
+        self.gc.vkd.cmdSetViewport(self.main_cmd_buffer, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
+        self.gc.vkd.cmdSetScissor(self.main_cmd_buffer, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
 
         self.gc.vkd.cmdBeginRenderPass(self.main_cmd_buffer, &.{
             .render_pass = self.render_pass,
@@ -513,7 +535,6 @@ fn createShaderStageCreateInfo(shader_module: vk.ShaderModule, stage: vk.ShaderS
 fn createPipeline(
     gc: *const GraphicsContext,
     allocator: std.mem.Allocator,
-    extent: vk.Extent2D,
     render_pass: vk.RenderPass,
     pipeline_layout: vk.PipelineLayout,
 ) !vk.Pipeline {
@@ -523,7 +544,7 @@ fn createPipeline(
     defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
     defer gc.vkd.destroyShaderModule(gc.dev, frag, null);
 
-    var builder = PipelineBuilder.init(allocator, extent, pipeline_layout);
+    var builder = PipelineBuilder.init(allocator, pipeline_layout);
     builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less_or_equal);
 
     builder.vertex_input_info.vertex_attribute_description_count = Vertex.attribute_description.len;

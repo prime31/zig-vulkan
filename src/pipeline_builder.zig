@@ -8,30 +8,13 @@ pub const PipelineBuilder = struct {
     shader_stages: std.ArrayList(vk.PipelineShaderStageCreateInfo),
     vertex_input_info: vk.PipelineVertexInputStateCreateInfo,
     input_assembly: vk.PipelineInputAssemblyStateCreateInfo,
-    viewport: vk.Viewport,
-    scissor: vk.Rect2D,
     rasterizer: vk.PipelineRasterizationStateCreateInfo,
     color_blend_attachment: vk.PipelineColorBlendAttachmentState,
     multisampling: vk.PipelineMultisampleStateCreateInfo,
     pipeline_layout: vk.PipelineLayout,
     depth_stencil: ?vk.PipelineDepthStencilStateCreateInfo = null,
 
-    pub fn init(allocator: std.mem.Allocator, extent: vk.Extent2D, pipeline_layout: vk.PipelineLayout) PipelineBuilder {
-        // build viewport and scissor from the swapchain extents
-        const viewport = vk.Viewport{
-            .x = 0,
-            .y = 0,
-            .width = @intToFloat(f32, extent.width),
-            .height = @intToFloat(f32, extent.height),
-            .min_depth = 0,
-            .max_depth = 1,
-        };
-
-        const scissor = vk.Rect2D{
-            .offset = .{ .x = 0, .y = 0 },
-            .extent = extent,
-        };
-
+    pub fn init(allocator: std.mem.Allocator, pipeline_layout: vk.PipelineLayout) PipelineBuilder {
         return .{
             .shader_stages = std.ArrayList(vk.PipelineShaderStageCreateInfo).init(allocator),
             .vertex_input_info = .{
@@ -42,8 +25,6 @@ pub const PipelineBuilder = struct {
                 .p_vertex_attribute_descriptions = undefined,
             },
             .input_assembly = vkinit.pipelineInputAssempblyCreateInfo(.triangle_list),
-            .viewport = viewport,
-            .scissor = scissor,
             .rasterizer = vkinit.pipelineRasterizationStateCreateInfo(.fill),
             .color_blend_attachment = vkinit.pipelineColorBlendAttachmentState(),
             .multisampling = vkinit.pipelineMultisampleStateCreateInfo(),
@@ -65,9 +46,16 @@ pub const PipelineBuilder = struct {
         const viewport_state = vk.PipelineViewportStateCreateInfo{
             .flags = .{},
             .viewport_count = 1,
-            .p_viewports =  @ptrCast([*]const vk.Viewport, &self.viewport),
+            .p_viewports =  null,
             .scissor_count = 1,
-            .p_scissors = @ptrCast([*]const vk.Rect2D, &self.scissor),
+            .p_scissors = null,
+        };
+
+        const dynstate = [_]vk.DynamicState{ .viewport, .scissor };
+        const pdsci = vk.PipelineDynamicStateCreateInfo{
+            .flags = .{},
+            .dynamic_state_count = dynstate.len,
+            .p_dynamic_states = &dynstate,
         };
 
         // color_blending must match the fragment shader output
@@ -92,7 +80,7 @@ pub const PipelineBuilder = struct {
             .p_multisample_state = &self.multisampling,
             .p_depth_stencil_state = if (self.depth_stencil) |*ds| ds else null,
             .p_color_blend_state = &color_blending,
-            .p_dynamic_state = null,
+            .p_dynamic_state = &pdsci,
             .layout = self.pipeline_layout,
             .render_pass = render_pass,
             .subpass = 0,

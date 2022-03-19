@@ -126,7 +126,7 @@ pub const EngineChap3 = struct {
         pip_layout_info.p_push_constant_ranges = @ptrCast([*]const vk.PushConstantRange, &push_constant);
 
         const pipeline_layout = try gc.vkd.createPipelineLayout(gc.dev, &pip_layout_info, null);
-        const pipeline = try createPipeline(gc, gpa, swapchain.extent, render_pass, pipeline_layout);
+        const pipeline = try createPipeline(gc, gpa, render_pass, pipeline_layout);
 
         var mesh = try loadMeshes();
         uploadMesh(&mesh, vk_allocator);
@@ -343,7 +343,6 @@ fn createShaderStageCreateInfo(shader_module: vk.ShaderModule, stage: vk.ShaderS
 fn createPipeline(
     gc: *const GraphicsContext,
     allocator: std.mem.Allocator,
-    extent: vk.Extent2D,
     render_pass: vk.RenderPass,
     pipeline_layout: vk.PipelineLayout,
 ) !vk.Pipeline {
@@ -353,7 +352,7 @@ fn createPipeline(
     defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
     defer gc.vkd.destroyShaderModule(gc.dev, frag, null);
 
-    var builder = PipelineBuilder.init(allocator, extent, pipeline_layout);
+    var builder = PipelineBuilder.init(allocator, pipeline_layout);
     builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less_or_equal);
 
     builder.vertex_input_info.vertex_attribute_description_count = Vertex.attribute_description.len;
@@ -439,6 +438,15 @@ fn recordCommandBuffer(
         .extent = extent,
     };
 
+    const viewport = vk.Viewport{
+        .x = 0,
+        .y = 0,
+        .width = @intToFloat(f32, extent.width),
+        .height = @intToFloat(f32, extent.height),
+        .min_depth = 0,
+        .max_depth = 1,
+    };
+
     // push constants
     var cam_pos = Vec3{ .z = -3 };
     var view = Mat4.createLookAt(cam_pos, Vec3.new(0.0, 0.0, 0.0), Vec3.new(0.0, 1.0, 0.0));
@@ -458,6 +466,8 @@ fn recordCommandBuffer(
         .flags = .{ .one_time_submit_bit = true },
         .p_inheritance_info = null,
     });
+    gc.vkd.cmdSetViewport(cmdbuf, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
+    gc.vkd.cmdSetScissor(cmdbuf, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
 
     gc.vkd.cmdBeginRenderPass(cmdbuf, &.{
         .render_pass = render_pass,
