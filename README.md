@@ -7,6 +7,7 @@
 - Checkout math lib: [Zalgebra](https://github.com/kooparse/zalgebra)
 
 - Checkout abstractions here too: [Another Vulkan Zig](https://github.com/maxxnino/another-vulkan-zig)
+- and here: [](https://github.com/GPUOpen-LibrariesAndSDKs/V-EZ)
 - Some API ideas: [Volkano](https://github.com/vulkano-rs/vulkano)
 - higher-level api:
     - buffers: CpuAccessibleBuffer, GpuAccessibleBuffer, etc

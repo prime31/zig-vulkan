@@ -15,11 +15,11 @@ const Mat4 = @import("mat4.zig").Mat4;
 const Vec3 = @import("vec3.zig").Vec3;
 const Vec4 = @import("vec4.zig").Vec4;
 
-pub fn toRadians(deg: anytype) @TypeOf(deg) {
+fn toRadians(deg: anytype) @TypeOf(deg) {
     return std.math.pi * deg / 180.0;
 }
 
-pub fn toDegrees(rad: anytype) @TypeOf(rad) {
+fn toDegrees(rad: anytype) @TypeOf(rad) {
     return 180.0 * rad / std.math.pi;
 }
 
@@ -86,12 +86,43 @@ const FlyCamera = struct {
     }
 };
 
+const FrameData = struct {
+    pool: vk.CommandPool,
+    cmd_buffer: vk.CommandBuffer,
+
+    pub fn init(gc: *GraphicsContext) !FrameData {
+        const pool = try gc.vkd.createCommandPool(gc.dev, &.{
+            .flags = .{ .reset_command_buffer_bit = true },
+            .queue_family_index = gc.graphics_queue.family,
+        }, null);
+
+        var cmd_buffer: vk.CommandBuffer = undefined;
+        try gc.vkd.allocateCommandBuffers(gc.dev, &.{
+            .command_pool = pool,
+            .level = .primary,
+            .command_buffer_count = 1,
+        }, @ptrCast([*]vk.CommandBuffer, &cmd_buffer));
+
+        return FrameData{
+            .pool = pool,
+            .cmd_buffer = cmd_buffer,
+        };
+    }
+
+    pub fn deinit(self: *FrameData, gc: *GraphicsContext) void {
+        gc.vkd.freeCommandBuffers(gc.dev, self.pool, 1, @ptrCast([*]vk.CommandBuffer, &self.cmd_buffer));
+        gc.vkd.destroyCommandPool(gc.dev, self.pool, null);
+    }
+};
+
 const AllocatedImage = struct {
     image: vk.Image,
+    view: vk.ImageView,
     allocation: vma.VmaAllocation,
 
-    pub fn deinit(self: AllocatedImage, vk_allocator: vma.VmaAllocator) void {
+    pub fn deinit(self: AllocatedImage, gc: *const GraphicsContext, vk_allocator: vma.VmaAllocator) void {
         vma.vmaDestroyImage(vk_allocator, self.image, self.allocation);
+        gc.vkd.destroyImageView(gc.dev, self.view, null);
     }
 };
 
@@ -123,7 +154,7 @@ const MeshPushConstants = struct {
     render_matrix: Mat4,
 };
 
-pub const EngineChap3s = struct {
+pub const EngineChap4 = struct {
     const Self = @This();
 
     allocator: Allocator,
@@ -133,13 +164,11 @@ pub const EngineChap3s = struct {
     swapchain: Swapchain,
     render_pass: vk.RenderPass,
     framebuffers: []vk.Framebuffer,
-    pool: vk.CommandPool,
-    main_cmd_buffer: vk.CommandBuffer,
+    frames: []FrameData,
     frame_num: f32 = 0,
     dt: f64 = 0.0,
     last_frame_time: f64 = 0.0,
     depth_image: AllocatedImage,
-    depth_image_view: vk.ImageView,
     renderables: std.ArrayList(RenderObject),
     materials: std.StringHashMap(Material),
     meshes: std.StringHashMap(Mesh),
@@ -177,35 +206,13 @@ pub const EngineChap3s = struct {
         const render_pass = try createRenderPass(gc, swapchain);
 
         // depth image
-        var depth_image: AllocatedImage = undefined;
-        const depth_extent = vk.Extent3D{ .width = swapchain.extent.width, .height = swapchain.extent.height, .depth = 1 };
-        const dimg_info = vkinit.imageCreateInfo(depth_format, depth_extent, .{ .depth_stencil_attachment_bit = true });
+        const depth_image = try createDepthImage(gc, swapchain, vk_allocator);
+        const framebuffers = try createFramebuffers(gc, gpa, render_pass, swapchain, depth_image.view);
 
-        // we want to allocate it from GPU local memory
-        const mem_prop_bits = vk.MemoryPropertyFlags{ .device_local_bit = true };
-        var vma_malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
-            .usage = vma.VMA_MEMORY_USAGE_GPU_ONLY,
-            .flags = mem_prop_bits.toInt(),
-        });
-        const res = vma.vmaCreateImage(vk_allocator, &dimg_info, &vma_malloc_info, &depth_image.image, &depth_image.allocation, null);
-        std.debug.assert(res == .success);
-
-        const dview_info = vkinit.imageViewCreateInfo(depth_format, depth_image.image, .{ .depth_bit = true });
-        var depth_image_view = try gc.vkd.createImageView(gc.dev, &dview_info, null);
-
-        const framebuffers = try createFramebuffers(gc, gpa, render_pass, swapchain, depth_image_view);
-
-        const pool = try gc.vkd.createCommandPool(gc.dev, &.{
-            .flags = .{ .reset_command_buffer_bit = true },
-            .queue_family_index = gc.graphics_queue.family,
-        }, null);
-
-        var main_cmd_buffer: vk.CommandBuffer = undefined;
-        try gc.vkd.allocateCommandBuffers(gc.dev, &.{
-            .command_pool = pool,
-            .level = .primary,
-            .command_buffer_count = 1,
-        }, @ptrCast([*]vk.CommandBuffer, &main_cmd_buffer));
+        // create our FrameDatas
+        const frames = try gpa.alloc(FrameData, swapchain.swap_images.len);
+        errdefer gpa.free(frames);
+        for (frames) |*f| f.* = try FrameData.init(gc);
 
         return Self{
             .allocator = gpa,
@@ -215,10 +222,8 @@ pub const EngineChap3s = struct {
             .swapchain = swapchain,
             .render_pass = render_pass,
             .framebuffers = framebuffers,
-            .pool = pool,
-            .main_cmd_buffer = main_cmd_buffer,
+            .frames = frames,
             .depth_image = depth_image,
-            .depth_image_view = depth_image_view,
             .renderables = std.ArrayList(RenderObject).init(gpa),
             .materials = std.StringHashMap(Material).init(gpa),
             .meshes = std.StringHashMap(Mesh).init(gpa),
@@ -229,15 +234,14 @@ pub const EngineChap3s = struct {
     pub fn deinit(self: *Self) void {
         try self.swapchain.waitForAllFences();
 
-        self.depth_image.deinit(self.vk_allocator);
-        self.gc.vkd.destroyImageView(self.gc.dev, self.depth_image_view, null);
+        self.depth_image.deinit(self.gc,self.vk_allocator);
 
         var iter = self.meshes.valueIterator();
         while (iter.next()) |mesh| mesh.*.deinit(self.vk_allocator);
         vma.vmaDestroyAllocator(self.vk_allocator);
 
-        self.gc.vkd.freeCommandBuffers(self.gc.dev, self.pool, 1, @ptrCast([*]vk.CommandBuffer, &self.main_cmd_buffer));
-        self.gc.vkd.destroyCommandPool(self.gc.dev, self.pool, null);
+        for (self.frames) |*frame| frame.deinit(self.gc);
+        self.allocator.free(self.frames);
 
         for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
         self.allocator.free(self.framebuffers);
@@ -270,23 +274,26 @@ pub const EngineChap3s = struct {
 
     pub fn run(self: *Self) !void {
         while (!self.window.shouldClose()) {
+            // wait for the last frame to complete before filling our CommandBuffer
+            try self.swapchain.waitForFrame();
+
             var curr_frame_time = glfw.getTime();
             self.dt = curr_frame_time - self.last_frame_time;
             self.last_frame_time = curr_frame_time;
 
             self.camera.update(self.dt);
 
-            // we only have one CommandBuffer so just wait on all the swapchain images
-            try self.swapchain.waitForAllFences();
-            try self.swapchain.waitForFrame();
-            try self.draw(self.framebuffers[self.swapchain.image_index]);
+            const cmdbuf = self.frames[self.swapchain.image_index].cmd_buffer;
+            try self.draw(self.framebuffers[self.swapchain.image_index], cmdbuf);
 
-            const state = self.swapchain.present(self.main_cmd_buffer) catch |err| switch (err) {
+            const state = self.swapchain.present(cmdbuf) catch |err| switch (err) {
                 error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
                 else => |narrow| return narrow,
             };
 
             if (state == .suboptimal) {
+                try self.swapchain.waitForAllFences();
+
                 const size = try self.window.getSize();
                 var extent = vk.Extent2D{ .width = size.width, .height = size.height };
                 try self.swapchain.recreate(extent);
@@ -294,24 +301,9 @@ pub const EngineChap3s = struct {
                 for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
                 self.allocator.free(self.framebuffers);
 
-                self.depth_image.deinit(self.vk_allocator);
-                self.gc.vkd.destroyImageView(self.gc.dev, self.depth_image_view, null);
-
-                const depth_extent = vk.Extent3D{ .width = self.swapchain.extent.width, .height = self.swapchain.extent.height, .depth = 1 };
-                const dimg_info = vkinit.imageCreateInfo(depth_format, depth_extent, .{ .depth_stencil_attachment_bit = true });
-
-                // we want to allocate it from GPU local memory
-                const mem_prop_bits = vk.MemoryPropertyFlags{ .device_local_bit = true };
-                var vma_malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
-                    .usage = vma.VMA_MEMORY_USAGE_GPU_ONLY,
-                    .flags = mem_prop_bits.toInt(),
-                });
-                const res = vma.vmaCreateImage(self.vk_allocator, &dimg_info, &vma_malloc_info, &self.depth_image.image, &self.depth_image.allocation, null);
-                std.debug.assert(res == .success);
-
-                const dview_info = vkinit.imageViewCreateInfo(depth_format, self.depth_image.image, .{ .depth_bit = true });
-                self.depth_image_view = try self.gc.vkd.createImageView(self.gc.dev, &dview_info, null);
-                self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain, self.depth_image_view);
+                self.depth_image.deinit(self.gc, self.vk_allocator);
+                self.depth_image = try createDepthImage(self.gc, self.swapchain, self.vk_allocator);
+                self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain, self.depth_image.view);
             }
 
             self.frame_num += 1;
@@ -402,7 +394,7 @@ pub const EngineChap3s = struct {
         }
     }
 
-    fn draw(self: *Self, framebuffer: vk.Framebuffer) !void {
+    fn draw(self: *Self, framebuffer: vk.Framebuffer, cmdbuf: vk.CommandBuffer) !void {
         const clear = vk.ClearValue{
             .color = .{ .float_32 = .{ 0.6, 0.5, 0, 1 } },
         };
@@ -428,28 +420,28 @@ pub const EngineChap3s = struct {
             .max_depth = 1,
         };
 
-        try self.gc.vkd.resetCommandBuffer(self.main_cmd_buffer, .{});
-        try self.gc.vkd.beginCommandBuffer(self.main_cmd_buffer, &.{
+        try self.gc.vkd.resetCommandBuffer(cmdbuf, .{});
+        try self.gc.vkd.beginCommandBuffer(cmdbuf, &.{
             .flags = .{ .one_time_submit_bit = true },
             .p_inheritance_info = null,
         });
 
-        self.gc.vkd.cmdSetViewport(self.main_cmd_buffer, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
-        self.gc.vkd.cmdSetScissor(self.main_cmd_buffer, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
+        self.gc.vkd.cmdSetViewport(cmdbuf, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
+        self.gc.vkd.cmdSetScissor(cmdbuf, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
 
-        self.gc.vkd.cmdBeginRenderPass(self.main_cmd_buffer, &.{
+        self.gc.vkd.cmdBeginRenderPass(cmdbuf, &.{
             .render_pass = self.render_pass,
             .framebuffer = framebuffer,
             .render_area = render_area,
             .clear_value_count = clear_values.len,
             .p_clear_values = @ptrCast([*]const vk.ClearValue, &clear_values),
         }, .@"inline");
-        try self.drawRenderObjects();
-        self.gc.vkd.cmdEndRenderPass(self.main_cmd_buffer);
-        try self.gc.vkd.endCommandBuffer(self.main_cmd_buffer);
+        try self.drawRenderObjects(cmdbuf);
+        self.gc.vkd.cmdEndRenderPass(cmdbuf);
+        try self.gc.vkd.endCommandBuffer(cmdbuf);
     }
 
-    fn drawRenderObjects(self: Self) !void {
+    fn drawRenderObjects(self: Self, cmdbuf: vk.CommandBuffer) !void {
         var view = self.camera.getViewMatrix();
         var proj = Mat4.createPerspective(toRadians(70.0), @intToFloat(f32, self.swapchain.extent.width) / @intToFloat(f32, self.swapchain.extent.height), 0.1, 200);
         proj.fields[1][1] *= -1;
@@ -462,7 +454,7 @@ pub const EngineChap3s = struct {
             // only bind the pipeline if it doesnt match with the already bound one
             if (object.material != last_material) {
                 last_material = object.material;
-                self.gc.vkd.cmdBindPipeline(self.main_cmd_buffer, .graphics, object.material.pipeline);
+                self.gc.vkd.cmdBindPipeline(cmdbuf, .graphics, object.material.pipeline);
             }
 
             var model = object.transform_matrix;
@@ -473,17 +465,17 @@ pub const EngineChap3s = struct {
             var constants = MeshPushConstants{
                 .render_matrix = mvp,
             };
-            self.gc.vkd.cmdPushConstants(self.main_cmd_buffer, object.material.pipeline_layout, .{ .vertex_bit = true }, 0, @sizeOf(MeshPushConstants), &constants);
+            self.gc.vkd.cmdPushConstants(cmdbuf, object.material.pipeline_layout, .{ .vertex_bit = true }, 0, @sizeOf(MeshPushConstants), &constants);
 
             // only bind the mesh if its a different one from last bind
             if (object.mesh != last_mesh) {
                 last_mesh = object.mesh;
                 // bind the mesh vertex buffer with offset 0
                 var offset: vk.DeviceSize = 0;
-                self.gc.vkd.cmdBindVertexBuffers(self.main_cmd_buffer, 0, 1, @ptrCast([*]const vk.Buffer, &object.mesh.vert_buffer.buffer), @ptrCast([*]const vk.DeviceSize, &offset));
+                self.gc.vkd.cmdBindVertexBuffers(cmdbuf, 0, 1, @ptrCast([*]const vk.Buffer, &object.mesh.vert_buffer.buffer), @ptrCast([*]const vk.DeviceSize, &offset));
             }
 
-            self.gc.vkd.cmdDraw(self.main_cmd_buffer, @intCast(u32, object.mesh.vertices.items.len), 1, 0, 0);
+            self.gc.vkd.cmdDraw(cmdbuf, @intCast(u32, object.mesh.vertices.items.len), 1, 0, 0);
         }
     }
 };
@@ -581,6 +573,26 @@ fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Render
         .dependency_count = 1,
         .p_dependencies = @ptrCast([*]const vk.SubpassDependency, &dependencies),
     }, null);
+}
+
+fn createDepthImage(gc: *const GraphicsContext, swapchain: Swapchain, vk_allocator: vma.VmaAllocator) !AllocatedImage {
+    var depth_image: AllocatedImage = undefined;
+    const depth_extent = vk.Extent3D{ .width = swapchain.extent.width, .height = swapchain.extent.height, .depth = 1 };
+    const dimg_info = vkinit.imageCreateInfo(depth_format, depth_extent, .{ .depth_stencil_attachment_bit = true });
+
+    // we want to allocate it from GPU local memory
+    const mem_prop_bits = vk.MemoryPropertyFlags{ .device_local_bit = true };
+    var vma_malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
+        .usage = vma.VMA_MEMORY_USAGE_GPU_ONLY,
+        .flags = mem_prop_bits.toInt(),
+    });
+    const res = vma.vmaCreateImage(vk_allocator, &dimg_info, &vma_malloc_info, &depth_image.image, &depth_image.allocation, null);
+    std.debug.assert(res == .success);
+
+    const dview_info = vkinit.imageViewCreateInfo(depth_format, depth_image.image, .{ .depth_bit = true });
+    depth_image.view = try gc.vkd.createImageView(gc.dev, &dview_info, null);
+
+    return depth_image;
 }
 
 fn createFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, swapchain: Swapchain, depth_image_view: vk.ImageView) ![]vk.Framebuffer {

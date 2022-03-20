@@ -21,6 +21,7 @@ pub const Swapchain = struct {
     image_index: u32,
     next_image_acquired: vk.Semaphore,
 
+    // TODO: take in max swapchain images so we can limit it to 1 or 2 if we want to
     pub fn init(gc: *const GraphicsContext, allocator: Allocator, extent: vk.Extent2D) !Swapchain {
         return try initRecycle(gc, allocator, extent, .null_handle);
     }
@@ -110,6 +111,13 @@ pub const Swapchain = struct {
         for (self.swap_images) |si| si.waitForFence(self.gc) catch {};
     }
 
+    /// waits for the current SwapImage's fence. Call this before filling CommandBuffers.
+    pub fn waitForFrame(self: *Swapchain) !void {
+        const current = self.currentSwapImage();
+        try current.waitForFence(self.gc);
+        try self.gc.vkd.resetFences(self.gc.dev, 1, @ptrCast([*]const vk.Fence, &current.frame_fence));
+    }
+
     pub fn recreate(self: *Swapchain, new_extent: vk.Extent2D) !void {
         const gc = self.gc;
         const allocator = self.allocator;
@@ -144,9 +152,8 @@ pub const Swapchain = struct {
         // One problem that arises is that we can't know beforehand which semaphore to signal,
         // so we keep an extra auxilery semaphore that is swapped around
 
-        // Step 1: Make sure the current frame has finished rendering. We waited after last present so we are all clear
+        // Step 1: Make sure the current frame has finished rendering
         const current = self.currentSwapImage();
-        try self.gc.vkd.resetFences(self.gc.dev, 1, @ptrCast([*]const vk.Fence, &current.frame_fence));
 
         // Step 2: Submit the command buffer
         // TODO: should the flag used here be color_attachment_output_bit?
@@ -172,6 +179,7 @@ pub const Swapchain = struct {
         });
 
         // Step 4: Acquire next frame
+        // TODO: should this be in `waitForFrame` after waiting on the fence? We could skip the semaphore swap if we do that.
         const result = try self.gc.vkd.acquireNextImageKHR(
             self.gc.dev,
             self.handle,
@@ -182,10 +190,6 @@ pub const Swapchain = struct {
 
         std.mem.swap(vk.Semaphore, &self.swap_images[result.image_index].image_acquired, &self.next_image_acquired);
         self.image_index = result.image_index;
-
-        // wait on the next image fence so that any command buffers/framebuffers used for it are clear for use
-        const next = self.currentSwapImage();
-        try next.waitForFence(self.gc);
 
         return switch (result.result) {
             .success => .optimal,

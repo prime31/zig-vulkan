@@ -54,8 +54,8 @@ pub const EngineChap2 = struct {
         }, @ptrCast([*]vk.CommandBuffer, &main_cmd_buffer));
 
         const pipeline_layout = try gc.vkd.createPipelineLayout(gc.dev, &vkinit.pipelineLayoutCreateInfo(), null);
-        const pipeline = try createPipeline(gc, allocator, swapchain.extent, render_pass, pipeline_layout);
-        const pipeline2 = try createPipeline2(gc, allocator, swapchain.extent, render_pass, pipeline_layout);
+        const pipeline = try createPipeline(gc, allocator, render_pass, pipeline_layout);
+        const pipeline2 = try createPipeline2(gc, allocator, render_pass, pipeline_layout);
 
         return Self{
             .allocator = allocator,
@@ -123,7 +123,6 @@ pub const EngineChap2 = struct {
         }
     }
 };
-
 
 fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.RenderPass {
     const color_attachment = vk.AttachmentDescription{
@@ -227,7 +226,6 @@ fn createShaderStageCreateInfo(shader_module: vk.ShaderModule, stage: vk.ShaderS
 fn createPipeline(
     gc: *const GraphicsContext,
     allocator: std.mem.Allocator,
-    extent: vk.Extent2D,
     render_pass: vk.RenderPass,
     pipeline_layout: vk.PipelineLayout,
 ) !vk.Pipeline {
@@ -237,7 +235,7 @@ fn createPipeline(
     defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
     defer gc.vkd.destroyShaderModule(gc.dev, frag, null);
 
-    var builder = PipelineBuilder.init(allocator, extent, pipeline_layout);
+    var builder = PipelineBuilder.init(allocator, pipeline_layout);
     try builder.addShaderStage(createShaderStageCreateInfo(vert, .{ .vertex_bit = true }));
     try builder.addShaderStage(createShaderStageCreateInfo(frag, .{ .fragment_bit = true }));
     return try builder.build(gc, render_pass);
@@ -246,7 +244,6 @@ fn createPipeline(
 fn createPipeline2(
     gc: *const GraphicsContext,
     allocator: std.mem.Allocator,
-    extent: vk.Extent2D,
     render_pass: vk.RenderPass,
     pipeline_layout: vk.PipelineLayout,
 ) !vk.Pipeline {
@@ -256,14 +253,11 @@ fn createPipeline2(
     defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
     defer gc.vkd.destroyShaderModule(gc.dev, frag, null);
 
-    var builder = PipelineBuilder.init(allocator, extent, pipeline_layout);
+    var builder = PipelineBuilder.init(allocator, pipeline_layout);
     try builder.addShaderStage(createShaderStageCreateInfo(vert, .{ .vertex_bit = true }));
     try builder.addShaderStage(createShaderStageCreateInfo(frag, .{ .fragment_bit = true }));
     return try builder.build(gc, render_pass);
 }
-
-
-
 
 fn recordCommandBuffer(
     cmdbuf: vk.CommandBuffer,
@@ -283,11 +277,23 @@ fn recordCommandBuffer(
         .extent = extent,
     };
 
+    const viewport = vk.Viewport{
+        .x = 0,
+        .y = 0,
+        .width = @intToFloat(f32, extent.width),
+        .height = @intToFloat(f32, extent.height),
+        .min_depth = 0,
+        .max_depth = 1,
+    };
+
     try gc.vkd.resetCommandBuffer(cmdbuf, .{});
     try gc.vkd.beginCommandBuffer(cmdbuf, &.{
         .flags = .{ .one_time_submit_bit = true },
         .p_inheritance_info = null,
     });
+
+    gc.vkd.cmdSetViewport(cmdbuf, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
+    gc.vkd.cmdSetScissor(cmdbuf, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
 
     gc.vkd.cmdBeginRenderPass(cmdbuf, &.{
         .render_pass = render_pass,
