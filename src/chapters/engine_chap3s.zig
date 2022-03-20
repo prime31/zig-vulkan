@@ -15,6 +15,77 @@ const Mat4 = @import("mat4.zig").Mat4;
 const Vec3 = @import("vec3.zig").Vec3;
 const Vec4 = @import("vec4.zig").Vec4;
 
+pub fn toRadians(deg: anytype) @TypeOf(deg) {
+    return std.math.pi * deg / 180.0;
+}
+
+pub fn toDegrees(rad: anytype) @TypeOf(rad) {
+    return 180.0 * rad / std.math.pi;
+}
+
+const FlyCamera = struct {
+    window: glfw.Window,
+    speed: f32 = 3.5,
+    pos: Vec3 = Vec3.new(2, 0.5, 20),
+    front: Vec3 = Vec3.new(0, 0, -1),
+    up: Vec3 = Vec3.new(0, 1, 0),
+    pitch: f32 = 0,
+    yaw: f32 = -90,
+    last_mouse_x: f32 = 400,
+    last_mouse_y: f32 = 300,
+
+    pub fn init(window: glfw.Window) FlyCamera {
+        return .{
+            .window = window,
+        };
+    }
+
+    pub fn update(self: *FlyCamera, dt: f64) void {
+        var cursor_pos = self.window.getCursorPos() catch unreachable;
+        var x_offset = @floatCast(f32, cursor_pos.xpos) - self.last_mouse_x;
+        var y_offset = self.last_mouse_y - @floatCast(f32, cursor_pos.ypos); // reversed since y-coordinates range from bottom to top
+        self.last_mouse_x = @floatCast(f32, cursor_pos.xpos);
+        self.last_mouse_y = @floatCast(f32, cursor_pos.ypos);
+
+        var sensitivity: f32 = 0.2;
+        x_offset *= sensitivity * 1.5; // bit more sensitivity for x
+        y_offset *= sensitivity;
+
+        self.yaw += x_offset;
+        self.pitch += y_offset;
+        self.pitch = std.math.clamp(self.pitch, -90, 90);
+
+        var direction = Vec3.new(0, 0, 0);
+        direction.x = std.math.cos(toRadians(self.yaw)) * std.math.cos(toRadians(self.pitch));
+        direction.y = std.math.sin(toRadians(self.pitch));
+        direction.z = std.math.sin(toRadians(self.yaw)) * std.math.cos(toRadians(self.pitch));
+        self.front = direction.normalize();
+
+        // wasd
+        var spd = self.speed * @floatCast(f32, dt);
+
+        if (self.window.getKey(.w) == .press) {
+            self.pos = self.pos.add(self.front.scale(spd));
+        } else if (self.window.getKey(.s) == .press) {
+            self.pos = self.pos.sub(self.front.scale(spd));
+        }
+        if (self.window.getKey(.a) == .press) {
+            self.pos = self.pos.sub(Vec3.normalize(self.front.cross(self.up)).scale(spd));
+        } else if (self.window.getKey(.d) == .press) {
+            self.pos = self.pos.add(Vec3.normalize(self.front.cross(self.up)).scale(spd));
+        }
+        if (self.window.getKey(.e) == .press) {
+            self.pos.y += spd;
+        } else if (self.window.getKey(.q) == .press) {
+            self.pos.y -= spd;
+        }
+    }
+
+    pub fn getViewMatrix(self: FlyCamera) Mat4 {
+        return Mat4.createLookAt(self.pos, self.pos.add(self.front), self.up);
+    }
+};
+
 const AllocatedImage = struct {
     image: vk.Image,
     allocation: vma.VmaAllocation,
@@ -72,6 +143,7 @@ pub const EngineChap3s = struct {
     renderables: std.ArrayList(RenderObject),
     materials: std.StringHashMap(Material),
     meshes: std.StringHashMap(Mesh),
+    camera: FlyCamera,
 
     pub fn init(app_name: [*:0]const u8) !Self {
         try glfw.init(.{});
@@ -150,6 +222,7 @@ pub const EngineChap3s = struct {
             .renderables = std.ArrayList(RenderObject).init(gpa),
             .materials = std.StringHashMap(Material).init(gpa),
             .meshes = std.StringHashMap(Mesh).init(gpa),
+            .camera = FlyCamera.init(window),
         };
     }
 
@@ -200,6 +273,8 @@ pub const EngineChap3s = struct {
             var curr_frame_time = glfw.getTime();
             self.dt = curr_frame_time - self.last_frame_time;
             self.last_frame_time = curr_frame_time;
+
+            self.camera.update(self.dt);
 
             // we only have one CommandBuffer so just wait on all the swapchain images
             try self.swapchain.waitForAllFences();
@@ -373,36 +448,9 @@ pub const EngineChap3s = struct {
         try self.gc.vkd.endCommandBuffer(self.main_cmd_buffer);
     }
 
-    const cam_speed: f32 = 2.5;
-    var camera_pos = Vec3.new(2, 0.5, 20);
-    var camera_front = Vec3.new(0, 0, -1);
-    var camera_up = Vec3.new(0, 1, 0);
-
     fn drawRenderObjects(self: Self) !void {
-        // push constants
-        var spd = cam_speed * @floatCast(f32, self.dt);
-        var cam_pos = Vec3{ .y = 1, .z = 20 };
-
-        if (self.window.getKey(.w) == .press) {
-            camera_pos = camera_pos.add(camera_front.scale(spd));
-        } else if (self.window.getKey(.s) == .press) {
-            camera_pos = camera_pos.sub(camera_front.scale(spd));
-        }
-        if (self.window.getKey(.a) == .press) {
-            camera_pos = camera_pos.sub(Vec3.normalize(camera_front.cross(camera_up)).scale(spd));
-        } else if (self.window.getKey(.d) == .press) {
-            camera_pos = camera_pos.add(Vec3.normalize(camera_front.cross(camera_up)).scale(spd));
-        }
-        if (self.window.getKey(.e) == .press) {
-            camera_pos.y += spd;
-        } else if (self.window.getKey(.q) == .press) {
-            camera_pos.y -= spd;
-        }
-
-        var view = Mat4.createLookAt(cam_pos, Vec3.new(8, 0.0, 0.0), Vec3.new(0.0, 1.0, 0.0));
-        view = Mat4.createLookAt(camera_pos, camera_pos.add(camera_front), camera_up);
-
-        var proj = Mat4.createPerspective(70 * 0.0174533, @intToFloat(f32, self.swapchain.extent.width) / @intToFloat(f32, self.swapchain.extent.height), 0.1, 200);
+        var view = self.camera.getViewMatrix();
+        var proj = Mat4.createPerspective(toRadians(70.0), @intToFloat(f32, self.swapchain.extent.width) / @intToFloat(f32, self.swapchain.extent.height), 0.1, 200);
         proj.fields[1][1] *= -1;
         var view_proj = Mat4.mul(proj, view);
 
@@ -417,7 +465,7 @@ pub const EngineChap3s = struct {
             }
 
             var model = object.transform_matrix;
-            var rot = Mat4.createAngleAxis(.{ .y = 1 }, 25 * 0.0174533 * self.frame_num * 0.04);
+            var rot = Mat4.createAngleAxis(.{ .y = 1 }, toRadians(25.0) * self.frame_num * 0.04);
             model = model.mul(rot);
             var mvp = Mat4.mul(view_proj, model);
 
