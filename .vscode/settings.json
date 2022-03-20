@@ -1,5 +1,8 @@
 {
     "files.associations": {
         "tinyobj_loader_c.h": "c"
-    }
+    },
+    "lldb.showDisassembly": "auto",
+    "lldb.dereferencePointers": true,
+    "lldb.consoleMode": "commands"
 }

@@ -65,6 +65,8 @@ pub const EngineChap3s = struct {
     pool: vk.CommandPool,
     main_cmd_buffer: vk.CommandBuffer,
     frame_num: f32 = 0,
+    dt: f64 = 0.0,
+    last_frame_time: f64 = 0.0,
     depth_image: AllocatedImage,
     depth_image_view: vk.ImageView,
     renderables: std.ArrayList(RenderObject),
@@ -195,6 +197,10 @@ pub const EngineChap3s = struct {
 
     pub fn run(self: *Self) !void {
         while (!self.window.shouldClose()) {
+            var curr_frame_time = glfw.getTime();
+            self.dt = curr_frame_time - self.last_frame_time;
+            self.last_frame_time = curr_frame_time;
+
             // we only have one CommandBuffer so just wait on all the swapchain images
             try self.swapchain.waitForAllFences();
             try self.draw(self.framebuffers[self.swapchain.image_index]);
@@ -244,12 +250,15 @@ pub const EngineChap3s = struct {
         try tri_mesh.vertices.append(.{ .position = .{ 0, -1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0, 1, 0 } });
 
         var monkey_mesh = Mesh.initFromObj(gpa, "src/chapters/monkey_smooth.obj");
+        var cube_thing_mesh = Mesh.initFromObj(gpa, "src/chapters/cube_thing.obj");
 
         uploadMesh(&tri_mesh, self.vk_allocator);
         uploadMesh(&monkey_mesh, self.vk_allocator);
+        uploadMesh(&cube_thing_mesh, self.vk_allocator);
 
         try self.meshes.put("triangle", tri_mesh);
         try self.meshes.put("monkey", monkey_mesh);
+        try self.meshes.put("cube_thing", cube_thing_mesh);
     }
 
     fn initPipelines(self: *Self) !void {
@@ -264,20 +273,26 @@ pub const EngineChap3s = struct {
         pip_layout_info.p_push_constant_ranges = @ptrCast([*]const vk.PushConstantRange, &push_constant);
 
         const pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
-        const pipeline = try createPipeline(self.gc, self.allocator, self.render_pass, pipeline_layout);
+        const pipeline = try createPipeline(self.gc, self.allocator, self.render_pass, pipeline_layout, resources.colored_tri_frag);
         const material = Material{
             .pipeline = pipeline,
             .pipeline_layout = pipeline_layout,
         };
         try self.materials.put("defaultmesh", material);
+
+        const pipeline_layout2 = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
+        const pipeline2 = try createPipeline(self.gc, self.allocator, self.render_pass, pipeline_layout2, resources.tri_frag);
+        const material2 = Material{
+            .pipeline = pipeline2,
+            .pipeline_layout = pipeline_layout2,
+        };
+        try self.materials.put("redmesh", material2);
     }
 
     fn initScene(self: *Self) !void {
-        var mesh_material = self.materials.getPtr("defaultmesh").?;
-
         var monkey = RenderObject{
             .mesh = self.meshes.getPtr("monkey").?,
-            .material = mesh_material,
+            .material = self.materials.getPtr("defaultmesh").?,
             .transform_matrix = Mat4.identity,
         };
         try self.renderables.append(monkey);
@@ -289,8 +304,10 @@ pub const EngineChap3s = struct {
                 var matrix = Mat4.createTranslation(.{ .x = x, .y = 0, .z = y });
                 var scale_matrix = Mat4.createScale(.{ .x = 0.2, .y = 0.2, .z = 0.2 });
 
+                const mesh_material = if (@mod(x, 2) == 0) self.materials.getPtr("defaultmesh").? else self.materials.getPtr("redmesh").?;
+                const mesh = if (@mod(x, 2) == 0 and @mod(x, 6) == 0) self.meshes.getPtr("cube_thing").? else self.meshes.getPtr("triangle").?;
                 var object = RenderObject{
-                    .mesh = self.meshes.getPtr("triangle").?,
+                    .mesh = mesh,
                     .material = mesh_material,
                     .transform_matrix = Mat4.mul(matrix, scale_matrix),
                 };
@@ -300,7 +317,7 @@ pub const EngineChap3s = struct {
                 scale_matrix = Mat4.createScale(.{ .x = 0.1, .y = 0.1, .z = 0.1 });
 
                 object = RenderObject{
-                    .mesh = self.meshes.getPtr("triangle").?,
+                    .mesh = mesh,
                     .material = mesh_material,
                     .transform_matrix = Mat4.mul(matrix, scale_matrix),
                 };
@@ -356,10 +373,35 @@ pub const EngineChap3s = struct {
         try self.gc.vkd.endCommandBuffer(self.main_cmd_buffer);
     }
 
+    const cam_speed: f32 = 2.5;
+    var camera_pos = Vec3.new(2, 0.5, 20);
+    var camera_front = Vec3.new(0, 0, -1);
+    var camera_up = Vec3.new(0, 1, 0);
+
     fn drawRenderObjects(self: Self) !void {
         // push constants
+        var spd = cam_speed * @floatCast(f32, self.dt);
         var cam_pos = Vec3{ .y = 1, .z = 20 };
+
+        if (self.window.getKey(.w) == .press) {
+            camera_pos = camera_pos.add(camera_front.scale(spd));
+        } else if (self.window.getKey(.s) == .press) {
+            camera_pos = camera_pos.sub(camera_front.scale(spd));
+        }
+        if (self.window.getKey(.a) == .press) {
+            camera_pos = camera_pos.sub(Vec3.normalize(camera_front.cross(camera_up)).scale(spd));
+        } else if (self.window.getKey(.d) == .press) {
+            camera_pos = camera_pos.add(Vec3.normalize(camera_front.cross(camera_up)).scale(spd));
+        }
+        if (self.window.getKey(.e) == .press) {
+            camera_pos.y += spd;
+        } else if (self.window.getKey(.q) == .press) {
+            camera_pos.y -= spd;
+        }
+
         var view = Mat4.createLookAt(cam_pos, Vec3.new(8, 0.0, 0.0), Vec3.new(0.0, 1.0, 0.0));
+        view = Mat4.createLookAt(camera_pos, camera_pos.add(camera_front), camera_up);
+
         var proj = Mat4.createPerspective(70 * 0.0174533, @intToFloat(f32, self.swapchain.extent.width) / @intToFloat(f32, self.swapchain.extent.height), 0.1, 200);
         proj.fields[1][1] *= -1;
         var view_proj = Mat4.mul(proj, view);
@@ -375,6 +417,8 @@ pub const EngineChap3s = struct {
             }
 
             var model = object.transform_matrix;
+            var rot = Mat4.createAngleAxis(.{ .y = 1 }, 25 * 0.0174533 * self.frame_num * 0.04);
+            model = model.mul(rot);
             var mvp = Mat4.mul(view_proj, model);
 
             var constants = MeshPushConstants{
@@ -537,9 +581,10 @@ fn createPipeline(
     allocator: std.mem.Allocator,
     render_pass: vk.RenderPass,
     pipeline_layout: vk.PipelineLayout,
+    frag_shader_bytes: [:0]const u8,
 ) !vk.Pipeline {
     const vert = try createShaderModule(gc, @ptrCast([*]const u32, resources.tri_mesh_pushconstants_vert), resources.tri_mesh_pushconstants_vert.len);
-    const frag = try createShaderModule(gc, @ptrCast([*]const u32, resources.colored_tri_frag), resources.colored_tri_frag.len);
+    const frag = try createShaderModule(gc, @ptrCast([*]const u32, @alignCast(@alignOf(u32), frag_shader_bytes)), frag_shader_bytes.len);
 
     defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
     defer gc.vkd.destroyShaderModule(gc.dev, frag, null);

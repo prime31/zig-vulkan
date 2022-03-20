@@ -49,6 +49,14 @@ pub const Vec3 = extern struct {
         return vec.scale(1.0 / vec.length());
     }
 
+    pub fn add(a: Vec3, b: Vec3) Vec3 {
+        var result: Vec3 = undefined;
+        inline for (@typeInfo(Vec3).Struct.fields) |fld| {
+            @field(result, fld.name) = @field(a, fld.name) + @field(b, fld.name);
+        }
+        return result;
+    }
+
     pub fn sub(a: Vec3, b: Vec3) Vec3 {
         var result: Vec3 = undefined;
         inline for (@typeInfo(Vec3).Struct.fields) |fld| {

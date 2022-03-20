@@ -78,6 +78,27 @@ pub const ResourceGenStep = struct {
     }
 };
 
+// packages
+const vulkan_pkg = std.build.Pkg{
+    .name = "vulkan",
+    .path = .{ .path = "src/vk.zig" },
+};
+const glfw_pkg = std.build.Pkg{
+    .name = "glfw",
+    .path = .{ .path = "libs/mach-glfw/src/main.zig" },
+};
+
+const tinyobjloader_pkg = std.build.Pkg{
+    .name = "tiny",
+    .path = .{ .path = "libs/tinyobjloader/tinyobjloader.zig" },
+};
+
+const vma_pkg = std.build.Pkg{
+    .name = "vma",
+    .path = .{ .path = "libs/vma/vma.zig" },
+    .dependencies = &[_]std.build.Pkg{vulkan_pkg},
+};
+
 const vk_sdk_root = "/Users/mikedesaro/VulkanSDK/1.3.204.1/macOS";
 
 pub fn build(b: *Builder) void {
@@ -86,33 +107,6 @@ pub fn build(b: *Builder) void {
 
     // shader compilation and resources.zig generation
     const resources_pkg = addShaderCompilationStep(b, true);
-
-    // packages
-    const vulkan_pkg = std.build.Pkg{
-        .name = "vulkan",
-        .path = .{
-            .path = std.fs.path.join(b.allocator, &[_][]const u8{
-                b.build_root,
-                b.cache_root,
-                "vk.zig",
-            }) catch unreachable,
-        },
-    };
-    const glfw_pkg = std.build.Pkg{
-        .name = "glfw",
-        .path = .{ .path = "libs/mach-glfw/src/main.zig" },
-    };
-
-    const tinyobjloader_pkg = std.build.Pkg{
-        .name = "tiny",
-        .path = .{ .path = "libs/tinyobjloader/tinyobjloader.zig" },
-    };
-
-    const vma_pkg = std.build.Pkg{
-        .name = "vma",
-        .path = .{ .path = "libs/vma/vma.zig" },
-        .dependencies = &[_]std.build.Pkg{vulkan_pkg},
-    };
 
     const examples = getAllExamples(b, "examples");
     for (examples) |example| {
