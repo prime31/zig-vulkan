@@ -234,7 +234,7 @@ pub const EngineChap4 = struct {
     pub fn deinit(self: *Self) void {
         try self.swapchain.waitForAllFences();
 
-        self.depth_image.deinit(self.gc,self.vk_allocator);
+        self.depth_image.deinit(self.gc, self.vk_allocator);
 
         var iter = self.meshes.valueIterator();
         while (iter.next()) |mesh| mesh.*.deinit(self.vk_allocator);
