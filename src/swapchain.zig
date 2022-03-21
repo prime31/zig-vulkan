@@ -21,7 +21,7 @@ pub const Swapchain = struct {
     image_index: u32,
     next_image_acquired: vk.Semaphore,
 
-    // TODO: take in max swapchain images so we can limit it to 1 or 2 if we want to
+    // TODO: take in desired swapchain image count
     pub fn init(gc: *const GraphicsContext, allocator: Allocator, extent: vk.Extent2D) !Swapchain {
         return try initRecycle(gc, allocator, extent, .null_handle);
     }
@@ -36,10 +36,10 @@ pub const Swapchain = struct {
         const surface_format = try findSurfaceFormat(gc, allocator);
         const present_mode = try findPresentMode(gc, allocator);
 
-        var image_count = caps.min_image_count + 1;
-        if (caps.max_image_count > 0) {
-            image_count = std.math.min(image_count, caps.max_image_count);
-        }
+        const desired_image_count = @as(u32, 2);
+        var image_count = desired_image_count;
+        if (image_count > caps.max_image_count) image_count = caps.max_image_count;
+        if (image_count < caps.min_image_count) image_count = caps.min_image_count;
 
         const qfi = [_]u32{ gc.graphics_queue.family, gc.present_queue.family };
         const sharing_mode: vk.SharingMode = if (gc.graphics_queue.family != gc.present_queue.family)
