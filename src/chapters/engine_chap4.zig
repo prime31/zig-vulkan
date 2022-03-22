@@ -235,7 +235,7 @@ pub const EngineChap4 = struct {
         });
 
         var gc = try gpa.create(GraphicsContext);
-        gc.* = try GraphicsContext.init(gpa, app_name, window, true);
+        gc.* = try GraphicsContext.init(gpa, app_name, window);
 
         // swapchain
         var swapchain = try Swapchain.init(gc, gpa, extent);

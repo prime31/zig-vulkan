@@ -8,9 +8,11 @@ const Allocator = std.mem.Allocator;
 const BaseDispatch = dispatch.BaseDispatch;
 const InstanceDispatch = dispatch.InstanceDispatch;
 const DeviceDispatch = dispatch.DeviceDispatch;
+const enableValidationLayers = dispatch.enableValidationLayers;
 
 const required_device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name} ++ if (@import("builtin").os.tag == .macos) [_][*:0]const u8{vk.extension_info.khr_portability_subset.name} else [_][*:0]const u8{};
-var validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
+const required_instance_extensions = if (enableValidationLayers) [_][*:0]const u8{vk.extension_info.ext_debug_utils.name} else [_][*:0]const u8{};
+const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
 
 pub const GraphicsContext = struct {
     vkb: BaseDispatch,
@@ -27,17 +29,16 @@ pub const GraphicsContext = struct {
     graphics_queue: Queue,
     present_queue: Queue,
     allocator: vma.VmaAllocator = undefined,
+    debug_message: if (enableValidationLayers) vk.DebugUtilsMessengerEXT else void,
 
-    pub fn init(allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window, enableValidationLayers: bool) !GraphicsContext {
+    pub fn init(allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window) !GraphicsContext {
         var self: GraphicsContext = undefined;
         const vk_proc = @ptrCast(fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, glfw.getInstanceProcAddress);
         self.vkb = try BaseDispatch.load(vk_proc);
 
-        var validate = enableValidationLayers;
-        if (enableValidationLayers and !try checkValidationLayerSupport(self.vkb, allocator)) {
-            std.debug.print("Disabling validation layers", .{});
-            validate = false;
-        }
+        if (enableValidationLayers and !try checkValidationLayerSupport(self.vkb, allocator))
+            std.debug.panic("Validation layers enabled but validationLayerSupport returned false", .{});
+
         const glfw_exts = try glfw.getRequiredInstanceExtensions();
 
         const app_info = vk.ApplicationInfo{
@@ -48,21 +49,38 @@ pub const GraphicsContext = struct {
             .api_version = vk.API_VERSION_1_1,
         };
 
-        // hack because zig cant properly handle `if (validate) &validation_layers else undefined`
+        // hack because zig cant properly handle `if (enableValidationLayers) &validation_layers else undefined`
         var v_layers: [*]const [*:0]const u8 = undefined;
         var v_layers_cnt: u32 = 0;
-        if (validate) {
+        if (enableValidationLayers) {
             v_layers = @ptrCast([*]const [*:0]const u8, &validation_layers);
             v_layers_cnt = validation_layers.len;
         }
 
+        var instance_exts = blk: {
+            if (enableValidationLayers) {
+                var exts = try std.ArrayList([*:0]const u8).initCapacity(
+                    allocator,
+                    glfw_exts.len + required_instance_extensions.len,
+                );
+
+                try exts.appendSlice(glfw_exts);
+                for (required_instance_extensions) |e| try exts.append(e);
+
+                break :blk exts.toOwnedSlice();
+            }
+
+            break :blk glfw_exts;
+        };
+        defer if (enableValidationLayers) allocator.free(instance_exts);
+
         self.instance = try self.vkb.createInstance(&.{
             .flags = .{},
             .p_application_info = &app_info,
-            .enabled_layer_count = v_layers_cnt,
-            .pp_enabled_layer_names = v_layers,
-            .enabled_extension_count = @intCast(u32, glfw_exts.len),
-            .pp_enabled_extension_names = @ptrCast([*]const [*:0]const u8, &glfw_exts[0]),
+            .enabled_layer_count = if (enableValidationLayers) validation_layers.len else 0,
+            .pp_enabled_layer_names = if (enableValidationLayers) &validation_layers else undefined,
+            .enabled_extension_count = @intCast(u32, instance_exts.len),
+            .pp_enabled_extension_names = @ptrCast([*]const [*:0]const u8, &instance_exts[0]),
         }, null);
 
         self.vki = try InstanceDispatch.load(self.instance, vk_proc);
@@ -95,14 +113,24 @@ pub const GraphicsContext = struct {
         const alloc_res = vma.vmaCreateAllocator(&allocator_info, &self.allocator);
         std.debug.assert(alloc_res == vk.Result.success);
 
-        // no VK_EXT_debug_utils support for some reason....
-        // _ = try self.vki.createDebugUtilsMessengerEXT(self.instance, &.{
-        //     .flags = .{},
-        //     .message_severity = .{},
-        //     .message_type = .{},
-        //     .pfn_user_callback = debugCallback,
-        //     .p_user_data = null,
-        // }, null);
+        if (enableValidationLayers) {
+            self.debug_message = try self.vki.createDebugUtilsMessengerEXT(self.instance, &.{
+                .flags = .{},
+                .message_severity = .{
+                    .verbose_bit_ext = true,
+                    .info_bit_ext = true,
+                    .warning_bit_ext = true,
+                    .error_bit_ext = true,
+                },
+                .message_type = .{
+                    .general_bit_ext = true,
+                    .validation_bit_ext = true,
+                    .performance_bit_ext = true,
+                },
+                .pfn_user_callback = debugCallback,
+                .p_user_data = null,
+            }, null);
+        }
 
         return self;
     }
@@ -111,6 +139,7 @@ pub const GraphicsContext = struct {
         vma.vmaDestroyAllocator(self.allocator);
         self.vkd.destroyDevice(self.dev, null);
         self.vki.destroySurfaceKHR(self.instance, self.surface, null);
+        if (enableValidationLayers) self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_message, null);
         self.vki.destroyInstance(self.instance, null);
     }
 
@@ -358,5 +387,42 @@ fn debugCallback(
     _ = message_types;
     _ = p_callback_data;
     _ = p_user_data;
+
+    if (p_callback_data) |data| {
+        const level = (vk.DebugUtilsMessageSeverityFlagsEXT{
+            .warning_bit_ext = true,
+        }).toInt();
+
+        if (message_severity >= level) {
+            std.debug.print("{s}\n", .{data.p_message});
+
+            if (data.object_count > 0) {
+                std.debug.print("---------- Objects {} -----------\n", .{data.object_count});
+                var i: u32 = 0;
+                while (i < data.object_count) : (i += 1) {
+                    const o: vk.DebugUtilsObjectNameInfoEXT = data.p_objects[i];
+                    std.debug.print("\t[{} - {s}]: {s}\n", .{
+                        i,
+                        @tagName(o.object_type),
+                        o.p_object_name,
+                    });
+                }
+                std.debug.print("---------- End Object -----------\n\n", .{});
+            }
+            if (data.cmd_buf_label_count > 0) {
+                std.debug.print("---------- Labels {} ------------\n\n", .{data.object_count});
+                var i: u32 = 0;
+                while (i < data.cmd_buf_label_count) : (i += 1) {
+                    const o: vk.DebugUtilsLabelEXT = data.p_cmd_buf_labels[i];
+                    std.debug.print("\t[{}]: {s}", .{
+                        i,
+                        o.p_label_name,
+                    });
+                }
+                std.debug.print("---------- End Label ------------\n\n", .{});
+            }
+        }
+    }
+
     return vk.FALSE;
 }

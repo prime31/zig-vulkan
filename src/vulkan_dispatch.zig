@@ -2,9 +2,23 @@ const std = @import("std");
 const vk = @import("vulkan");
 const vma = @import("vma");
 
+// TODO: hack that should disable validation if @root wants to or if this is a cross-compile
+pub const enableValidationLayers = if (@hasDecl(@import("root"), "disable_validation")) blk: {
+    break :blk !@field(@import("root"), "disable_validation");
+} else if (@import("builtin").os.tag == .macos) blk: {
+    break :blk true;
+};
+
 pub const BaseDispatch = vk.BaseWrapper(allFuncs(vk.BaseCommandFlags));
 
 pub const InstanceDispatch = vk.InstanceWrapper(.{
+    // vma
+    .getPhysicalDeviceMemoryProperties2 = true,
+
+    // debug
+    .createDebugUtilsMessengerEXT = enableValidationLayers,
+    .destroyDebugUtilsMessengerEXT = enableValidationLayers,
+
     .destroyInstance = true,
     .createDevice = true,
     .destroySurfaceKHR = true,
@@ -18,9 +32,6 @@ pub const InstanceDispatch = vk.InstanceWrapper(.{
     .getPhysicalDeviceSurfaceSupportKHR = true,
     .getPhysicalDeviceMemoryProperties = true,
     .getDeviceProcAddr = true,
-
-    // vma
-    .getPhysicalDeviceMemoryProperties2 = true,
 });
 
 pub const DeviceDispatch = vk.DeviceWrapper(.{
