@@ -72,12 +72,20 @@ const DeviceDispatch = vk.DeviceWrapper(.{
     .cmdPushConstants = true,
     .cmdBindPipeline = true,
     .cmdDraw = true,
+    .cmdBindDescriptorSets = true,
     .cmdSetViewport = true,
     .cmdSetScissor = true,
     .cmdClearColorImage = true,
     .cmdBindVertexBuffers = true,
     .cmdCopyBuffer = true,
     .resetCommandBuffer = true,
+    .createDescriptorSetLayout = true,
+    .destroyDescriptorSetLayout = true,
+    .createDescriptorPool = true,
+    .destroyDescriptorPool = true,
+    .allocateDescriptorSets = true,
+    .freeDescriptorSets = true,
+    .updateDescriptorSets = true,
 });
 
 pub const GraphicsContext = struct {
