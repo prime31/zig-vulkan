@@ -763,6 +763,7 @@ fn createBuffer(allocator: vma.VmaAllocator, size: usize, usage: vk.BufferUsageF
 
     const vma_malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
         .usage = memory_usage,
+        .requiredFlags = .{ .host_visible_bit = true, .host_coherent_bit = true },
     });
 
     var allocated_buffer = std.mem.zeroes(AllocatedBuffer);
