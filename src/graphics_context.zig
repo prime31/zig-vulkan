@@ -36,9 +36,6 @@ pub const GraphicsContext = struct {
         const vk_proc = @ptrCast(fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, glfw.getInstanceProcAddress);
         self.vkb = try BaseDispatch.load(vk_proc);
 
-        if (enableValidationLayers and !try checkValidationLayerSupport(self.vkb, allocator))
-            std.debug.panic("Validation layers enabled but validationLayerSupport returned false", .{});
-
         const glfw_exts = try glfw.getRequiredInstanceExtensions();
 
         const app_info = vk.ApplicationInfo{
@@ -49,13 +46,9 @@ pub const GraphicsContext = struct {
             .api_version = vk.API_VERSION_1_1,
         };
 
-        // hack because zig cant properly handle `if (enableValidationLayers) &validation_layers else undefined`
-        var v_layers: [*]const [*:0]const u8 = undefined;
-        var v_layers_cnt: u32 = 0;
-        if (enableValidationLayers) {
-            v_layers = @ptrCast([*]const [*:0]const u8, &validation_layers);
-            v_layers_cnt = validation_layers.len;
-        }
+        // validation
+        if (enableValidationLayers and !try checkValidationLayerSupport(self.vkb, allocator))
+            std.debug.panic("Validation layers enabled but validationLayerSupport returned false", .{});
 
         var instance_exts = blk: {
             if (enableValidationLayers) {
