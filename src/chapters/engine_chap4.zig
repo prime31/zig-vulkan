@@ -100,7 +100,7 @@ const FrameData = struct {
     camera_buffer: AllocatedBuffer,
     global_descriptor: vk.DescriptorSet,
 
-    pub fn init(gc: *GraphicsContext, vk_allocator: vma.VmaAllocator, descriptor_set_layout: vk.DescriptorSetLayout, descriptor_pool: vk.DescriptorPool) !FrameData {
+    pub fn init(gc: *GraphicsContext, descriptor_set_layout: vk.DescriptorSetLayout, descriptor_pool: vk.DescriptorPool) !FrameData {
         const pool = try gc.vkd.createCommandPool(gc.dev, &.{
             .flags = .{ .reset_command_buffer_bit = true },
             .queue_family_index = gc.graphics_queue.family,
@@ -114,7 +114,7 @@ const FrameData = struct {
         }, @ptrCast([*]vk.CommandBuffer, &cmd_buffer));
 
         // descriptor set setup
-        var camera_buffer = try createBuffer(vk_allocator, @sizeOf(GpuCameraData), .{ .uniform_buffer_bit = true }, vma.VMA_MEMORY_USAGE_CPU_TO_GPU);
+        var camera_buffer = try createBuffer(gc, @sizeOf(GpuCameraData), .{ .uniform_buffer_bit = true }, vma.VMA_MEMORY_USAGE_CPU_TO_GPU);
 
         var global_descriptor: vk.DescriptorSet = undefined;
         try gc.vkd.allocateDescriptorSets(gc.dev, &.{
@@ -150,10 +150,10 @@ const FrameData = struct {
         };
     }
 
-    pub fn deinit(self: *FrameData, gc: *GraphicsContext, vk_allocator: vma.VmaAllocator) void {
+    pub fn deinit(self: *FrameData, gc: *GraphicsContext) void {
         gc.vkd.freeCommandBuffers(gc.dev, self.pool, 1, @ptrCast([*]vk.CommandBuffer, &self.cmd_buffer));
         gc.vkd.destroyCommandPool(gc.dev, self.pool, null);
-        self.camera_buffer.deinit(vk_allocator);
+        self.camera_buffer.deinit(gc.allocator);
     }
 };
 
@@ -162,8 +162,8 @@ const AllocatedImage = struct {
     view: vk.ImageView,
     allocation: vma.VmaAllocation,
 
-    pub fn deinit(self: AllocatedImage, gc: *const GraphicsContext, vk_allocator: vma.VmaAllocator) void {
-        vma.vmaDestroyImage(vk_allocator, self.image, self.allocation);
+    pub fn deinit(self: AllocatedImage, gc: *const GraphicsContext) void {
+        vma.vmaDestroyImage(gc.allocator, self.image, self.allocation);
         gc.vkd.destroyImageView(gc.dev, self.view, null);
     }
 };
@@ -172,8 +172,8 @@ const AllocatedBuffer = struct {
     buffer: vk.Buffer,
     allocation: vma.VmaAllocation,
 
-    pub fn deinit(self: AllocatedBuffer, vk_allocator: vma.VmaAllocator) void {
-        vma.vmaDestroyBuffer(vk_allocator, self.buffer, self.allocation);
+    pub fn deinit(self: AllocatedBuffer, allocator: vma.VmaAllocator) void {
+        vma.vmaDestroyBuffer(allocator, self.buffer, self.allocation);
     }
 };
 
@@ -211,7 +211,6 @@ pub const EngineChap4 = struct {
     allocator: Allocator,
     window: glfw.Window,
     gc: *GraphicsContext,
-    vk_allocator: vma.VmaAllocator,
     swapchain: Swapchain,
     render_pass: vk.RenderPass,
     framebuffers: []vk.Framebuffer,
@@ -238,28 +237,12 @@ pub const EngineChap4 = struct {
         var gc = try gpa.create(GraphicsContext);
         gc.* = try GraphicsContext.init(gpa, app_name, window, true);
 
-        // initialize the memory allocator
-        var allocator_info = std.mem.zeroInit(vma.VmaAllocatorCreateInfo, .{
-            .physicalDevice = gc.pdev,
-            .device = gc.dev,
-            .pVulkanFunctions = &std.mem.zeroInit(vma.VmaVulkanFunctions, .{
-                .vkGetInstanceProcAddr = gc.vkb.dispatch.vkGetInstanceProcAddr,
-                .vkGetDeviceProcAddr = gc.vki.dispatch.vkGetDeviceProcAddr,
-            }),
-            .instance = gc.instance,
-            .vulkanApiVersion = vk.API_VERSION_1_2,
-        });
-
-        var vk_allocator: vma.VmaAllocator = undefined;
-        const alloc_res = vma.vmaCreateAllocator(&allocator_info, &vk_allocator);
-        std.debug.assert(alloc_res == vk.Result.success);
-
         // swapchain
         var swapchain = try Swapchain.init(gc, gpa, extent);
         const render_pass = try createRenderPass(gc, swapchain);
 
         // depth image
-        const depth_image = try createDepthImage(gc, swapchain, vk_allocator);
+        const depth_image = try createDepthImage(gc, swapchain);
         const framebuffers = try createFramebuffers(gc, gpa, render_pass, swapchain, depth_image.view);
 
         // descriptors
@@ -268,13 +251,12 @@ pub const EngineChap4 = struct {
         // create our FrameDatas
         const frames = try gpa.alloc(FrameData, swapchain.swap_images.len);
         errdefer gpa.free(frames);
-        for (frames) |*f| f.* = try FrameData.init(gc, vk_allocator, descriptors.layout, descriptors.pool);
+        for (frames) |*f| f.* = try FrameData.init(gc, descriptors.layout, descriptors.pool);
 
         return Self{
             .allocator = gpa,
             .window = window,
             .gc = gc,
-            .vk_allocator = vk_allocator,
             .swapchain = swapchain,
             .render_pass = render_pass,
             .framebuffers = framebuffers,
@@ -295,15 +277,13 @@ pub const EngineChap4 = struct {
         self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.global_set_layout, null);
         self.gc.vkd.destroyDescriptorPool(self.gc.dev, self.descriptor_pool, null);
 
-        self.depth_image.deinit(self.gc, self.vk_allocator);
+        self.depth_image.deinit(self.gc);
 
         var iter = self.meshes.valueIterator();
-        while (iter.next()) |mesh| mesh.*.deinit(self.vk_allocator);
+        while (iter.next()) |mesh| mesh.*.deinit(self.gc.allocator);
 
-        for (self.frames) |*frame| frame.deinit(self.gc, self.vk_allocator);
+        for (self.frames) |*frame| frame.deinit(self.gc);
         self.allocator.free(self.frames);
-
-        vma.vmaDestroyAllocator(self.vk_allocator);
 
         for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
         self.allocator.free(self.framebuffers);
@@ -363,8 +343,8 @@ pub const EngineChap4 = struct {
                 for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
                 self.allocator.free(self.framebuffers);
 
-                self.depth_image.deinit(self.gc, self.vk_allocator);
-                self.depth_image = try createDepthImage(self.gc, self.swapchain, self.vk_allocator);
+                self.depth_image.deinit(self.gc);
+                self.depth_image = try createDepthImage(self.gc, self.swapchain);
                 self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain, self.depth_image.view);
             }
 
@@ -382,9 +362,9 @@ pub const EngineChap4 = struct {
         var monkey_mesh = Mesh.initFromObj(gpa, "src/chapters/monkey_smooth.obj");
         var cube_thing_mesh = Mesh.initFromObj(gpa, "src/chapters/cube_thing.obj");
 
-        uploadMesh(&tri_mesh, self.vk_allocator);
-        uploadMesh(&monkey_mesh, self.vk_allocator);
-        uploadMesh(&cube_thing_mesh, self.vk_allocator);
+        uploadMesh(self.gc, &tri_mesh);
+        uploadMesh(self.gc, &monkey_mesh);
+        uploadMesh(self.gc, &cube_thing_mesh);
 
         try self.meshes.put("triangle", tri_mesh);
         try self.meshes.put("monkey", monkey_mesh);
@@ -526,12 +506,12 @@ pub const EngineChap4 = struct {
 
         // and copy it to the buffer
         var data: *anyopaque = undefined;
-        const res = vma.vmaMapMemory(self.vk_allocator, frame.camera_buffer.allocation, @ptrCast([*c]?*anyopaque, &data));
+        const res = vma.vmaMapMemory(self.gc.allocator, frame.camera_buffer.allocation, @ptrCast([*c]?*anyopaque, &data));
         std.debug.assert(res == vk.Result.success);
 
         const cam_data_ptr = @ptrCast(*GpuCameraData, @alignCast(@alignOf(GpuCameraData), data));
         cam_data_ptr.* = cam_data;
-        vma.vmaUnmapMemory(self.vk_allocator, frame.camera_buffer.allocation);
+        vma.vmaUnmapMemory(self.gc.allocator, frame.camera_buffer.allocation);
 
 
         var last_mesh: *Mesh = @intToPtr(*Mesh, @ptrToInt(&self));
@@ -664,7 +644,7 @@ fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Render
     }, null);
 }
 
-fn createDepthImage(gc: *const GraphicsContext, swapchain: Swapchain, vk_allocator: vma.VmaAllocator) !AllocatedImage {
+fn createDepthImage(gc: *const GraphicsContext, swapchain: Swapchain) !AllocatedImage {
     var depth_image: AllocatedImage = undefined;
     const depth_extent = vk.Extent3D{ .width = swapchain.extent.width, .height = swapchain.extent.height, .depth = 1 };
     const dimg_info = vkinit.imageCreateInfo(depth_format, depth_extent, .{ .depth_stencil_attachment_bit = true });
@@ -675,7 +655,7 @@ fn createDepthImage(gc: *const GraphicsContext, swapchain: Swapchain, vk_allocat
         .usage = vma.VMA_MEMORY_USAGE_GPU_ONLY,
         .flags = mem_prop_bits.toInt(),
     });
-    const res = vma.vmaCreateImage(vk_allocator, &dimg_info, &vma_malloc_info, &depth_image.image, &depth_image.allocation, null);
+    const res = vma.vmaCreateImage(gc.allocator, &dimg_info, &vma_malloc_info, &depth_image.image, &depth_image.allocation, null);
     std.debug.assert(res == .success);
 
     const dview_info = vkinit.imageViewCreateInfo(depth_format, depth_image.image, .{ .depth_bit = true });
@@ -752,7 +732,7 @@ fn createPipeline(
     return try builder.build(gc, render_pass);
 }
 
-fn createBuffer(allocator: vma.VmaAllocator, size: usize, usage: vk.BufferUsageFlags, memory_usage: vma.VmaMemoryUsage) !AllocatedBuffer {
+fn createBuffer(gc: *const GraphicsContext, size: usize, usage: vk.BufferUsageFlags, memory_usage: vma.VmaMemoryUsage) !AllocatedBuffer {
     const buffer_info = std.mem.zeroInit(vk.BufferCreateInfo, .{
         .flags = .{},
         .size = size,
@@ -767,7 +747,7 @@ fn createBuffer(allocator: vma.VmaAllocator, size: usize, usage: vk.BufferUsageF
     var allocated_buffer = std.mem.zeroes(AllocatedBuffer);
 
     const res = vma.vmaCreateBuffer(
-        allocator,
+        gc.allocator,
         &buffer_info,
         &vma_malloc_info,
         &allocated_buffer.buffer,
@@ -813,7 +793,7 @@ fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorS
     };
 }
 
-fn uploadMesh(mesh: *Mesh, allocator: vma.VmaAllocator) void {
+fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) void {
     // allocate vertex buffer
     var buffer_info = std.mem.zeroInit(vk.BufferCreateInfo, .{
         .flags = .{},
@@ -829,7 +809,7 @@ fn uploadMesh(mesh: *Mesh, allocator: vma.VmaAllocator) void {
 
     // allocate the buffer
     var res = vma.vmaCreateBuffer(
-        allocator,
+        gc.allocator,
         &buffer_info,
         &vma_malloc_info,
         &mesh.vert_buffer.buffer,
@@ -840,11 +820,11 @@ fn uploadMesh(mesh: *Mesh, allocator: vma.VmaAllocator) void {
 
     // copy vertex data
     var data: *anyopaque = undefined;
-    res = vma.vmaMapMemory(allocator, mesh.vert_buffer.allocation, @ptrCast([*c]?*anyopaque, &data));
+    res = vma.vmaMapMemory(gc.allocator, mesh.vert_buffer.allocation, @ptrCast([*c]?*anyopaque, &data));
     std.debug.assert(res == vk.Result.success);
 
     const gpu_vertices = @ptrCast([*]Vertex, @alignCast(@alignOf(Vertex), data));
     std.mem.copy(Vertex, gpu_vertices[0..mesh.vertices.items.len], mesh.vertices.items);
 
-    vma.vmaUnmapMemory(allocator, mesh.vert_buffer.allocation);
+    vma.vmaUnmapMemory(gc.allocator, mesh.vert_buffer.allocation);
 }

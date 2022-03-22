@@ -1,92 +1,16 @@
 const std = @import("std");
 const vk = @import("vulkan");
+const vma = @import("vma");
 const glfw = @import("glfw");
+const dispatch = @import("vulkan_dispatch.zig");
+
 const Allocator = std.mem.Allocator;
+const BaseDispatch = dispatch.BaseDispatch;
+const InstanceDispatch = dispatch.InstanceDispatch;
+const DeviceDispatch = dispatch.DeviceDispatch;
 
 const required_device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name} ++ if (@import("builtin").os.tag == .macos) [_][*:0]const u8{vk.extension_info.khr_portability_subset.name} else [_][*:0]const u8{};
 var validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
-
-const BaseDispatch = vk.BaseWrapper(allFuncs(vk.BaseCommandFlags));
-
-const InstanceDispatch = vk.InstanceWrapper(.{
-    .destroyInstance = true,
-    .createDevice = true,
-    .destroySurfaceKHR = true,
-    .enumeratePhysicalDevices = true,
-    .getPhysicalDeviceProperties = true,
-    .enumerateDeviceExtensionProperties = true,
-    .getPhysicalDeviceSurfaceFormatsKHR = true,
-    .getPhysicalDeviceSurfacePresentModesKHR = true,
-    .getPhysicalDeviceSurfaceCapabilitiesKHR = true,
-    .getPhysicalDeviceQueueFamilyProperties = true,
-    .getPhysicalDeviceSurfaceSupportKHR = true,
-    .getPhysicalDeviceMemoryProperties = true,
-    .getDeviceProcAddr = true,
-});
-
-const DeviceDispatch = vk.DeviceWrapper(.{
-    .destroyDevice = true,
-    .getDeviceQueue = true,
-    .createSemaphore = true,
-    .createFence = true,
-    .createImageView = true,
-    .destroyImageView = true,
-    .destroySemaphore = true,
-    .destroyFence = true,
-    .getSwapchainImagesKHR = true,
-    .createSwapchainKHR = true,
-    .destroySwapchainKHR = true,
-    .acquireNextImageKHR = true,
-    .deviceWaitIdle = true,
-    .waitForFences = true,
-    .resetFences = true,
-    .queueSubmit = true,
-    .queuePresentKHR = true,
-    .createCommandPool = true,
-    .destroyCommandPool = true,
-    .allocateCommandBuffers = true,
-    .freeCommandBuffers = true,
-    .queueWaitIdle = true,
-    .createShaderModule = true,
-    .destroyShaderModule = true,
-    .createPipelineLayout = true,
-    .destroyPipelineLayout = true,
-    .createRenderPass = true,
-    .destroyRenderPass = true,
-    .createGraphicsPipelines = true,
-    .destroyPipeline = true,
-    .createFramebuffer = true,
-    .destroyFramebuffer = true,
-    .beginCommandBuffer = true,
-    .endCommandBuffer = true,
-    .allocateMemory = true,
-    .freeMemory = true,
-    .createBuffer = true,
-    .destroyBuffer = true,
-    .getBufferMemoryRequirements = true,
-    .mapMemory = true,
-    .unmapMemory = true,
-    .bindBufferMemory = true,
-    .cmdBeginRenderPass = true,
-    .cmdEndRenderPass = true,
-    .cmdPushConstants = true,
-    .cmdBindPipeline = true,
-    .cmdDraw = true,
-    .cmdBindDescriptorSets = true,
-    .cmdSetViewport = true,
-    .cmdSetScissor = true,
-    .cmdClearColorImage = true,
-    .cmdBindVertexBuffers = true,
-    .cmdCopyBuffer = true,
-    .resetCommandBuffer = true,
-    .createDescriptorSetLayout = true,
-    .destroyDescriptorSetLayout = true,
-    .createDescriptorPool = true,
-    .destroyDescriptorPool = true,
-    .allocateDescriptorSets = true,
-    .freeDescriptorSets = true,
-    .updateDescriptorSets = true,
-});
 
 pub const GraphicsContext = struct {
     vkb: BaseDispatch,
@@ -102,6 +26,7 @@ pub const GraphicsContext = struct {
     dev: vk.Device,
     graphics_queue: Queue,
     present_queue: Queue,
+    allocator: vma.VmaAllocator = undefined,
 
     pub fn init(allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window, enableValidationLayers: bool) !GraphicsContext {
         var self: GraphicsContext = undefined;
@@ -158,6 +83,18 @@ pub const GraphicsContext = struct {
 
         self.mem_props = self.vki.getPhysicalDeviceMemoryProperties(self.pdev);
 
+        // initialize the memory allocator
+        const allocator_info = std.mem.zeroInit(vma.VmaAllocatorCreateInfo, .{
+            .physicalDevice = self.pdev,
+            .device = self.dev,
+            .pVulkanFunctions = &dispatch.getVmaVulkanFunction(self.vki, self.vkd),
+            .instance = self.instance,
+            .vulkanApiVersion = vk.API_VERSION_1_2,
+        });
+
+        const alloc_res = vma.vmaCreateAllocator(&allocator_info, &self.allocator);
+        std.debug.assert(alloc_res == vk.Result.success);
+
         // no VK_EXT_debug_utils support for some reason....
         // _ = try self.vki.createDebugUtilsMessengerEXT(self.instance, &.{
         //     .flags = .{},
@@ -171,6 +108,7 @@ pub const GraphicsContext = struct {
     }
 
     pub fn deinit(self: GraphicsContext) void {
+        vma.vmaDestroyAllocator(self.allocator);
         self.vkd.destroyDevice(self.dev, null);
         self.vki.destroySurfaceKHR(self.instance, self.surface, null);
         self.vki.destroyInstance(self.instance, null);
@@ -210,14 +148,6 @@ pub const Queue = struct {
         };
     }
 };
-
-fn allFuncs(comptime T: type) T {
-    var inst = T{};
-    for (std.meta.fields(T)) |field| {
-        @field(inst, field.name) = true;
-    }
-    return inst;
-}
 
 fn createSurfaceGlfw(instance: vk.Instance, window: glfw.Window) !vk.SurfaceKHR {
     var surface: vk.SurfaceKHR = undefined;
