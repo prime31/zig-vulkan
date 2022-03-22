@@ -140,8 +140,7 @@ const FrameData = struct {
             .p_buffer_info = @ptrCast([*]const vk.DescriptorBufferInfo, &binfo),
             .p_texel_buffer_view = undefined,
         };
-        // TODO: last param is a hack. it should be a nullable param
-        gc.vkd.updateDescriptorSets(gc.dev, 1, @ptrCast([*]const vk.WriteDescriptorSet, &set_write), 0, @ptrCast([*]const vk.CopyDescriptorSet, &set_write));
+        gc.vkd.updateDescriptorSets(gc.dev, 1, @ptrCast([*]const vk.WriteDescriptorSet, &set_write), 0, undefined);
 
         return FrameData{
             .pool = pool,
@@ -545,8 +544,7 @@ pub const EngineChap4 = struct {
                 self.gc.vkd.cmdBindPipeline(cmdbuf, .graphics, object.material.pipeline);
 
                 // bind the descriptor set when changing pipeline
-                // TODO: last param should be nullptr
-                self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, object.material.pipeline_layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &frame.global_descriptor), 0,  @ptrCast([*]const u32, &self));
+                self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, object.material.pipeline_layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &frame.global_descriptor), 0, undefined);
             }
 
             var model = object.transform_matrix;
