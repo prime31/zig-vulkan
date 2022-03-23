@@ -176,7 +176,7 @@ const RenderObject = struct {
     transform_matrix: Mat4,
 };
 
-var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
+var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
 const gpa = general_purpose_allocator.allocator();
 
 const depth_format = vk.Format.d32_sfloat;
