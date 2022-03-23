@@ -3,7 +3,25 @@ const vk = @import("vulkan");
 // https://github.com/SpexGuy/Zig-VMA/blob/main/vma.zig
 // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/index.html
 
-// zigified API
+pub const AllocatedImage = struct {
+    image: vk.Image,
+    allocation: VmaAllocation,
+    view: ?vk.ImageView = null, // unmanaged ImageView that must be created/destroyed seperately. Here for convenience only.
+
+    pub fn deinit(self: AllocatedImage, allocator: Allocator) void {
+        vmaDestroyImage(allocator.allocator, self.image, self.allocation);
+    }
+};
+
+pub const AllocatedBuffer = struct {
+    buffer: vk.Buffer,
+    allocation: VmaAllocation,
+
+    pub fn deinit(self: AllocatedBuffer, allocator: Allocator) void {
+        vmaDestroyBuffer(allocator.allocator, self.buffer, self.allocation);
+    }
+};
+
 pub const Allocator = struct {
     allocator: VmaAllocator,
 
@@ -12,25 +30,26 @@ pub const Allocator = struct {
         const res = vmaCreateAllocator(alloc_create_info, &allocator);
         if (res != vk.Result.success) return error.VMACreateFailed;
 
-        return .{ .allocator = allocator };
+        return Allocator{ .allocator = allocator };
     }
 
     pub fn deinit(self: Allocator) void {
         vmaDestroyAllocator(self.allocator);
     }
 
-    // TODO: return an AllocatedBuffer replacing the `buffer` and `allocation` ref params
-    pub fn createBuffer(self: Allocator, buffer_create_info: *const vk.BufferCreateInfo, alloc_info: *const VmaAllocationCreateInfo, buffer: *vk.Buffer, allocation: *VmaAllocation, allocation_info: ?*VmaAllocationInfo) !void {
+    pub fn createBuffer(self: Allocator, buffer_create_info: *const vk.BufferCreateInfo, alloc_info: *const VmaAllocationCreateInfo, allocation_info: ?*VmaAllocationInfo) !AllocatedBuffer {
+        var buffer: AllocatedBuffer = undefined;
+
         const a_info = if (allocation_info) |ai| ai else null;
         const res = vmaCreateBuffer(
             self.allocator,
             buffer_create_info,
             alloc_info,
-            &buffer,
-            &allocation,
+            &buffer.buffer,
+            &buffer.allocation,
             a_info,
         );
-        if (res == vk.Result.success) return;
+        if (res == vk.Result.success) return buffer;
         return switch (res) {
             .error_out_of_host_memory => error.out_of_host_memory,
             .error_out_of_device_memory => error.out_of_device_memory,
@@ -48,11 +67,12 @@ pub const Allocator = struct {
         vmaDestroyBuffer(self.allocator, buffer, allocation);
     }
 
-    // TODO: return an AllocatedImage replacing the `image` and `allocation` ref params
-    pub fn createImage(self: Allocator, img_create_info: *const vk.ImageCreateInfo, vma_malloc_info: *const VmaAllocationCreateInfo, image: *vk.Image, allocation: *VmaAllocation, allocation_info: ?*VmaAllocationInfo) !void {
+    pub fn createImage(self: Allocator, img_create_info: *const vk.ImageCreateInfo, vma_malloc_info: *const VmaAllocationCreateInfo, allocation_info: ?*VmaAllocationInfo) !AllocatedImage {
+        var image: AllocatedImage = undefined;
+
         const a_info = if (allocation_info) |ai| ai else null;
-        const res = vmaCreateImage(self.allocator, img_create_info, vma_malloc_info, image, allocation, a_info);
-        if (res == vk.Result.success) return;
+        const res = vmaCreateImage(self.allocator, img_create_info, vma_malloc_info, &image.image, &image.allocation, a_info);
+        if (res == vk.Result.success) return image;
         return switch (res) {
             .error_out_of_host_memory => error.out_of_host_memory,
             .error_out_of_device_memory => error.out_of_device_memory,
@@ -74,7 +94,7 @@ pub const Allocator = struct {
         var pp_data: ?*anyopaque = undefined;
         const res = vmaMapMemory(self.allocator, allocation, @ptrCast([*c]?*anyopaque, &pp_data));
         if (res == vk.Result.success) return @ptrCast([*]T, @alignCast(@alignOf(T), pp_data));
-        return switch (rc) {
+        return switch (res) {
             .error_out_of_host_memory => error.out_of_host_memory,
             .error_out_of_device_memory => error.out_of_device_memory,
             .error_memory_map_failed => error.memory_map_failed,
@@ -88,7 +108,7 @@ pub const Allocator = struct {
 
     pub fn flushAllocation(self: Allocator, allocation: VmaAllocation, offset: vk.DeviceSize, size: vk.DeviceSize) !void {
         const res = vmaFlushAllocation(self.allocator, allocation, offset, size);
-        switch (result) {
+        switch (res) {
             .success => {},
             .error_out_of_host_memory => return error.OutOfHostMemory,
             .error_out_of_device_memory => return error.OutOfDeviceMemory,

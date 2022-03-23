@@ -97,7 +97,7 @@ const GpuCameraData = struct {
 const FrameData = struct {
     cmd_pool: vk.CommandPool,
     cmd_buffer: vk.CommandBuffer,
-    camera_buffer: AllocatedBuffer,
+    camera_buffer: vma.AllocatedBuffer,
     global_descriptor: vk.DescriptorSet,
 
     pub fn init(gc: *GraphicsContext, descriptor_set_layout: vk.DescriptorSetLayout, descriptor_pool: vk.DescriptorPool) !FrameData {
@@ -157,25 +157,6 @@ const FrameData = struct {
     }
 };
 
-const AllocatedImage = struct {
-    image: vk.Image,
-    view: vk.ImageView,
-    allocation: vma.VmaAllocation,
-
-    pub fn deinit(self: AllocatedImage, gc: *const GraphicsContext) void {
-        vma.vmaDestroyImage(gc.allocator, self.image, self.allocation);
-        gc.vkd.destroyImageView(gc.dev, self.view, null);
-    }
-};
-
-const AllocatedBuffer = struct {
-    buffer: vk.Buffer,
-    allocation: vma.VmaAllocation,
-
-    pub fn deinit(self: AllocatedBuffer, allocator: vma.VmaAllocator) void {
-        vma.vmaDestroyBuffer(allocator, self.buffer, self.allocation);
-    }
-};
 
 const Material = struct {
     pipeline: vk.Pipeline,
@@ -218,7 +199,7 @@ pub const EngineChap4 = struct {
     frame_num: f32 = 0,
     dt: f64 = 0.0,
     last_frame_time: f64 = 0.0,
-    depth_image: AllocatedImage,
+    depth_image: vma.AllocatedImage,
     renderables: std.ArrayList(RenderObject),
     materials: std.StringHashMap(Material),
     meshes: std.StringHashMap(Mesh),
@@ -243,7 +224,7 @@ pub const EngineChap4 = struct {
 
         // depth image
         const depth_image = try createDepthImage(gc, swapchain);
-        const framebuffers = try createFramebuffers(gc, gpa, render_pass, swapchain, depth_image.view);
+        const framebuffers = try createFramebuffers(gc, gpa, render_pass, swapchain, depth_image.view.?);
 
         // descriptors
         const descriptors = createDescriptors(gc);
@@ -277,7 +258,8 @@ pub const EngineChap4 = struct {
         self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.global_set_layout, null);
         self.gc.vkd.destroyDescriptorPool(self.gc.dev, self.descriptor_pool, null);
 
-        self.depth_image.deinit(self.gc);
+        self.depth_image.deinit(self.gc.allocator);
+        self.gc.vkd.destroyImageView(self.gc.dev, self.depth_image.view.?, null);
 
         var iter = self.meshes.valueIterator();
         while (iter.next()) |mesh| mesh.*.deinit(self.gc.allocator);
@@ -343,9 +325,10 @@ pub const EngineChap4 = struct {
                 for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
                 self.allocator.free(self.framebuffers);
 
-                self.depth_image.deinit(self.gc);
+                self.depth_image.deinit(self.gc.allocator);
+                self.gc.vkd.destroyImageView(self.gc.dev, self.depth_image.view.?, null);
                 self.depth_image = try createDepthImage(self.gc, self.swapchain);
-                self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain, self.depth_image.view);
+                self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain, self.depth_image.view.?);
             }
 
             self.frame_num += 1;
@@ -362,9 +345,9 @@ pub const EngineChap4 = struct {
         var monkey_mesh = Mesh.initFromObj(gpa, "src/chapters/monkey_smooth.obj");
         var cube_thing_mesh = Mesh.initFromObj(gpa, "src/chapters/cube_thing.obj");
 
-        uploadMesh(self.gc, &tri_mesh);
-        uploadMesh(self.gc, &monkey_mesh);
-        uploadMesh(self.gc, &cube_thing_mesh);
+        try uploadMesh(self.gc, &tri_mesh);
+        try uploadMesh(self.gc, &monkey_mesh);
+        try uploadMesh(self.gc, &cube_thing_mesh);
 
         try self.meshes.put("triangle", tri_mesh);
         try self.meshes.put("monkey", monkey_mesh);
@@ -505,13 +488,9 @@ pub const EngineChap4 = struct {
         };
 
         // and copy it to the buffer
-        var data: *anyopaque = undefined;
-        const res = vma.vmaMapMemory(self.gc.allocator, frame.camera_buffer.allocation, @ptrCast([*c]?*anyopaque, &data));
-        std.debug.assert(res == vk.Result.success);
-
-        const cam_data_ptr = @ptrCast(*GpuCameraData, @alignCast(@alignOf(GpuCameraData), data));
+        const cam_data_ptr = try self.gc.allocator.mapMemory(GpuCameraData, frame.camera_buffer.allocation);
         cam_data_ptr.* = cam_data;
-        vma.vmaUnmapMemory(self.gc.allocator, frame.camera_buffer.allocation);
+        self.gc.allocator.unmapMemory(frame.camera_buffer.allocation);
 
 
         var last_mesh: *Mesh = @intToPtr(*Mesh, @ptrToInt(&self));
@@ -644,8 +623,7 @@ fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Render
     }, null);
 }
 
-fn createDepthImage(gc: *const GraphicsContext, swapchain: Swapchain) !AllocatedImage {
-    var depth_image: AllocatedImage = undefined;
+fn createDepthImage(gc: *const GraphicsContext, swapchain: Swapchain) !vma.AllocatedImage {
     const depth_extent = vk.Extent3D{ .width = swapchain.extent.width, .height = swapchain.extent.height, .depth = 1 };
     const dimg_info = vkinit.imageCreateInfo(depth_format, depth_extent, .{ .depth_stencil_attachment_bit = true });
 
@@ -655,8 +633,7 @@ fn createDepthImage(gc: *const GraphicsContext, swapchain: Swapchain) !Allocated
         .usage = vma.VMA_MEMORY_USAGE_GPU_ONLY,
         .flags = mem_prop_bits.toInt(),
     });
-    const res = vma.vmaCreateImage(gc.allocator, &dimg_info, &vma_malloc_info, &depth_image.image, &depth_image.allocation, null);
-    std.debug.assert(res == .success);
+    var depth_image = try gc.allocator.createImage(&dimg_info, &vma_malloc_info, null);
 
     const dview_info = vkinit.imageViewCreateInfo(depth_format, depth_image.image, .{ .depth_bit = true });
     depth_image.view = try gc.vkd.createImageView(gc.dev, &dview_info, null);
@@ -732,30 +709,19 @@ fn createPipeline(
     return try builder.build(gc, render_pass);
 }
 
-fn createBuffer(gc: *const GraphicsContext, size: usize, usage: vk.BufferUsageFlags, memory_usage: vma.VmaMemoryUsage) !AllocatedBuffer {
+fn createBuffer(gc: *const GraphicsContext, size: usize, usage: vk.BufferUsageFlags, memory_usage: vma.VmaMemoryUsage) !vma.AllocatedBuffer {
     const buffer_info = std.mem.zeroInit(vk.BufferCreateInfo, .{
         .flags = .{},
         .size = size,
         .usage = usage,
     });
 
-    const vma_malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
+    const malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
         .usage = memory_usage,
         .requiredFlags = .{ .host_visible_bit = true, .host_coherent_bit = true },
     });
 
-    var allocated_buffer = std.mem.zeroes(AllocatedBuffer);
-
-    const res = vma.vmaCreateBuffer(
-        gc.allocator,
-        &buffer_info,
-        &vma_malloc_info,
-        &allocated_buffer.buffer,
-        &allocated_buffer.allocation,
-        null,
-    );
-    std.debug.assert(res == vk.Result.success);
-    return allocated_buffer;
+    return try gc.allocator.createBuffer(&buffer_info, &malloc_info, null);
 }
 
 fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorSetLayout, pool: vk.DescriptorPool } {
@@ -793,7 +759,7 @@ fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorS
     };
 }
 
-fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) void {
+fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
     // allocate vertex buffer
     var buffer_info = std.mem.zeroInit(vk.BufferCreateInfo, .{
         .flags = .{},
@@ -802,29 +768,16 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) void {
     });
 
     // let the VMA library know that this data should be writeable by CPU, but also readable by GPU
-    var vma_malloc_info = std.mem.zeroes(vma.VmaAllocationCreateInfo);
-    vma_malloc_info.usage = vma.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-    vma_malloc_info.requiredFlags = .{ .host_visible_bit = true, .host_coherent_bit = true };
-    vma_malloc_info.flags = vma.VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT | vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    var malloc_info = std.mem.zeroes(vma.VmaAllocationCreateInfo);
+    malloc_info.usage = vma.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
+    malloc_info.requiredFlags = .{ .host_visible_bit = true, .host_coherent_bit = true };
+    malloc_info.flags = vma.VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT | vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
 
     // allocate the buffer
-    var res = vma.vmaCreateBuffer(
-        gc.allocator,
-        &buffer_info,
-        &vma_malloc_info,
-        &mesh.vert_buffer.buffer,
-        &mesh.vert_buffer.allocation,
-        null,
-    );
-    std.debug.assert(res == vk.Result.success);
+    mesh.vert_buffer = try gc.allocator.createBuffer(&buffer_info, &malloc_info, null);
 
     // copy vertex data
-    var data: *anyopaque = undefined;
-    res = vma.vmaMapMemory(gc.allocator, mesh.vert_buffer.allocation, @ptrCast([*c]?*anyopaque, &data));
-    std.debug.assert(res == vk.Result.success);
-
-    const gpu_vertices = @ptrCast([*]Vertex, @alignCast(@alignOf(Vertex), data));
+    var gpu_vertices = try gc.allocator.mapMemory(Vertex, mesh.vert_buffer.allocation);
     std.mem.copy(Vertex, gpu_vertices[0..mesh.vertices.items.len], mesh.vertices.items);
-
-    vma.vmaUnmapMemory(gc.allocator, mesh.vert_buffer.allocation);
+    gc.allocator.unmapMemory(mesh.vert_buffer.allocation);
 }

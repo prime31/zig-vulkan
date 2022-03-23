@@ -49,7 +49,7 @@ pub const Vertex = extern struct {
 
 pub const Mesh = struct {
     vertices: std.ArrayList(Vertex),
-    vert_buffer: AllocatedBuffer,
+    vert_buffer: vma.AllocatedBuffer,
 
     pub fn init(allocator: std.mem.Allocator) Mesh {
         return .{
@@ -131,8 +131,8 @@ pub const Mesh = struct {
         };
     }
 
-    pub fn deinit(self: Mesh, vk_allocator: vma.VmaAllocator) void {
-        self.vert_buffer.deinit(vk_allocator);
+    pub fn deinit(self: Mesh, allocator: vma.Allocator) void {
+        self.vert_buffer.deinit(allocator);
         self.vertices.deinit();
     }
 };

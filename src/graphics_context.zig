@@ -28,7 +28,7 @@ pub const GraphicsContext = struct {
     dev: vk.Device,
     graphics_queue: Queue,
     present_queue: Queue,
-    allocator: vma.VmaAllocator = undefined,
+    allocator: vma.Allocator,
     debug_message: if (enableValidationLayers) vk.DebugUtilsMessengerEXT else void,
 
     pub fn init(allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window) !GraphicsContext {
@@ -95,16 +95,14 @@ pub const GraphicsContext = struct {
         self.mem_props = self.vki.getPhysicalDeviceMemoryProperties(self.pdev);
 
         // initialize the memory allocator
-        const allocator_info = std.mem.zeroInit(vma.VmaAllocatorCreateInfo, .{
+        var allocator_info = std.mem.zeroInit(vma.VmaAllocatorCreateInfo, .{
             .physicalDevice = self.pdev,
             .device = self.dev,
             .pVulkanFunctions = &dispatch.getVmaVulkanFunction(self.vki, self.vkd),
             .instance = self.instance,
             .vulkanApiVersion = vk.API_VERSION_1_2,
         });
-
-        const alloc_res = vma.vmaCreateAllocator(&allocator_info, &self.allocator);
-        std.debug.assert(alloc_res == vk.Result.success);
+        self.allocator = try vma.Allocator.init(&allocator_info);
 
         if (enableValidationLayers) {
             self.debug_message = try self.vki.createDebugUtilsMessengerEXT(self.instance, &.{
@@ -129,7 +127,7 @@ pub const GraphicsContext = struct {
     }
 
     pub fn deinit(self: GraphicsContext) void {
-        vma.vmaDestroyAllocator(self.allocator);
+        self.allocator.deinit();
         self.vkd.destroyDevice(self.dev, null);
         self.vki.destroySurfaceKHR(self.instance, self.surface, null);
         if (enableValidationLayers) self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_message, null);
