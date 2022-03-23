@@ -95,20 +95,20 @@ const GpuCameraData = struct {
 };
 
 const FrameData = struct {
-    pool: vk.CommandPool,
+    cmd_pool: vk.CommandPool,
     cmd_buffer: vk.CommandBuffer,
     camera_buffer: AllocatedBuffer,
     global_descriptor: vk.DescriptorSet,
 
     pub fn init(gc: *GraphicsContext, descriptor_set_layout: vk.DescriptorSetLayout, descriptor_pool: vk.DescriptorPool) !FrameData {
-        const pool = try gc.vkd.createCommandPool(gc.dev, &.{
+        const cmd_pool = try gc.vkd.createCommandPool(gc.dev, &.{
             .flags = .{ .reset_command_buffer_bit = true },
             .queue_family_index = gc.graphics_queue.family,
         }, null);
 
         var cmd_buffer: vk.CommandBuffer = undefined;
         try gc.vkd.allocateCommandBuffers(gc.dev, &.{
-            .command_pool = pool,
+            .command_pool = cmd_pool,
             .level = .primary,
             .command_buffer_count = 1,
         }, @ptrCast([*]vk.CommandBuffer, &cmd_buffer));
@@ -143,7 +143,7 @@ const FrameData = struct {
         gc.vkd.updateDescriptorSets(gc.dev, 1, @ptrCast([*]const vk.WriteDescriptorSet, &set_write), 0, undefined);
 
         return FrameData{
-            .pool = pool,
+            .cmd_pool = cmd_pool,
             .cmd_buffer = cmd_buffer,
             .camera_buffer = camera_buffer,
             .global_descriptor = global_descriptor,
@@ -151,8 +151,8 @@ const FrameData = struct {
     }
 
     pub fn deinit(self: *FrameData, gc: *GraphicsContext) void {
-        gc.vkd.freeCommandBuffers(gc.dev, self.pool, 1, @ptrCast([*]vk.CommandBuffer, &self.cmd_buffer));
-        gc.vkd.destroyCommandPool(gc.dev, self.pool, null);
+        gc.vkd.freeCommandBuffers(gc.dev, self.cmd_pool, 1, @ptrCast([*]vk.CommandBuffer, &self.cmd_buffer));
+        gc.vkd.destroyCommandPool(gc.dev, self.cmd_pool, null);
         self.camera_buffer.deinit(gc.allocator);
     }
 };

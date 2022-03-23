@@ -1,29 +1,26 @@
 const vk = @import("vulkan");
 
 // https://github.com/SpexGuy/Zig-VMA/blob/main/vma.zig
-
 // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/index.html
 
 // zigified API
 pub const Allocator = struct {
-    const Self = @This();
-
     allocator: VmaAllocator,
 
-    pub fn init(alloc_create_info: *VmaAllocatorCreateInfo) !Self {
+    pub fn init(alloc_create_info: *VmaAllocatorCreateInfo) !Allocator {
         var allocator: VmaAllocator = undefined;
         const res = vmaCreateAllocator(alloc_create_info, &allocator);
-        if (res != vk.Result.success) return error.Unknown;
+        if (res != vk.Result.success) return error.VMACreateFailed;
 
         return .{ .allocator = allocator };
     }
 
-    pub fn deinit(self: Self) void {
+    pub fn deinit(self: Allocator) void {
         vmaDestroyAllocator(self.allocator);
     }
 
     // TODO: return an AllocatedBuffer replacing the `buffer` and `allocation` ref params
-    pub fn createBuffer(self: Self, buffer_create_info: *const vk.BufferCreateInfo, alloc_info: *const VmaAllocationCreateInfo, buffer: *vk.Buffer, allocation: *VmaAllocation, allocation_info: ?*VmaAllocationInfo) !void {
+    pub fn createBuffer(self: Allocator, buffer_create_info: *const vk.BufferCreateInfo, alloc_info: *const VmaAllocationCreateInfo, buffer: *vk.Buffer, allocation: *VmaAllocation, allocation_info: ?*VmaAllocationInfo) !void {
         const a_info = if (allocation_info) |ai| ai else null;
         const res = vmaCreateBuffer(
             self.allocator,
@@ -33,42 +30,72 @@ pub const Allocator = struct {
             &allocation,
             a_info,
         );
-        if (res != vk.Result.success) return error.Unknown;
+        if (res == vk.Result.success) return;
+        return switch (res) {
+            .error_out_of_host_memory => error.out_of_host_memory,
+            .error_out_of_device_memory => error.out_of_device_memory,
+            .error_too_many_objects => error.too_many_objects,
+            .error_invalid_external_handle => error.invalid_external_handle,
+            .error_invalid_opaque_capture_address => error.invalid_opaque_capture_address,
+            .error_memory_map_failed => error.memory_map_failed,
+            .error_fragmented_pool => error.fragmented_pool,
+            .error_out_of_pool_memory => error.out_of_pool_memory,
+            else => error.undocumented_error,
+        };
     }
 
-    pub fn destroyBuffer(self: Self, buffer: vk.Buffer, allocation: VmaAllocation) void {
+    pub fn destroyBuffer(self: Allocator, buffer: vk.Buffer, allocation: VmaAllocation) void {
         vmaDestroyBuffer(self.allocator, buffer, allocation);
     }
 
     // TODO: return an AllocatedImage replacing the `image` and `allocation` ref params
-    pub fn createImage(self: Self, img_create_info: *const vk.ImageCreateInfo, vma_malloc_info: *const VmaAllocationCreateInfo, image: *vk.Image, allocation: *VmaAllocation, allocation_info: ?*VmaAllocationInfo) !void {
+    pub fn createImage(self: Allocator, img_create_info: *const vk.ImageCreateInfo, vma_malloc_info: *const VmaAllocationCreateInfo, image: *vk.Image, allocation: *VmaAllocation, allocation_info: ?*VmaAllocationInfo) !void {
         const a_info = if (allocation_info) |ai| ai else null;
         const res = vmaCreateImage(self.allocator, img_create_info, vma_malloc_info, image, allocation, a_info);
-        if (res != vk.Result.success) return error.Unknown;
+        if (res == vk.Result.success) return;
+        return switch (res) {
+            .error_out_of_host_memory => error.out_of_host_memory,
+            .error_out_of_device_memory => error.out_of_device_memory,
+            .error_too_many_objects => error.too_many_objects,
+            .error_invalid_external_handle => error.invalid_external_handle,
+            .error_invalid_opaque_capture_address => error.invalid_opaque_capture_address,
+            .error_memory_map_failed => error.memory_map_failed,
+            .error_fragmented_pool => error.fragmented_pool,
+            .error_out_of_pool_memory => error.out_of_pool_memory,
+            else => error.undocumented_error,
+        };
     }
 
-    pub fn destroyImage(self: Self, image: vk.Image, allocation: VmaAllocation) void {
+    pub fn destroyImage(self: Allocator, image: vk.Image, allocation: VmaAllocation) void {
         vmaDestroyImage(self.allocator, image, allocation);
     }
 
-    pub fn mapMemory(self: Self, comptime T: type, allocation: VmaAllocation) ![*]T {
+    pub fn mapMemory(self: Allocator, comptime T: type, allocation: VmaAllocation) ![*]T {
         var pp_data: ?*anyopaque = undefined;
         const res = vmaMapMemory(self.allocator, allocation, @ptrCast([*c]?*anyopaque, &pp_data));
-        if (res != vk.Result.success) return error.Unknown;
-
-        return @ptrCast([*]T, @alignCast(@alignOf(T), pp_data));
+        if (res == vk.Result.success) return @ptrCast([*]T, @alignCast(@alignOf(T), pp_data));
+        return switch (rc) {
+            .error_out_of_host_memory => error.out_of_host_memory,
+            .error_out_of_device_memory => error.out_of_device_memory,
+            .error_memory_map_failed => error.memory_map_failed,
+            else => error.undocumented_error,
+        };
     }
 
-    pub fn unmapMemory(self: Self, allocation: VmaAllocation) void {
+    pub fn unmapMemory(self: Allocator, allocation: VmaAllocation) void {
         vmaUnmapMemory(self.allocator, allocation);
     }
 
-    pub fn flushAllocation(self: Self, allocation: VmaAllocation, offset: vk.DeviceSize, size: vk.DeviceSize) !void {
+    pub fn flushAllocation(self: Allocator, allocation: VmaAllocation, offset: vk.DeviceSize, size: vk.DeviceSize) !void {
         const res = vmaFlushAllocation(self.allocator, allocation, offset, size);
-        if (res != vk.Result.success) return error.Unknown;
+        switch (result) {
+            .success => {},
+            .error_out_of_host_memory => return error.OutOfHostMemory,
+            .error_out_of_device_memory => return error.OutOfDeviceMemory,
+            else => return error.Unknown,
+        }
     }
 };
-
 
 // manually added translation layer
 const VkFlags = vk.Flags;
@@ -114,7 +141,6 @@ const PFN_vkCreateImage = vk.PfnCreateImage;
 const PFN_vkDestroyImage = vk.PfnDestroyImage;
 const PFN_vkCmdCopyBuffer = vk.PfnCmdCopyBuffer;
 // end translation layer
-
 
 pub const VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT: c_int = 1;
 pub const VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT: c_int = 2;
