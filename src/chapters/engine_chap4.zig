@@ -219,7 +219,7 @@ pub const EngineChap4 = struct {
         gc.* = try GraphicsContext.init(gpa, app_name, window);
 
         // swapchain
-        var swapchain = try Swapchain.init(gc, gpa, extent);
+        var swapchain = try Swapchain.init(gc, gpa, extent, FRAME_OVERLAP);
         const render_pass = try createRenderPass(gc, swapchain);
 
         // depth image
@@ -288,6 +288,8 @@ pub const EngineChap4 = struct {
         self.renderables.deinit();
         self.materials.deinit();
         self.meshes.deinit();
+        _ = general_purpose_allocator.deinit();
+        // _ = general_purpose_allocator.detectLeaks();
     }
 
     pub fn loadContent(self: *Self) !void {

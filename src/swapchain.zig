@@ -21,12 +21,11 @@ pub const Swapchain = struct {
     image_index: u32,
     next_image_acquired: vk.Semaphore,
 
-    // TODO: take in desired swapchain image count
-    pub fn init(gc: *const GraphicsContext, allocator: Allocator, extent: vk.Extent2D) !Swapchain {
-        return try initRecycle(gc, allocator, extent, .null_handle);
+    pub fn init(gc: *const GraphicsContext, allocator: Allocator, extent: vk.Extent2D, desired_image_count: u32) !Swapchain {
+        return try initRecycle(gc, allocator, extent, .null_handle, desired_image_count);
     }
 
-    pub fn initRecycle(gc: *const GraphicsContext, allocator: Allocator, extent: vk.Extent2D, old_handle: vk.SwapchainKHR) !Swapchain {
+    pub fn initRecycle(gc: *const GraphicsContext, allocator: Allocator, extent: vk.Extent2D, old_handle: vk.SwapchainKHR, desired_image_count: u32) !Swapchain {
         const caps = try gc.vki.getPhysicalDeviceSurfaceCapabilitiesKHR(gc.pdev, gc.surface);
         const actual_extent = findActualExtent(caps, extent);
         if (actual_extent.width == 0 or actual_extent.height == 0) {
@@ -36,7 +35,6 @@ pub const Swapchain = struct {
         const surface_format = try findSurfaceFormat(gc, allocator);
         const present_mode = try findPresentMode(gc, allocator);
 
-        const desired_image_count = @as(u32, 2);
         var image_count = desired_image_count;
         if (image_count > caps.max_image_count) image_count = caps.max_image_count;
         if (image_count < caps.min_image_count) image_count = caps.min_image_count;
@@ -99,6 +97,7 @@ pub const Swapchain = struct {
 
     fn deinitExceptSwapchain(self: Swapchain) void {
         for (self.swap_images) |si| si.deinit(self.gc);
+        self.allocator.free(self.swap_images);
         self.gc.vkd.destroySemaphore(self.gc.dev, self.next_image_acquired, null);
     }
 
@@ -122,8 +121,9 @@ pub const Swapchain = struct {
         const gc = self.gc;
         const allocator = self.allocator;
         const old_handle = self.handle;
+        const desired_image_count = @intCast(u32, self.swap_images.len);
         self.deinitExceptSwapchain();
-        self.* = try initRecycle(gc, allocator, new_extent, old_handle);
+        self.* = try initRecycle(gc, allocator, new_extent, old_handle, desired_image_count);
     }
 
     pub fn currentImage(self: Swapchain) vk.Image {
