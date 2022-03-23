@@ -4,22 +4,25 @@
 
 ## TODO
 - move vk.zig out of cache
-- Checkout math lib: [Zalgebra](https://github.com/kooparse/zalgebra)
+- other math lib: [Zalgebra](https://github.com/kooparse/zalgebra)
+- other math lib: [vectormath](https://github.com/michal-z/zig-gamedev/blob/main/libs/common/src/vectormath.zig)
+- other math lib: [zmath](https://github.com/michal-z/zig-gamedev/tree/main/libs/zmath)
 
-- Checkout abstractions here too: [Another Vulkan Zig](https://github.com/maxxnino/another-vulkan-zig)
+- checkout abstractions here too: [Another Vulkan Zig](https://github.com/maxxnino/another-vulkan-zig)
 - and here: [](https://github.com/GPUOpen-LibrariesAndSDKs/V-EZ)
-- Some API ideas: [Volkano](https://github.com/vulkano-rs/vulkano)
+- some API ideas: [Volkano](https://github.com/vulkano-rs/vulkano)
 - higher-level api:
     - buffers: CpuAccessibleBuffer, GpuAccessibleBuffer, etc
-    -
 
 - higher-level helpers:
     - vertex_input_state: blahGetVertexInputState(VertexT)
 
 - add auto uniform/push/pip_layout generation (`spirv-cross shaer.spv --reflect`)
 
+
 Future
 - add SDL toggle [sdltest](https://github.com/SpexGuy/sdltest)
+
 
 ## Getting started
 

@@ -129,7 +129,6 @@ const FrameData = struct {
             .offset = 0,
             .range = @sizeOf(GpuCameraData),
         };
-
         const set_write = vk.WriteDescriptorSet{
             .dst_set = global_descriptor,
             .dst_binding = 0,
@@ -734,13 +733,11 @@ fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorS
         .stage_flags = .{ .vertex_bit = true },
         .p_immutable_samplers = null,
     });
-
     var set_info = vk.DescriptorSetLayoutCreateInfo{
         .flags = .{},
         .binding_count = 1,
         .p_bindings = @ptrCast([*]const vk.DescriptorSetLayoutBinding, &cam_buffer_binding),
     };
-
     var global_set_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &set_info, null) catch unreachable;
 
 
