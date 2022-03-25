@@ -208,31 +208,28 @@ pub fn pipelineDepthStencilCreateInfo(depth_test: bool, depth_write: bool, compa
     };
 }
 
-// VkDescriptorSetLayoutBinding vkinit::descriptorset_layout_binding(VkDescriptorType type, VkShaderStageFlags stageFlags, uint32_t binding)
-// {
-// 	VkDescriptorSetLayoutBinding setbind = {};
-// 	setbind.binding = binding;
-// 	setbind.descriptorCount = 1;
-// 	setbind.descriptorType = type;
-// 	setbind.pImmutableSamplers = nullptr;
-// 	setbind.stageFlags = stageFlags;
+pub fn descriptorSetLayoutBinding(desc_type: vk.DescriptorType, stage_flags: vk.ShaderStageFlags, binding: u32) vk.DescriptorSetLayoutBinding {
+    return .{
+        .binding = binding,
+        .descriptor_type = desc_type,
+        .descriptor_count = 1,
+        .stage_flags = stage_flags,
+        .p_immutable_samplers = null,
+    };
+}
 
-// 	return setbind;
-// }
-// VkWriteDescriptorSet vkinit::write_descriptor_buffer(VkDescriptorType type, VkDescriptorSet dstSet, VkDescriptorBufferInfo* bufferInfo , uint32_t binding)
-// {
-// 	VkWriteDescriptorSet write = {};
-// 	write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-// 	write.pNext = nullptr;
-
-// 	write.dstBinding = binding;
-// 	write.dstSet = dstSet;
-// 	write.descriptorCount = 1;
-// 	write.descriptorType = type;
-// 	write.pBufferInfo = bufferInfo;
-
-// 	return write;
-// }
+pub fn writeDescriptorBuffer(desc_type: vk.DescriptorType, dst_set: vk.DescriptorSet, buffer_info: *const vk.DescriptorBufferInfo, binding: u32) vk.WriteDescriptorSet {
+    return .{
+        .dst_set = dst_set,
+        .dst_binding = binding,
+        .dst_array_element = 0,
+        .descriptor_count = 1,
+        .descriptor_type = desc_type,
+        .p_image_info = undefined,
+        .p_buffer_info = @ptrCast([*]const vk.DescriptorBufferInfo, buffer_info),
+        .p_texel_buffer_view = undefined,
+    };
+}
 
 // VkWriteDescriptorSet vkinit::write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet, VkDescriptorImageInfo* imageInfo, uint32_t binding)
 // {
