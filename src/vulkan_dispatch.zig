@@ -7,7 +7,7 @@ pub const enableValidationLayers = if (@hasDecl(@import("root"), "disable_valida
     break :blk !@field(@import("root"), "disable_validation");
 } else if (@import("builtin").os.tag == .macos) blk: {
     break :blk true;
-};
+} else false;
 
 pub const BaseDispatch = vk.BaseWrapper(allFuncs(vk.BaseCommandFlags));
 
