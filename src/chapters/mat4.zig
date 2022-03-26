@@ -60,11 +60,11 @@ pub const Mat4 = extern struct {
         return result;
     }
 
-    pub fn createScale(translation: Vec3) Mat4 {
+    pub fn createScale(scale: Vec3) Mat4 {
         var result = identity;
-        result.fields[0][0] = translation.x;
-        result.fields[1][1] = translation.y;
-        result.fields[2][2] = translation.z;
+        result.fields[0][0] = scale.x;
+        result.fields[1][1] = scale.y;
+        result.fields[2][2] = scale.z;
         return result;
     }
 

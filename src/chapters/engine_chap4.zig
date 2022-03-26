@@ -345,14 +345,14 @@ pub const EngineChap4 = struct {
 
     pub fn run(self: *Self) !void {
         while (!self.window.shouldClose()) {
-            // wait for the last frame to complete before filling our CommandBuffer
-            try self.swapchain.waitForFrame();
-
             var curr_frame_time = glfw.getTime();
             self.dt = curr_frame_time - self.last_frame_time;
             self.last_frame_time = curr_frame_time;
 
             self.camera.update(self.dt);
+
+            // wait for the last frame to complete before filling our CommandBuffer
+            try self.swapchain.waitForFrame();
 
             const frame = self.frames[self.swapchain.image_index];
             try self.draw(self.framebuffers[self.swapchain.image_index], frame);
@@ -439,7 +439,7 @@ pub const EngineChap4 = struct {
         var monkey = RenderObject{
             .mesh = self.meshes.getPtr("monkey").?,
             .material = self.materials.getPtr("defaultmesh").?,
-            .transform_matrix = Mat4.identity,
+            .transform_matrix = Mat4.createTranslation(Vec3.new(0, 2, 0)),
         };
         try self.renderables.append(monkey);
 
