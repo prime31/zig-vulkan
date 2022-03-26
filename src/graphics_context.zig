@@ -43,7 +43,7 @@ pub const GraphicsContext = struct {
             .application_version = vk.makeApiVersion(0, 0, 0, 0),
             .p_engine_name = app_name,
             .engine_version = vk.makeApiVersion(0, 0, 0, 0),
-            .api_version = vk.API_VERSION_1_1,
+            .api_version = vk.API_VERSION_1_2,
         };
 
         // validation
@@ -201,7 +201,16 @@ fn initializeCandidate(vki: InstanceDispatch, candidate: DeviceCandidate) !vk.De
     else
         2;
 
+    // required for access to gl_BaseInstance: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/html/vkspec.html#features-shaderDrawParameters
+    var physical_features2 = std.mem.zeroInit(vk.PhysicalDeviceFeatures2, .{
+        .p_next = &std.mem.zeroInit(vk.PhysicalDeviceVulkan11Features, .{
+            .shader_draw_parameters = vk.TRUE,
+        }),
+    });
+    vki.getPhysicalDeviceFeatures2(candidate.pdev, &physical_features2);
+
     return try vki.createDevice(candidate.pdev, &.{
+        .p_next = &physical_features2,
         .flags = .{},
         .queue_create_info_count = queue_count,
         .p_queue_create_infos = &qci,

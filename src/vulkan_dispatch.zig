@@ -24,6 +24,7 @@ pub const InstanceDispatch = vk.InstanceWrapper(.{
     .destroySurfaceKHR = true,
     .enumeratePhysicalDevices = true,
     .getPhysicalDeviceProperties = true,
+    .getPhysicalDeviceFeatures2 = true,
     .enumerateDeviceExtensionProperties = true,
     .getPhysicalDeviceSurfaceFormatsKHR = true,
     .getPhysicalDeviceSurfacePresentModesKHR = true,

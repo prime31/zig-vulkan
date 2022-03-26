@@ -102,13 +102,19 @@ const GpuSceneData = struct {
     sun_color: Vec4,
 };
 
+const GpuObjectData = struct {
+    model: Mat4,
+};
+
 const FrameData = struct {
     cmd_pool: vk.CommandPool,
     cmd_buffer: vk.CommandBuffer,
     camera_buffer: vma.AllocatedBuffer,
     global_descriptor: vk.DescriptorSet,
+    object_buffer: vma.AllocatedBuffer,
+    object_descriptor: vk.DescriptorSet,
 
-    pub fn init(gc: *GraphicsContext, descriptor_set_layout: vk.DescriptorSetLayout, descriptor_pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBuffer) !FrameData {
+    pub fn init(gc: *GraphicsContext, descriptor_set_layout: vk.DescriptorSetLayout, descriptor_pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBuffer, object_set_layout: vk.DescriptorSetLayout) !FrameData {
         const cmd_pool = try gc.vkd.createCommandPool(gc.dev, &.{
             .flags = .{ .reset_command_buffer_bit = true },
             .queue_family_index = gc.graphics_queue.family,
@@ -124,12 +130,23 @@ const FrameData = struct {
         // descriptor set setup
         var camera_buffer = try createBuffer(gc, @sizeOf(GpuCameraData), .{ .uniform_buffer_bit = true }, .cpu_to_gpu);
 
+        const max_objects: usize = 10_000;
+        var object_buffer = try createBuffer(gc, @sizeOf(GpuObjectData) * max_objects, .{ .storage_buffer_bit = true }, .cpu_to_gpu);
+
         var global_descriptor: vk.DescriptorSet = undefined;
         try gc.vkd.allocateDescriptorSets(gc.dev, &.{
             .descriptor_pool = descriptor_pool,
             .descriptor_set_count = 1,
             .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &descriptor_set_layout),
         }, @ptrCast([*]vk.DescriptorSet, &global_descriptor));
+
+        // allocate the descriptor set that will point to object buffer
+        var object_descriptor: vk.DescriptorSet = undefined;
+        try gc.vkd.allocateDescriptorSets(gc.dev, &.{
+            .descriptor_pool = descriptor_pool,
+            .descriptor_set_count = 1,
+            .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &object_set_layout),
+        }, @ptrCast([*]vk.DescriptorSet, &object_descriptor));
 
         // information about the buffer we want to point at in the descriptor
         const cam_info = vk.DescriptorBufferInfo{
@@ -144,16 +161,26 @@ const FrameData = struct {
             .range = @sizeOf(GpuSceneData),
         };
 
+        const object_buffer_info = vk.DescriptorBufferInfo{
+            .buffer = object_buffer.buffer,
+            .offset = 0,
+            .range = @sizeOf(GpuObjectData) * max_objects,
+        };
+
         const camera_write = vkinit.writeDescriptorBuffer(.uniform_buffer, global_descriptor, &cam_info, 0);
         const scene_write = vkinit.writeDescriptorBuffer(.uniform_buffer_dynamic, global_descriptor, &scene_info, 1);
-        const set_writes = [_]vk.WriteDescriptorSet{ camera_write, scene_write };
-        gc.vkd.updateDescriptorSets(gc.dev, 2, &set_writes, 0, undefined);
+        const object_write = vkinit.writeDescriptorBuffer(.storage_buffer, object_descriptor, &object_buffer_info, 0);
+
+        const set_writes = [_]vk.WriteDescriptorSet{ camera_write, scene_write, object_write };
+        gc.vkd.updateDescriptorSets(gc.dev, 3, &set_writes, 0, undefined);
 
         return FrameData{
             .cmd_pool = cmd_pool,
             .cmd_buffer = cmd_buffer,
             .camera_buffer = camera_buffer,
             .global_descriptor = global_descriptor,
+            .object_buffer = object_buffer,
+            .object_descriptor = object_descriptor,
         };
     }
 
@@ -161,6 +188,7 @@ const FrameData = struct {
         gc.vkd.freeCommandBuffers(gc.dev, self.cmd_pool, 1, @ptrCast([*]vk.CommandBuffer, &self.cmd_buffer));
         gc.vkd.destroyCommandPool(gc.dev, self.cmd_pool, null);
         self.camera_buffer.deinit(gc.allocator);
+        self.object_buffer.deinit(gc.allocator);
     }
 };
 
@@ -215,6 +243,7 @@ pub const EngineChap4 = struct {
     gpu_props: vk.PhysicalDeviceProperties,
     scene_params: GpuSceneData,
     scene_param_buffer: vma.AllocatedBuffer,
+    object_set_layout: vk.DescriptorSetLayout,
 
     pub fn init(app_name: [*:0]const u8) !Self {
         try glfw.init(.{});
@@ -242,7 +271,7 @@ pub const EngineChap4 = struct {
         // create our FrameDatas
         const frames = try gpa.alloc(FrameData, swapchain.swap_images.len);
         errdefer gpa.free(frames);
-        for (frames) |*f| f.* = try FrameData.init(gc, descriptors.layout, descriptors.pool, descriptors.scene_param_buffer);
+        for (frames) |*f| f.* = try FrameData.init(gc, descriptors.layout, descriptors.pool, descriptors.scene_param_buffer, descriptors.object_set_layout);
 
         return Self{
             .allocator = gpa,
@@ -262,6 +291,7 @@ pub const EngineChap4 = struct {
             .gpu_props = gpu_props,
             .scene_params = undefined,
             .scene_param_buffer = descriptors.scene_param_buffer,
+            .object_set_layout = descriptors.object_set_layout,
         };
     }
 
@@ -269,6 +299,7 @@ pub const EngineChap4 = struct {
         try self.swapchain.waitForAllFences();
 
         self.scene_param_buffer.deinit(self.gc.allocator);
+        self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.object_set_layout, null);
         self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.global_set_layout, null);
         self.gc.vkd.destroyDescriptorPool(self.gc.dev, self.descriptor_pool, null);
 
@@ -354,12 +385,12 @@ pub const EngineChap4 = struct {
 
     fn loadMeshes(self: *Self) !void {
         var tri_mesh = Mesh.init(gpa);
-        try tri_mesh.vertices.append(.{ .position = .{ 1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0, 1, 0 } });
-        try tri_mesh.vertices.append(.{ .position = .{ -1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0, 1, 0 } });
-        try tri_mesh.vertices.append(.{ .position = .{ 0, -1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0, 1, 0 } });
+        try tri_mesh.vertices.append(.{ .position = .{ 1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 } });
+        try tri_mesh.vertices.append(.{ .position = .{ -1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 } });
+        try tri_mesh.vertices.append(.{ .position = .{ 0, -1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 } });
 
-        var monkey_mesh = Mesh.initFromObj(gpa, "src/chapters/monkey_smooth.obj");
-        var cube_thing_mesh = Mesh.initFromObj(gpa, "src/chapters/cube_thing.obj");
+        var monkey_mesh = Mesh.initFromObj(gpa, "/Users/desaro/zig-vulkan/" ++ "src/chapters/monkey_smooth.obj");
+        var cube_thing_mesh = Mesh.initFromObj(gpa, "/Users/desaro/zig-vulkan/" ++ "src/chapters/cube_thing.obj");
 
         try uploadMesh(self.gc, &tri_mesh);
         try uploadMesh(self.gc, &monkey_mesh);
@@ -382,9 +413,10 @@ pub const EngineChap4 = struct {
         pip_layout_info.push_constant_range_count = 1;
         pip_layout_info.p_push_constant_ranges = @ptrCast([*]const vk.PushConstantRange, &push_constant);
 
-        // hook the global set layout
-        pip_layout_info.set_layout_count = 1;
-        pip_layout_info.p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &self.global_set_layout);
+        // hook the global set layout and object set layout
+        const set_layouts = [_]vk.DescriptorSetLayout{ self.global_set_layout, self.object_set_layout };
+        pip_layout_info.set_layout_count = 2;
+        pip_layout_info.p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &set_layouts);
 
         const pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
         const pipeline = try createPipeline(self.gc, self.allocator, self.render_pass, pipeline_layout, resources.default_lit_frag);
@@ -512,7 +544,7 @@ pub const EngineChap4 = struct {
 
         // scene params
         const framed = self.frame_num / 120;
-        self.scene_params.ambient_color = Vec4.new(@sin(framed), 1, @cos(framed), 1);
+        self.scene_params.ambient_color = Vec4.new((@sin(framed) + 1) * 0.5, 1, (@cos(framed) + 1) * 0.5, 1);
 
         const frame_index = @floatToInt(usize, self.frame_num) % FRAME_OVERLAP;
         const data_offset = padUniformBufferSize(self.gpu_props, @sizeOf(GpuSceneData)) * frame_index;
@@ -520,10 +552,18 @@ pub const EngineChap4 = struct {
         scene_data_ptr.* = self.scene_params;
         self.gc.allocator.unmapMemory(self.scene_param_buffer.allocation);
 
+        // object SSBO
+        const object_data_ptr = try self.gc.allocator.mapMemory(GpuObjectData, frame.object_buffer.allocation);
+        for (self.renderables.items) |*object, i| {
+            var rot = Mat4.createAngleAxis(.{ .y = 1 }, toRadians(25.0) * self.frame_num * 0.04 + @intToFloat(f32, i));
+            object_data_ptr[i].model = object.transform_matrix.mul(rot);
+        }
+        self.gc.allocator.unmapMemory(frame.object_buffer.allocation);
+
         var last_mesh: *Mesh = @intToPtr(*Mesh, @ptrToInt(&self));
         var last_material: *Material = @intToPtr(*Material, @ptrToInt(&self));
 
-        for (self.renderables.items) |*object| {
+        for (self.renderables.items) |*object, i| {
             // only bind the pipeline if it doesnt match with the already bound one
             if (object.material != last_material) {
                 last_material = object.material;
@@ -534,6 +574,9 @@ pub const EngineChap4 = struct {
 
                 // bind the descriptor set when changing pipeline
                 self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, object.material.pipeline_layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &frame.global_descriptor), 1, @ptrCast([*]const u32, &uniform_offset));
+
+                // bind the object data descriptor
+                self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, object.material.pipeline_layout, 1, 1, @ptrCast([*]const vk.DescriptorSet, &frame.object_descriptor), 0, undefined);
             }
 
             var model = object.transform_matrix;
@@ -553,7 +596,7 @@ pub const EngineChap4 = struct {
                 self.gc.vkd.cmdBindVertexBuffers(cmdbuf, 0, 1, @ptrCast([*]const vk.Buffer, &object.mesh.vert_buffer.buffer), @ptrCast([*]const vk.DeviceSize, &offset));
             }
 
-            self.gc.vkd.cmdDraw(cmdbuf, @intCast(u32, object.mesh.vertices.items.len), 1, 0, 0);
+            self.gc.vkd.cmdDraw(cmdbuf, @intCast(u32, object.mesh.vertices.items.len), 1, 0, @intCast(u32, i));
         }
     }
 };
@@ -763,7 +806,7 @@ fn createBuffer(gc: *const GraphicsContext, size: usize, usage: vk.BufferUsageFl
     return try gc.allocator.createBuffer(&buffer_info, &malloc_info, null);
 }
 
-fn createDescriptors(gc: *const GraphicsContext, gpu_props: vk.PhysicalDeviceProperties) struct { layout: vk.DescriptorSetLayout, pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBuffer } {
+fn createDescriptors(gc: *const GraphicsContext, gpu_props: vk.PhysicalDeviceProperties) struct { layout: vk.DescriptorSetLayout, pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBuffer, object_set_layout: vk.DescriptorSetLayout } {
     // binding for camera data at 0
     const cam_bind = vkinit.descriptorSetLayoutBinding(.uniform_buffer, .{ .vertex_bit = true }, 0);
 
@@ -778,6 +821,15 @@ fn createDescriptors(gc: *const GraphicsContext, gpu_props: vk.PhysicalDevicePro
     };
     var global_set_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &set_info, null) catch unreachable;
 
+    // binding for object data at 0
+    const object_bind = vkinit.descriptorSetLayoutBinding(.storage_buffer, .{ .vertex_bit = true }, 0);
+    const set_info_object = vk.DescriptorSetLayoutCreateInfo{
+        .flags = .{},
+        .binding_count = 1,
+        .p_bindings = @ptrCast([*]const vk.DescriptorSetLayoutBinding, &object_bind),
+    };
+    const object_set_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &set_info_object, null) catch unreachable;
+
     const sizes = [_]vk.DescriptorPoolSize{
         .{
             .@"type" = .uniform_buffer,
@@ -787,11 +839,15 @@ fn createDescriptors(gc: *const GraphicsContext, gpu_props: vk.PhysicalDevicePro
             .@"type" = .uniform_buffer_dynamic,
             .descriptor_count = 10,
         },
+        .{
+            .@"type" = .storage_buffer,
+            .descriptor_count = 10,
+        },
     };
     var descriptor_pool = gc.vkd.createDescriptorPool(gc.dev, &.{
         .flags = .{},
         .max_sets = 10,
-        .pool_size_count = 2,
+        .pool_size_count = 3,
         .p_pool_sizes = &sizes,
     }, null) catch unreachable;
 
@@ -802,6 +858,7 @@ fn createDescriptors(gc: *const GraphicsContext, gpu_props: vk.PhysicalDevicePro
         .layout = global_set_layout,
         .pool = descriptor_pool,
         .scene_param_buffer = scene_param_buffer,
+        .object_set_layout = object_set_layout,
     };
 }
 
