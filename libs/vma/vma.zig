@@ -117,6 +117,119 @@ pub const Allocator = struct {
     }
 };
 
+// manually created types
+pub const MemoryUsage = enum(c_int) {
+    unknown = 0,
+    gpu_only = 1,
+    cpu_only = 2,
+    cpu_to_gpu = 3,
+    gpu_to_cpu = 4,
+    cpu_copy = 5,
+    gpu_lazily_allocated = 6,
+    auto = 7,
+    auto_prefer_device = 8,
+    auto_prefer_host = 9,
+    max_enum = 2147483647,
+};
+// comment line from translate-c generated source below
+// pub const VmaMemoryUsage = enum_VmaMemoryUsage;
+pub const VmaMemoryUsage = MemoryUsage;
+
+
+pub const AllocationCreateFlags = packed struct {
+    dedicated_memory: bool = false,
+    never_allocate: bool = false,
+    mapped: bool = false,
+    __reserved_bits_04: u1 = 0,
+    __reserved_bits_05: u1 = 0,
+    user_data_copy_string: bool = false,
+    upper_address: bool = false,
+    dont_bind: bool = false,
+    within_budget: bool = false,
+    can_alias: bool = false,
+    host_access_sequential_write: bool = false,
+    host_access_random: bool = false,
+    host_access_allow_transfer_instead: bool = false,
+    __reserved_bits_14: u1 = 0,
+    __reserved_bits_15: u1 = 0,
+    __reserved_bits_16: u1 = 0,
+    strategy_min_memory: bool = false,
+    strategy_min_time: bool = false,
+    strategy_min_offset: bool = false,
+    __reserved_bits_20: u1 = 0,
+    __reserved_bits_21: u1 = 0,
+    __reserved_bits_22: u1 = 0,
+    __reserved_bits_23: u1 = 0,
+    __reserved_bits_24: u1 = 0,
+    __reserved_bits_25: u1 = 0,
+    __reserved_bits_26: u1 = 0,
+    __reserved_bits_27: u1 = 0,
+    __reserved_bits_28: u1 = 0,
+    __reserved_bits_29: u1 = 0,
+    __reserved_bits_30: u1 = 0,
+    __reserved_bits_31: u1 = 0,
+    __reserved_bits_32: u1 = 0,
+
+    pub const STRATEGY_BEST_FIT = AllocationCreateFlags{ .strategy_min_memory = true };
+    pub const STRATEGY_FIRST_FIT = AllocationCreateFlags{ .strategy_min_time = true };
+
+    /// A bit mask to extract only `STRATEGY` bits from entire set of flags.
+    pub const STRATEGY_MASK = AllocationCreateFlags{
+        .strategy_min_memory = true,
+        .strategy_min_time = true,
+        .strategy_min_offset = true,
+    };
+
+    pub usingnamespace vk.FlagsMixin(@This(), vk.Flags);
+};
+// comment line from translate-c generated source below
+// pub const VmaAllocationCreateFlags = VkFlags;
+pub const VmaAllocationCreateFlags = AllocationCreateFlags;
+
+
+pub const AllocatorCreateFlags = packed struct {
+    externally_synchronized: bool = false,
+    dedicated_allocation: bool = false,
+    bind_memory2: bool = false,
+    memory_budget: bool = false,
+    device_coherent_memory: bool = false,
+    device_address: bool = false,
+    memory_priority: bool = false,
+    __reserved_bits_8: u1 = 0,
+    __reserved_bits_9: u1 = 0,
+    __reserved_bits_10: u1 = 0,
+    __reserved_bits_11: u1 = 0,
+    __reserved_bits_12: u1 = 0,
+    __reserved_bits_13: u1 = 0,
+    __reserved_bits_14: u1 = 0,
+    __reserved_bits_15: u1 = 0,
+    __reserved_bits_16: u1 = 0,
+    __reserved_bits_17: u1 = 0,
+    __reserved_bits_18: u1 = 0,
+    __reserved_bits_19: u1 = 0,
+    __reserved_bits_20: u1 = 0,
+    __reserved_bits_21: u1 = 0,
+    __reserved_bits_22: u1 = 0,
+    __reserved_bits_23: u1 = 0,
+    __reserved_bits_24: u1 = 0,
+    __reserved_bits_25: u1 = 0,
+    __reserved_bits_26: u1 = 0,
+    __reserved_bits_27: u1 = 0,
+    __reserved_bits_28: u1 = 0,
+    __reserved_bits_29: u1 = 0,
+    __reserved_bits_30: u1 = 0,
+    __reserved_bits_31: u1 = 0,
+    __reserved_bits_32: u1 = 0,
+
+    pub usingnamespace vk.FlagsMixin(@This(), vk.Flags);
+};
+// comment line from translate-c generated source below
+// pub const VmaAllocatorCreateFlags = VkFlags;
+pub const VmaAllocatorCreateFlags = AllocatorCreateFlags;
+
+// end manually created types
+
+
 // manually added translation layer
 const VkFlags = vk.Flags;
 const VkResult = vk.Result;
@@ -162,6 +275,7 @@ const PFN_vkDestroyImage = vk.PfnDestroyImage;
 const PFN_vkCmdCopyBuffer = vk.PfnCmdCopyBuffer;
 // end translation layer
 
+
 pub const VMA_ALLOCATOR_CREATE_EXTERNALLY_SYNCHRONIZED_BIT: c_int = 1;
 pub const VMA_ALLOCATOR_CREATE_KHR_DEDICATED_ALLOCATION_BIT: c_int = 2;
 pub const VMA_ALLOCATOR_CREATE_KHR_BIND_MEMORY2_BIT: c_int = 4;
@@ -172,7 +286,7 @@ pub const VMA_ALLOCATOR_CREATE_EXT_MEMORY_PRIORITY_BIT: c_int = 64;
 pub const VMA_ALLOCATOR_CREATE_FLAG_BITS_MAX_ENUM: c_int = 2147483647;
 pub const enum_VmaAllocatorCreateFlagBits = c_uint;
 pub const VmaAllocatorCreateFlagBits = enum_VmaAllocatorCreateFlagBits;
-pub const VmaAllocatorCreateFlags = VkFlags;
+// pub const VmaAllocatorCreateFlags = VkFlags;
 pub const VMA_MEMORY_USAGE_UNKNOWN: c_int = 0;
 pub const VMA_MEMORY_USAGE_GPU_ONLY: c_int = 1;
 pub const VMA_MEMORY_USAGE_CPU_ONLY: c_int = 2;
@@ -185,7 +299,7 @@ pub const VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE: c_int = 8;
 pub const VMA_MEMORY_USAGE_AUTO_PREFER_HOST: c_int = 9;
 pub const VMA_MEMORY_USAGE_MAX_ENUM: c_int = 2147483647;
 pub const enum_VmaMemoryUsage = c_uint;
-pub const VmaMemoryUsage = enum_VmaMemoryUsage;
+// pub const VmaMemoryUsage = enum_VmaMemoryUsage;
 pub const VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT: c_int = 1;
 pub const VMA_ALLOCATION_CREATE_NEVER_ALLOCATE_BIT: c_int = 2;
 pub const VMA_ALLOCATION_CREATE_MAPPED_BIT: c_int = 4;
@@ -206,7 +320,7 @@ pub const VMA_ALLOCATION_CREATE_STRATEGY_MASK: c_int = 458752;
 pub const VMA_ALLOCATION_CREATE_FLAG_BITS_MAX_ENUM: c_int = 2147483647;
 pub const enum_VmaAllocationCreateFlagBits = c_uint;
 pub const VmaAllocationCreateFlagBits = enum_VmaAllocationCreateFlagBits;
-pub const VmaAllocationCreateFlags = VkFlags;
+// pub const VmaAllocationCreateFlags = VkFlags;
 pub const VMA_POOL_CREATE_IGNORE_BUFFER_IMAGE_GRANULARITY_BIT: c_int = 2;
 pub const VMA_POOL_CREATE_LINEAR_ALGORITHM_BIT: c_int = 4;
 pub const VMA_POOL_CREATE_ALGORITHM_MASK: c_int = 4;

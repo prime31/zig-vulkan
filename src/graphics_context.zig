@@ -96,6 +96,7 @@ pub const GraphicsContext = struct {
 
         // initialize the memory allocator
         var allocator_info = std.mem.zeroInit(vma.VmaAllocatorCreateInfo, .{
+            .flags = .{},
             .physicalDevice = self.pdev,
             .device = self.dev,
             .pVulkanFunctions = &dispatch.getVmaVulkanFunction(self.vki, self.vkd),

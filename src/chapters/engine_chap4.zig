@@ -122,7 +122,7 @@ const FrameData = struct {
         }, @ptrCast([*]vk.CommandBuffer, &cmd_buffer));
 
         // descriptor set setup
-        var camera_buffer = try createBuffer(gc, @sizeOf(GpuCameraData), .{ .uniform_buffer_bit = true }, vma.VMA_MEMORY_USAGE_CPU_TO_GPU);
+        var camera_buffer = try createBuffer(gc, @sizeOf(GpuCameraData), .{ .uniform_buffer_bit = true }, .cpu_to_gpu);
 
         var global_descriptor: vk.DescriptorSet = undefined;
         try gc.vkd.allocateDescriptorSets(gc.dev, &.{
@@ -658,10 +658,11 @@ fn createDepthImage(gc: *const GraphicsContext, swapchain: Swapchain) !vma.Alloc
     const dimg_info = vkinit.imageCreateInfo(depth_format, depth_extent, .{ .depth_stencil_attachment_bit = true });
 
     // we want to allocate it from GPU local memory
-    const mem_prop_bits = vk.MemoryPropertyFlags{ .device_local_bit = true };
+    // const mem_prop_bits = vk.MemoryPropertyFlags{ .device_local_bit = true };
     var vma_malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
-        .usage = vma.VMA_MEMORY_USAGE_GPU_ONLY,
-        .flags = mem_prop_bits.toInt(),
+        .flags = .{},
+        .usage = .gpu_only,
+        .requiredFlags = .{ .device_local_bit = true },
     });
     var depth_image = try gc.allocator.createImage(&dimg_info, &vma_malloc_info, null);
 
@@ -795,7 +796,7 @@ fn createDescriptors(gc: *const GraphicsContext, gpu_props: vk.PhysicalDevicePro
     }, null) catch unreachable;
 
     const scene_param_buffer_size = FRAME_OVERLAP * padUniformBufferSize(gpu_props, @sizeOf(GpuSceneData));
-    const scene_param_buffer = createBuffer(gc, scene_param_buffer_size, .{ .uniform_buffer_bit = true }, vma.VMA_MEMORY_USAGE_CPU_TO_GPU) catch unreachable;
+    const scene_param_buffer = createBuffer(gc, scene_param_buffer_size, .{ .uniform_buffer_bit = true }, .cpu_to_gpu) catch unreachable;
 
     return .{
         .layout = global_set_layout,
@@ -813,10 +814,11 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
     });
 
     // let the VMA library know that this data should be writeable by CPU, but also readable by GPU
-    var malloc_info = std.mem.zeroes(vma.VmaAllocationCreateInfo);
-    malloc_info.usage = vma.VMA_MEMORY_USAGE_AUTO_PREFER_DEVICE;
-    malloc_info.requiredFlags = .{ .host_visible_bit = true, .host_coherent_bit = true };
-    malloc_info.flags = vma.VMA_ALLOCATION_CREATE_DEDICATED_MEMORY_BIT | vma.VMA_ALLOCATION_CREATE_HOST_ACCESS_SEQUENTIAL_WRITE_BIT;
+    var malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
+        .flags = .{ .dedicated_memory = true, .host_access_sequential_write = true },
+        .usage = .auto_prefer_device,
+        .requiredFlags = .{ .host_visible_bit = true, .host_coherent_bit = true },
+    });
 
     // allocate the buffer
     mesh.vert_buffer = try gc.allocator.createBuffer(&buffer_info, &malloc_info, null);
