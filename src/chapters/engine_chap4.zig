@@ -544,7 +544,7 @@ pub const EngineChap4 = struct {
 
         // scene params
         const framed = self.frame_num / 120;
-        self.scene_params.ambient_color = Vec4.new((@sin(framed) + 1) * 0.5, 1, (@cos(framed) + 1) * 0.5, 1);
+        self.scene_params.ambient_color = Vec4.new((std.math.sin(framed) + 1) * 0.5, 1, (std.math.cos(framed) + 1) * 0.5, 1);
 
         const frame_index = @floatToInt(usize, self.frame_num) % FRAME_OVERLAP;
         const data_offset = padUniformBufferSize(self.gpu_props, @sizeOf(GpuSceneData)) * frame_index;
