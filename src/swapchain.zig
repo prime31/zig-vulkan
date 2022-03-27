@@ -108,15 +108,16 @@ pub const Swapchain = struct {
     /// waits for the current SwapImage's fence and acquires the next. Call this before filling CommandBuffers. A suboptimal return value
     /// indidates that framebuffers and the SwapChain need to be recreated.
     pub fn waitForFrame(self: *Swapchain) !PresentState {
-        const sync_structs = self.currentFrameSyncStructure();
-        try sync_structs.waitForFence(self.gc);
+        const sync_struct = self.currentFrameSyncStructure();
+        try sync_struct.waitForFence(self.gc);
+        try self.gc.vkd.resetFences(self.gc.dev, 1, @ptrCast([*]const vk.Fence, &sync_struct.render_fence));
 
         // Step 4: Acquire next frame
         const result = try self.gc.vkd.acquireNextImageKHR(
             self.gc.dev,
             self.handle,
             std.math.maxInt(u64),
-            sync_structs.present_semaphore,
+            sync_struct.present_semaphore,
             .null_handle,
         );
         self.image_index = result.image_index;
@@ -230,7 +231,6 @@ const FrameSyncStructure = struct {
 
     fn waitForFence(self: FrameSyncStructure, gc: *const GraphicsContext) !void {
         _ = try gc.vkd.waitForFences(gc.dev, 1, @ptrCast([*]const vk.Fence, &self.render_fence), vk.TRUE, std.math.maxInt(u64));
-        try gc.vkd.resetFences(gc.dev, 1, @ptrCast([*]const vk.Fence, &self.render_fence));
     }
 };
 

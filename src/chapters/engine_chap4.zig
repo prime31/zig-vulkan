@@ -364,7 +364,7 @@ pub const EngineChap4 = struct {
 
             // TODO: why does this have to be after present?
             if (state == .suboptimal) {
-                try self.gc.vkd.deviceWaitIdle(self.gc.dev);
+                try self.swapchain.waitForAllFences();
 
                 const size = try self.window.getSize();
                 var extent = vk.Extent2D{ .width = size.width, .height = size.height };
