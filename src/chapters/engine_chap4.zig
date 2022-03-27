@@ -296,7 +296,7 @@ pub const EngineChap4 = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        try self.swapchain.waitForAllFences();
+        self.gc.vkd.deviceWaitIdle(self.gc.dev) catch return;
 
         self.scene_param_buffer.deinit(self.gc.allocator);
         self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.object_set_layout, null);
@@ -352,18 +352,19 @@ pub const EngineChap4 = struct {
             self.camera.update(self.dt);
 
             // wait for the last frame to complete before filling our CommandBuffer
-            try self.swapchain.waitForFrame();
-
-            const frame = self.frames[self.swapchain.image_index];
-            try self.draw(self.framebuffers[self.swapchain.image_index], frame);
-
-            const state = self.swapchain.present(frame.cmd_buffer) catch |err| switch (err) {
+            const state = self.swapchain.waitForFrame() catch |err| switch (err) {
                 error.OutOfDateKHR => Swapchain.PresentState.suboptimal,
                 else => |narrow| return narrow,
             };
 
+            const frame = self.frames[self.swapchain.frame_index % self.swapchain.swap_images.len];
+            try self.draw(self.framebuffers[self.swapchain.image_index], frame);
+
+            try self.swapchain.present(frame.cmd_buffer);
+
+            // TODO: why does this have to be after present?
             if (state == .suboptimal) {
-                try self.swapchain.waitForAllFences();
+                try self.gc.vkd.deviceWaitIdle(self.gc.dev);
 
                 const size = try self.window.getSize();
                 var extent = vk.Extent2D{ .width = size.width, .height = size.height };
