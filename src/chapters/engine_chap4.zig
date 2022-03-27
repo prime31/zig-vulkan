@@ -95,11 +95,11 @@ const GpuCameraData = struct {
 };
 
 const GpuSceneData = struct {
-    fog_color: Vec4,
-    fog_distance: Vec4,
-    ambient_color: Vec4,
-    sun_dir: Vec4,
-    sun_color: Vec4,
+    fog_color: Vec4 = Vec4.new(1, 0, 0, 1),
+    fog_distance: Vec4 = Vec4.new(1, 0, 0, 1),
+    ambient_color: Vec4 = Vec4.new(1, 0, 0, 1),
+    sun_dir: Vec4 = Vec4.new(1, 0, 0, 1),
+    sun_color: Vec4 = Vec4.new(1, 0, 0, 1),
 };
 
 const GpuObjectData = struct {
@@ -289,7 +289,7 @@ pub const EngineChap4 = struct {
             .global_set_layout = descriptors.layout,
             .descriptor_pool = descriptors.pool,
             .gpu_props = gpu_props,
-            .scene_params = undefined,
+            .scene_params = .{},
             .scene_param_buffer = descriptors.scene_param_buffer,
             .object_set_layout = descriptors.object_set_layout,
         };
@@ -390,8 +390,8 @@ pub const EngineChap4 = struct {
         try tri_mesh.vertices.append(.{ .position = .{ -1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 } });
         try tri_mesh.vertices.append(.{ .position = .{ 0, -1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 } });
 
-        var monkey_mesh = Mesh.initFromObj(gpa, "/Users/desaro/zig-vulkan/" ++ "src/chapters/monkey_smooth.obj");
-        var cube_thing_mesh = Mesh.initFromObj(gpa, "/Users/desaro/zig-vulkan/" ++ "src/chapters/cube_thing.obj");
+        var monkey_mesh = Mesh.initFromObj(gpa, "src/chapters/monkey_flat.obj");
+        var cube_thing_mesh = Mesh.initFromObj(gpa, "src/chapters/cube_thing.obj");
 
         try uploadMesh(self.gc, &tri_mesh);
         try uploadMesh(self.gc, &monkey_mesh);
@@ -449,7 +449,7 @@ pub const EngineChap4 = struct {
             var y: f32 = 0;
             while (y < 20) : (y += 1) {
                 var matrix = Mat4.createTranslation(.{ .x = x, .y = 0, .z = y });
-                var scale_matrix = Mat4.createScale(.{ .x = 0.2, .y = 0.2, .z = 0.2 });
+                var scale_matrix = Mat4.createScale(.{ .x = 0.4, .y = 0.4, .z = 0.4 });
 
                 const mesh_material = if (@mod(x, 2) == 0) self.materials.getPtr("defaultmesh").? else self.materials.getPtr("redmesh").?;
                 const mesh = if (@mod(x, 2) == 0 and @mod(x, 6) == 0) self.meshes.getPtr("cube_thing").? else self.meshes.getPtr("triangle").?;
@@ -461,8 +461,16 @@ pub const EngineChap4 = struct {
                 try self.renderables.append(object);
 
                 matrix = Mat4.createTranslation(.{ .x = x, .y = 0.8, .z = y });
-                scale_matrix = Mat4.createScale(.{ .x = 0.1, .y = 0.1, .z = 0.1 });
+                scale_matrix = Mat4.createScale(.{ .x = 0.2, .y = 0.2, .z = 0.2 });
 
+                object = RenderObject{
+                    .mesh = mesh,
+                    .material = mesh_material,
+                    .transform_matrix = Mat4.mul(matrix, scale_matrix),
+                };
+                try self.renderables.append(object);
+
+                matrix = Mat4.createTranslation(.{ .x = x, .y = -0.8, .z = y });
                 object = RenderObject{
                     .mesh = mesh,
                     .material = mesh_material,
@@ -544,7 +552,7 @@ pub const EngineChap4 = struct {
         self.gc.allocator.unmapMemory(frame.camera_buffer.allocation);
 
         // scene params
-        const framed = self.frame_num / 120;
+        const framed = self.frame_num / 12;
         self.scene_params.ambient_color = Vec4.new((std.math.sin(framed) + 1) * 0.5, 1, (std.math.cos(framed) + 1) * 0.5, 1);
 
         const frame_index = @floatToInt(usize, self.frame_num) % FRAME_OVERLAP;
