@@ -807,9 +807,18 @@ fn createBuffer(gc: *const GraphicsContext, size: usize, usage: vk.BufferUsageFl
         .usage = usage,
     });
 
-    // TODO: HACK: upper_address/dedicated_memory partially fixes the alignment/flickering/bad-buffer-data issue.
+    const alloc_flags = blk: {
+        // TODO: HACK: upper_address/dedicated_memory partially fixes the alignment/flickering/bad-buffer-data issue.
+        var flags = vma.AllocationCreateFlags{ .upper_address = true };
+
+        // for `auto*` `memory_usage` flags must include one of `host_access_sequential_write/random` flags
+        if (memory_usage == .auto or memory_usage == .auto_prefer_device or memory_usage == .auto_prefer_host)
+            flags = flags.merge(.{ .host_access_sequential_write = true });
+        break :blk flags;
+    };
+
     const malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
-        .flags = .{ .upper_address = true }, // for `auto*` `memory_usage` flags must include one of `host_access_sequential_write/random` flags
+        .flags = alloc_flags,
         .usage = memory_usage,
         .requiredFlags = .{ .host_visible_bit = true, .host_coherent_bit = true },
     });
@@ -874,25 +883,8 @@ fn createDescriptors(gc: *const GraphicsContext, gpu_props: vk.PhysicalDevicePro
 }
 
 fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
-    // allocate vertex buffer
-    var buffer_info = std.mem.zeroInit(vk.BufferCreateInfo, .{
-        .flags = .{},
-        .size = mesh.vertices.items.len * @sizeOf(Vertex),
-        .usage = .{ .vertex_buffer_bit = true, .transfer_dst_bit = true },
-    });
-
-    // let the VMA library know that this data should be writeable by CPU, but also readable by GPU
-    var malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
-        .flags = .{ .dedicated_memory = true, .host_access_sequential_write = true },
-        .usage = .auto_prefer_device,
-        .requiredFlags = .{ .host_visible_bit = true, .host_coherent_bit = true },
-    });
-
-    // allocate the buffer
-    mesh.vert_buffer = try gc.allocator.createBuffer(&buffer_info, &malloc_info, null);
-
-    // copy vertex data
-    var gpu_vertices = try gc.allocator.mapMemory(Vertex, mesh.vert_buffer.allocation);
-    std.mem.copy(Vertex, gpu_vertices[0..mesh.vertices.items.len], mesh.vertices.items);
+    mesh.vert_buffer = try createBuffer(gc, mesh.vertices.items.len * @sizeOf(Vertex), .{ .vertex_buffer_bit = true }, .auto_prefer_device);
+    const verts = try gc.allocator.mapMemory(Vertex, mesh.vert_buffer.allocation);
+    std.mem.copy(Vertex, verts[0..mesh.vertices.items.len], mesh.vertices.items);
     gc.allocator.unmapMemory(mesh.vert_buffer.allocation);
 }
