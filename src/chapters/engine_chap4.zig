@@ -807,7 +807,9 @@ fn createBuffer(gc: *const GraphicsContext, size: usize, usage: vk.BufferUsageFl
         .usage = usage,
     });
 
+    // TODO: HACK: upper_address/dedicated_memory partially fixes the alignment/flickering/bad-buffer-data issue.
     const malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
+        .flags = .{ .upper_address = true }, // for `auto*` `memory_usage` flags must include one of `host_access_sequential_write/random` flags
         .usage = memory_usage,
         .requiredFlags = .{ .host_visible_bit = true, .host_coherent_bit = true },
     });
