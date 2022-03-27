@@ -102,6 +102,21 @@ pub const Allocator = struct {
         };
     }
 
+    pub fn mapMemoryAtOffset(self: Allocator, comptime T: type, allocation: VmaAllocation, offset: usize) ![*]T {
+        var pp_data: ?*anyopaque = undefined;
+        const res = vmaMapMemory(self.allocator, allocation, @ptrCast([*c]?*anyopaque, &pp_data));
+        if (res == vk.Result.success) {
+            const pp_data_at_offset = @ptrCast([*]u8, pp_data) + offset;
+            return @ptrCast([*]T, @alignCast(@alignOf(T), pp_data_at_offset));
+        }
+        return switch (res) {
+            .error_out_of_host_memory => error.out_of_host_memory,
+            .error_out_of_device_memory => error.out_of_device_memory,
+            .error_memory_map_failed => error.memory_map_failed,
+            else => error.undocumented_error,
+        };
+    }
+
     pub fn unmapMemory(self: Allocator, allocation: VmaAllocation) void {
         vmaUnmapMemory(self.allocator, allocation);
     }

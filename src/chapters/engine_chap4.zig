@@ -557,7 +557,7 @@ pub const EngineChap4 = struct {
 
         const frame_index = @floatToInt(usize, self.frame_num) % FRAME_OVERLAP;
         const data_offset = padUniformBufferSize(self.gpu_props, @sizeOf(GpuSceneData)) * frame_index;
-        const scene_data_ptr = (try self.gc.allocator.mapMemory(GpuSceneData, self.scene_param_buffer.allocation)) + data_offset;
+        const scene_data_ptr = (try self.gc.allocator.mapMemoryAtOffset(GpuSceneData, self.scene_param_buffer.allocation, data_offset));
         scene_data_ptr.* = self.scene_params;
         self.gc.allocator.unmapMemory(self.scene_param_buffer.allocation);
 
@@ -710,13 +710,12 @@ fn createDepthImage(gc: *const GraphicsContext, swapchain: Swapchain) !vma.Alloc
     const dimg_info = vkinit.imageCreateInfo(depth_format, depth_extent, .{ .depth_stencil_attachment_bit = true });
 
     // we want to allocate it from GPU local memory
-    // const mem_prop_bits = vk.MemoryPropertyFlags{ .device_local_bit = true };
-    var vma_malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
+    var malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
         .flags = .{},
         .usage = .gpu_only,
         .requiredFlags = .{ .device_local_bit = true },
     });
-    var depth_image = try gc.allocator.createImage(&dimg_info, &vma_malloc_info, null);
+    var depth_image = try gc.allocator.createImage(&dimg_info, &malloc_info, null);
 
     const dview_info = vkinit.imageViewCreateInfo(depth_format, depth_image.image, .{ .depth_bit = true });
     depth_image.view = try gc.vkd.createImageView(gc.dev, &dview_info, null);
@@ -807,14 +806,11 @@ fn createBuffer(gc: *const GraphicsContext, size: usize, usage: vk.BufferUsageFl
         .usage = usage,
     });
 
-    const alloc_flags = blk: {
-        // TODO: HACK: upper_address/dedicated_memory partially fixes the alignment/flickering/bad-buffer-data issue.
-        var flags = vma.AllocationCreateFlags{ .upper_address = true };
-
-        // for `auto*` `memory_usage` flags must include one of `host_access_sequential_write/random` flags
+    const alloc_flags: vma.AllocationCreateFlags = blk: {
+        // for `auto*` `memory_usage` flags must include one of `host_access_sequential_write/host_access_random` flags. We prefer sequential here.
         if (memory_usage == .auto or memory_usage == .auto_prefer_device or memory_usage == .auto_prefer_host)
-            flags = flags.merge(.{ .host_access_sequential_write = true });
-        break :blk flags;
+            break :blk .{ .host_access_sequential_write = true };
+        break :blk .{};
     };
 
     const malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
