@@ -76,6 +76,7 @@ pub const DeviceDispatch = vk.DeviceWrapper(.{
     .queuePresentKHR = true,
     .createCommandPool = true,
     .destroyCommandPool = true,
+    .resetCommandPool = true,
     .allocateCommandBuffers = true,
     .freeCommandBuffers = true,
     .queueWaitIdle = true,

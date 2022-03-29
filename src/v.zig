@@ -14,3 +14,4 @@ pub usingnamespace @import("chapters/engine_chap2.zig");
 pub usingnamespace @import("chapters/engine_chap3.zig");
 pub usingnamespace @import("chapters/engine_chap3s.zig");
 pub usingnamespace @import("chapters/engine_chap4.zig");
+pub usingnamespace @import("chapters/engine_chap5.zig");

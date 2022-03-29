@@ -23,22 +23,17 @@ pub fn commandPoolCreateInfo(queue_family_index: u32, flags: vk.CommandPoolCreat
 // 	return info;
 // }
 
-// VkSubmitInfo vkinit::submit_info(VkCommandBuffer* cmd)
-// {
-// 	VkSubmitInfo info = {};
-// 	info.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-// 	info.pNext = nullptr;
-
-// 	info.waitSemaphoreCount = 0;
-// 	info.pWaitSemaphores = nullptr;
-// 	info.pWaitDstStageMask = nullptr;
-// 	info.commandBufferCount = 1;
-// 	info.pCommandBuffers = cmd;
-// 	info.signalSemaphoreCount = 0;
-// 	info.pSignalSemaphores = nullptr;
-
-// 	return info;
-// }
+pub fn submitInfo(cmd_buffer: *const vk.CommandBuffer) vk.SubmitInfo {
+    return .{
+        .wait_semaphore_count = 0,
+        .p_wait_semaphores = undefined,
+        .p_wait_dst_stage_mask = undefined,
+        .command_buffer_count = 1,
+        .p_command_buffers = @ptrCast([*]const vk.CommandBuffer, cmd_buffer),
+        .signal_semaphore_count = 0,
+        .p_signal_semaphores = undefined,
+    };
+}
 
 // VkPresentInfoKHR vkinit::present_info()
 // {
