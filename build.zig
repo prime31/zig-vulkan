@@ -99,6 +99,11 @@ const vma_pkg = std.build.Pkg{
     .dependencies = &[_]std.build.Pkg{vulkan_pkg},
 };
 
+const stb_pkg = stb_build.getPackage("");
+
+// builders
+const stb_build = @import("libs/stb/build.zig");
+
 const vk_sdk_root = "/Users/mikedesaro/VulkanSDK/1.3.204.1/macOS";
 
 pub fn build(b: *Builder) void {
@@ -121,6 +126,7 @@ pub fn build(b: *Builder) void {
         // packages
         exe.addPackage(vulkan_pkg);
         exe.addPackage(resources_pkg);
+        exe.addPackage(stb_pkg);
 
         // mach-glfw
         exe.addPackage(glfw_pkg);
@@ -129,12 +135,13 @@ pub fn build(b: *Builder) void {
         exe.addPackage(.{
             .name = "vengine",
             .path = .{ .path = "src/v.zig" },
-            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobjloader_pkg, vma_pkg },
+            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobjloader_pkg, vma_pkg, stb_pkg },
         });
 
         // vulken-mem
         linkVulkanMemoryAllocator(exe, vk_sdk_root);
         linkTinyObjLoader(exe);
+        stb_build.linkArtifact(exe, "");
 
         const run_cmd = exe.run();
         run_cmd.step.dependOn(b.getInstallStep());
@@ -157,9 +164,18 @@ pub fn build(b: *Builder) void {
     // tests
     const exe_tests = b.addTest("src/tests.zig");
     glfw.link(b, exe_tests, .{});
+    linkVulkanMemoryAllocator(exe_tests, vk_sdk_root);
+    linkTinyObjLoader(exe_tests);
+    stb_build.linkArtifact(exe_tests, "");
 
     exe_tests.addPackage(vulkan_pkg);
     exe_tests.addPackage(glfw_pkg);
+    exe_tests.addPackage(.{
+        .name = "vengine",
+        .path = .{ .path = "src/v.zig" },
+        .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobjloader_pkg, vma_pkg },
+    });
+
     exe_tests.setTarget(target);
     exe_tests.setBuildMode(b.standardReleaseOptions());
 
