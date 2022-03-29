@@ -24,6 +24,7 @@ pub const GraphicsContext = struct {
     pdev: vk.PhysicalDevice,
     props: vk.PhysicalDeviceProperties,
     mem_props: vk.PhysicalDeviceMemoryProperties,
+    gpu_props: vk.PhysicalDeviceProperties,
 
     dev: vk.Device,
     graphics_queue: Queue,
@@ -93,6 +94,7 @@ pub const GraphicsContext = struct {
         self.present_queue = Queue.init(self.vkd, self.dev, candidate.queues.present_family);
 
         self.mem_props = self.vki.getPhysicalDeviceMemoryProperties(self.pdev);
+        self.gpu_props = self.vki.getPhysicalDeviceProperties(self.pdev);
 
         // initialize the memory allocator
         var allocator_info = std.mem.zeroInit(vma.VmaAllocatorCreateInfo, .{

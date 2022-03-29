@@ -304,7 +304,6 @@ pub const EngineChap5 = struct {
     camera: FlyCamera,
     global_set_layout: vk.DescriptorSetLayout,
     descriptor_pool: vk.DescriptorPool,
-    gpu_props: vk.PhysicalDeviceProperties,
     scene_params: GpuSceneData,
     scene_param_buffer: vma.AllocatedBuffer,
     object_set_layout: vk.DescriptorSetLayout,
@@ -330,8 +329,7 @@ pub const EngineChap5 = struct {
         const framebuffers = try createFramebuffers(gc, gpa, render_pass, swapchain, depth_image.view);
 
         // descriptors
-        const gpu_props = gc.vki.getPhysicalDeviceProperties(gc.pdev);
-        const descriptors = createDescriptors(gc, gpu_props);
+        const descriptors = createDescriptors(gc);
 
         // create our FrameDatas
         const frames = try gpa.alloc(FrameData, swapchain.swap_images.len);
@@ -354,7 +352,6 @@ pub const EngineChap5 = struct {
             .camera = FlyCamera.init(window),
             .global_set_layout = descriptors.layout,
             .descriptor_pool = descriptors.pool,
-            .gpu_props = gpu_props,
             .scene_params = .{},
             .scene_param_buffer = descriptors.scene_param_buffer,
             .object_set_layout = descriptors.object_set_layout,
@@ -396,7 +393,7 @@ pub const EngineChap5 = struct {
         self.materials.deinit();
 
         self.gc.vkd.destroyRenderPass(self.gc.dev, self.render_pass, null);
-        
+
         self.swapchain.deinit();
         self.gc.deinit();
         self.allocator.destroy(self.gc);
@@ -619,7 +616,7 @@ pub const EngineChap5 = struct {
         self.scene_params.ambient_color = Vec4.new((std.math.sin(framed) + 1) * 0.5, 1, (std.math.cos(framed) + 1) * 0.5, 1);
 
         const frame_index = @floatToInt(usize, self.frame_num) % FRAME_OVERLAP;
-        const data_offset = padUniformBufferSize(self.gpu_props, @sizeOf(GpuSceneData)) * frame_index;
+        const data_offset = padUniformBufferSize(self.gc, @sizeOf(GpuSceneData)) * frame_index;
         const scene_data_ptr = (try self.gc.allocator.mapMemoryAtOffset(GpuSceneData, self.scene_param_buffer.allocation, data_offset));
         scene_data_ptr.* = self.scene_params;
         self.gc.allocator.unmapMemory(self.scene_param_buffer.allocation);
@@ -642,7 +639,7 @@ pub const EngineChap5 = struct {
                 self.gc.vkd.cmdBindPipeline(cmdbuf, .graphics, object.material.pipeline);
 
                 // offset for our scene buffer
-                const uniform_offset = padUniformBufferSize(self.gpu_props, @sizeOf(GpuSceneData)) * frame_index;
+                const uniform_offset = padUniformBufferSize(self.gc, @sizeOf(GpuSceneData)) * frame_index;
 
                 // bind the descriptor set when changing pipeline
                 self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, object.material.pipeline_layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &frame.global_descriptor), 1, @ptrCast([*]const u32, &uniform_offset));
@@ -849,8 +846,8 @@ fn createPipeline(
     return try builder.build(gc, render_pass);
 }
 
-fn padUniformBufferSize(gpu_props: vk.PhysicalDeviceProperties, size: usize) usize {
-    const min_ubo_alignment = gpu_props.limits.min_uniform_buffer_offset_alignment;
+fn padUniformBufferSize(gc: *const GraphicsContext, size: usize) usize {
+    const min_ubo_alignment = gc.gpu_props.limits.min_uniform_buffer_offset_alignment;
     var aligned_size = size;
     if (min_ubo_alignment > 0)
         aligned_size = (aligned_size + min_ubo_alignment - 1) & ~(min_ubo_alignment - 1);
@@ -880,7 +877,7 @@ fn createBuffer(gc: *const GraphicsContext, size: usize, usage: vk.BufferUsageFl
     return try gc.allocator.createBuffer(&buffer_info, &malloc_info, null);
 }
 
-fn createDescriptors(gc: *const GraphicsContext, gpu_props: vk.PhysicalDeviceProperties) struct { layout: vk.DescriptorSetLayout, pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBuffer, object_set_layout: vk.DescriptorSetLayout } {
+fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorSetLayout, pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBuffer, object_set_layout: vk.DescriptorSetLayout } {
     // binding for camera data at 0
     const cam_bind = vkinit.descriptorSetLayoutBinding(.uniform_buffer, .{ .vertex_bit = true }, 0);
 
@@ -925,7 +922,7 @@ fn createDescriptors(gc: *const GraphicsContext, gpu_props: vk.PhysicalDevicePro
         .p_pool_sizes = &sizes,
     }, null) catch unreachable;
 
-    const scene_param_buffer_size = FRAME_OVERLAP * padUniformBufferSize(gpu_props, @sizeOf(GpuSceneData));
+    const scene_param_buffer_size = FRAME_OVERLAP * padUniformBufferSize(gc, @sizeOf(GpuSceneData));
     const scene_param_buffer = createBuffer(gc, scene_param_buffer_size, .{ .uniform_buffer_bit = true }, .cpu_to_gpu) catch unreachable;
 
     return .{
