@@ -1,4 +1,5 @@
 const std = @import("std");
+const stb = @import("stb");
 const vk = @import("vulkan");
 const vma = @import("vma");
 const resources = @import("resources");
@@ -940,4 +941,76 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh, upload_context: UploadCon
     };
     gc.vkd.cmdCopyBuffer(upload_context.cmd_buf, staging_buffer.buffer, mesh.vert_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &copy_region));
     try upload_context.immediateSubmitEnd(gc);
+}
+
+fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: []const u8, upload_context: UploadContext) !vma.AllocatedImage {
+    const img = try stb.loadFromFile(allocator, file);
+    defer img.deinit();
+
+    // allocate temporary buffer for holding texture data to upload and copy image data to it
+    const staging_buffer = try createBuffer(gc, img.pixels.len, .{ .transfer_src_bit = true }, .cpu_only);
+    const data = try gc.allocator.mapMemory(u8, staging_buffer.allocation);
+    std.mem.copy(u8, data, img.pixels);
+    gc.allocator.unmapMemory(gc.allocator);
+
+    const img_extent = vk.Extent3D{
+        .width = @intCast(u32, img.w),
+        .height = @intCast(u32, img.h),
+        .depth = 1,
+    };
+    const dimg_info = vkinit.imageCreateInfo(vk.Format.r8g8b8a8_srgb, img_extent, .{ .sampled_bit = true, .transfer_dst_bit = true });
+    const malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
+        .usage = .gpu_only,
+    });
+    const new_img = try gc.allocator.createImage(&dimg_info, &malloc_info, null);
+
+    try upload_context.immediateSubmitBegin(gc);
+    {
+        // barrier the image into the transfer-receive layout
+        const range = vk.ImageSubresourceRange{
+            .aspect_mask = .{ .color_bit = true },
+            .base_mip_level = 0,
+            .level_count = 1,
+            .base_array_layer = 0,
+            .layer_count = 1,
+        };
+        const img_barrier_to_transfer = std.mem.zeroes(vk.ImageMemoryBarrier, .{
+            .old_layout = .@"undefined",
+            .new_layout = .transfer_dst_optimal,
+            .dst_access_mask = .{ .transfer_write_bit = true },
+            .image = new_img.image,
+            .subresource_range = range,
+        });
+
+        gc.vkd.cmdPipelineBarrier(upload_context.cmd_buf, .{ .top_of_pipe_bit = true }, .{ .stage_transfer_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &img_barrier_to_transfer));
+
+        const copy_region = vk.BufferImageCopy{
+            .buffer_offset = 0,
+            .buffer_row_length = 0,
+            .buffer_image_height = 0,
+            .image_subresource = .{
+                .aspect_mask = .{ .color_bit = true },
+                .mip_level = 0,
+                .base_array_layer = 0,
+                .layer_count = 1,
+            },
+            .image_extent = img_extent,
+        };
+        gc.vkd.cmdCopyBufferToImage(upload_context.cmd_buf, staging_buffer.buffer, new_img.image, .transfer_dst_optimal, 1, @ptrCast([*]const vk.BufferImageCopy, &copy_region));
+
+        // barrier the image into the shader readable layout
+        const img_barrier_to_readable = std.mem.zeroes(vk.ImageMemoryBarrier, .{
+            .old_layout = .transfer_dst_optimal,
+            .new_layout = .shader_read_only_optimal,
+            .src_access_mask = .{ .transfer_write_bit = true },
+            .dst_access_mask = .{ .shader_read_bit = true },
+            .image = new_img.image,
+            .subresource_range = range,
+        });
+        gc.vkd.cmdPipelineBarrier(upload_context.cmd_buf, .{ .transfer_bit = true }, .{ .fragment_shader_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &img_barrier_to_readable));
+    }
+    try upload_context.immediateSubmitEnd(gc);
+
+    staging_buffer.deinit(gc.allocator);
+    return new_img;
 }
