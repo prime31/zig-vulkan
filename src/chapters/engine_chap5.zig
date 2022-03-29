@@ -407,6 +407,7 @@ pub const EngineChap5 = struct {
     }
 
     pub fn loadContent(self: *Self) !void {
+        try self.loadImages();
         try self.loadMeshes();
         try self.initPipelines();
         try self.initScene();
@@ -450,6 +451,16 @@ pub const EngineChap5 = struct {
             self.frame_num += 1;
             try glfw.pollEvents();
         }
+    }
+
+    fn loadImages(self: *Self) !void {
+        const lost_empire_img = try loadTextureFromFile(self.gc, self.allocator, "src/chapters/lost_empire-RGBA.png", self.upload_context);
+        const image_info = vkinit.imageViewCreateInfo(.r8g8b8a8_srgb, lost_empire_img.image, .{ .color_bit = true });
+        const lost_empire_tex = Texture{
+            .image = lost_empire_img,
+            .view = try self.gc.vkd.createImageView(self.gc.dev, &image_info, null),
+        };
+        try self.textures.put("empire_diffuse", lost_empire_tex);
     }
 
     fn loadMeshes(self: *Self) !void {
@@ -963,10 +974,11 @@ fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: [
     defer img.deinit();
 
     // allocate temporary buffer for holding texture data to upload and copy image data to it
-    const staging_buffer = try createBuffer(gc, img.pixels.len, .{ .transfer_src_bit = true }, .cpu_only);
+    const img_pixels = img.asSlice();
+    const staging_buffer = try createBuffer(gc, img_pixels.len, .{ .transfer_src_bit = true }, .cpu_only);
     const data = try gc.allocator.mapMemory(u8, staging_buffer.allocation);
-    std.mem.copy(u8, data, img.pixels);
-    gc.allocator.unmapMemory(gc.allocator);
+    std.mem.copy(u8, data[0..img_pixels.len], img_pixels);
+    gc.allocator.unmapMemory(staging_buffer.allocation);
 
     const img_extent = vk.Extent3D{
         .width = @intCast(u32, img.w),
@@ -989,7 +1001,7 @@ fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: [
             .base_array_layer = 0,
             .layer_count = 1,
         };
-        const img_barrier_to_transfer = std.mem.zeroes(vk.ImageMemoryBarrier, .{
+        const img_barrier_to_transfer = std.mem.zeroInit(vk.ImageMemoryBarrier, .{
             .old_layout = .@"undefined",
             .new_layout = .transfer_dst_optimal,
             .dst_access_mask = .{ .transfer_write_bit = true },
@@ -997,7 +1009,7 @@ fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: [
             .subresource_range = range,
         });
 
-        gc.vkd.cmdPipelineBarrier(upload_context.cmd_buf, .{ .top_of_pipe_bit = true }, .{ .stage_transfer_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &img_barrier_to_transfer));
+        gc.vkd.cmdPipelineBarrier(upload_context.cmd_buf, .{ .top_of_pipe_bit = true }, .{ .transfer_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &img_barrier_to_transfer));
 
         const copy_region = vk.BufferImageCopy{
             .buffer_offset = 0,
@@ -1009,12 +1021,13 @@ fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: [
                 .base_array_layer = 0,
                 .layer_count = 1,
             },
+            .image_offset = std.mem.zeroes(vk.Offset3D),
             .image_extent = img_extent,
         };
         gc.vkd.cmdCopyBufferToImage(upload_context.cmd_buf, staging_buffer.buffer, new_img.image, .transfer_dst_optimal, 1, @ptrCast([*]const vk.BufferImageCopy, &copy_region));
 
         // barrier the image into the shader readable layout
-        const img_barrier_to_readable = std.mem.zeroes(vk.ImageMemoryBarrier, .{
+        const img_barrier_to_readable = std.mem.zeroInit(vk.ImageMemoryBarrier, .{
             .old_layout = .transfer_dst_optimal,
             .new_layout = .shader_read_only_optimal,
             .src_access_mask = .{ .transfer_write_bit = true },

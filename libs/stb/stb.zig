@@ -2,18 +2,19 @@ const std = @import("std");
 const stb = @import("stb_image.zig");
 
 pub const Image = struct {
-	w: c_int,
-	h: c_int,
-	channels: c_int,
-	stb_image: *anyopaque,
+    w: c_int,
+    h: c_int,
+    channels: c_int,
+    stb_image: ?*anyopaque,
 
-	pub fn deinit(self: Image) void {
-		stb.stbi_image_free(self.stb_image);
-	}
+    pub fn deinit(self: Image) void {
+        stb.stbi_image_free(self.stb_image);
+    }
 
-	pub fn asSlice(self: Image) []u8 {
-		return self.stb_image[0..@intCast(usize, self.w * self.h * 4)];
-	}
+    pub fn asSlice(self: Image) []u8 {
+        const ptr = @ptrCast([*]u8, self.stb_image);
+        return ptr[0..@intCast(usize, self.w * self.h * 4)];
+    }
 };
 
 pub fn loadFromFile(allocator: std.mem.Allocator, file: []const u8) !Image {
@@ -22,7 +23,7 @@ pub fn loadFromFile(allocator: std.mem.Allocator, file: []const u8) !Image {
 
     const file_size = try file_handle.getEndPos();
     var buffer = try allocator.alloc(u8, file_size);
-    errdefer allocator.free(buffer);
+    defer allocator.free(buffer);
 
     _ = try file_handle.read(buffer);
 
