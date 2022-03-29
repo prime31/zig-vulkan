@@ -300,6 +300,7 @@ pub const EngineChap5 = struct {
     renderables: std.ArrayList(RenderObject),
     materials: std.StringHashMap(Material),
     meshes: std.StringHashMap(Mesh),
+    textures: std.StringHashMap(Texture),
     camera: FlyCamera,
     global_set_layout: vk.DescriptorSetLayout,
     descriptor_pool: vk.DescriptorPool,
@@ -349,6 +350,7 @@ pub const EngineChap5 = struct {
             .renderables = std.ArrayList(RenderObject).init(gpa),
             .materials = std.StringHashMap(Material).init(gpa),
             .meshes = std.StringHashMap(Mesh).init(gpa),
+            .textures = std.StringHashMap(Texture).init(gpa),
             .camera = FlyCamera.init(window),
             .global_set_layout = descriptors.layout,
             .descriptor_pool = descriptors.pool,
@@ -374,6 +376,11 @@ pub const EngineChap5 = struct {
 
         var iter = self.meshes.valueIterator();
         while (iter.next()) |mesh| mesh.deinit(self.gc.allocator);
+        self.meshes.deinit();
+
+        var tex_iter = self.textures.valueIterator();
+        while (tex_iter.next()) |tex| tex.deinit(self.gc);
+        self.textures.deinit();
 
         for (self.frames) |*frame| frame.deinit(self.gc);
         self.allocator.free(self.frames);
@@ -386,10 +393,11 @@ pub const EngineChap5 = struct {
             self.gc.vkd.destroyPipeline(self.gc.dev, mat.pipeline, null);
             self.gc.vkd.destroyPipelineLayout(self.gc.dev, mat.pipeline_layout, null);
         }
+        self.materials.deinit();
+
         self.gc.vkd.destroyRenderPass(self.gc.dev, self.render_pass, null);
-
+        
         self.swapchain.deinit();
-
         self.gc.deinit();
         self.allocator.destroy(self.gc);
 
@@ -397,8 +405,6 @@ pub const EngineChap5 = struct {
         glfw.terminate();
 
         self.renderables.deinit();
-        self.materials.deinit();
-        self.meshes.deinit();
         _ = general_purpose_allocator.deinit();
         // _ = general_purpose_allocator.detectLeaks();
     }
