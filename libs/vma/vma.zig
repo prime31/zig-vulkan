@@ -6,7 +6,6 @@ const vk = @import("vulkan");
 pub const AllocatedImage = struct {
     image: vk.Image,
     allocation: VmaAllocation,
-    view: ?vk.ImageView = null, // unmanaged ImageView that must be created/destroyed seperately. Here for convenience only.
 
     pub fn deinit(self: AllocatedImage, allocator: Allocator) void {
         vmaDestroyImage(allocator.allocator, self.image, self.allocation);

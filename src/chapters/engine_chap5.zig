@@ -26,6 +26,20 @@ fn toDegrees(rad: anytype) @TypeOf(rad) {
     return 180.0 * rad / std.math.pi;
 }
 
+pub const Texture = struct {
+    image: vma.AllocatedImage,
+    view: vk.ImageView,
+
+    pub fn init(image: vma.AllocatedImage) Texture {
+        return .{ .image =image, .view = undefined };
+    }
+
+    pub fn deinit(self: Texture, gc: *const GraphicsContext) void {
+        gc.vkd.destroyImageView(gc.dev, self.view, null);
+        self.image.deinit(gc.allocator);
+    }
+};
+
 const FlyCamera = struct {
     window: glfw.Window,
     speed: f32 = 3.5,
@@ -282,7 +296,7 @@ pub const EngineChap5 = struct {
     frame_num: f32 = 0,
     dt: f64 = 0.0,
     last_frame_time: f64 = 0.0,
-    depth_image: vma.AllocatedImage,
+    depth_image: Texture,
     renderables: std.ArrayList(RenderObject),
     materials: std.StringHashMap(Material),
     meshes: std.StringHashMap(Mesh),
@@ -312,7 +326,7 @@ pub const EngineChap5 = struct {
 
         // depth image
         const depth_image = try createDepthImage(gc, swapchain);
-        const framebuffers = try createFramebuffers(gc, gpa, render_pass, swapchain, depth_image.view.?);
+        const framebuffers = try createFramebuffers(gc, gpa, render_pass, swapchain, depth_image.view);
 
         // descriptors
         const gpu_props = gc.vki.getPhysicalDeviceProperties(gc.pdev);
@@ -347,7 +361,7 @@ pub const EngineChap5 = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        self.gc.vkd.deviceWaitIdle(self.gc.dev) catch return;
+        self.gc.vkd.deviceWaitIdle(self.gc.dev) catch unreachable;
 
         self.upload_context.deinit(self.gc);
 
@@ -356,8 +370,7 @@ pub const EngineChap5 = struct {
         self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.global_set_layout, null);
         self.gc.vkd.destroyDescriptorPool(self.gc.dev, self.descriptor_pool, null);
 
-        self.depth_image.deinit(self.gc.allocator);
-        self.gc.vkd.destroyImageView(self.gc.dev, self.depth_image.view.?, null);
+        self.depth_image.deinit(self.gc);
 
         var iter = self.meshes.valueIterator();
         while (iter.next()) |mesh| mesh.deinit(self.gc.allocator);
@@ -426,10 +439,9 @@ pub const EngineChap5 = struct {
                 for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
                 self.allocator.free(self.framebuffers);
 
-                self.depth_image.deinit(self.gc.allocator);
-                self.gc.vkd.destroyImageView(self.gc.dev, self.depth_image.view.?, null);
+                self.depth_image.deinit(self.gc);
                 self.depth_image = try createDepthImage(self.gc, self.swapchain);
-                self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain, self.depth_image.view.?);
+                self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain, self.depth_image.view);
             }
 
             self.frame_num += 1;
@@ -745,7 +757,7 @@ fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Render
     }, null);
 }
 
-fn createDepthImage(gc: *const GraphicsContext, swapchain: Swapchain) !vma.AllocatedImage {
+fn createDepthImage(gc: *const GraphicsContext, swapchain: Swapchain) !Texture {
     const depth_extent = vk.Extent3D{ .width = swapchain.extent.width, .height = swapchain.extent.height, .depth = 1 };
     const dimg_info = vkinit.imageCreateInfo(depth_format, depth_extent, .{ .depth_stencil_attachment_bit = true });
 
@@ -755,9 +767,9 @@ fn createDepthImage(gc: *const GraphicsContext, swapchain: Swapchain) !vma.Alloc
         .usage = .gpu_only,
         .requiredFlags = .{ .device_local_bit = true },
     });
-    var depth_image = try gc.allocator.createImage(&dimg_info, &malloc_info, null);
+    var depth_image = Texture.init(try gc.allocator.createImage(&dimg_info, &malloc_info, null));
 
-    const dview_info = vkinit.imageViewCreateInfo(depth_format, depth_image.image, .{ .depth_bit = true });
+    const dview_info = vkinit.imageViewCreateInfo(depth_format, depth_image.image.image, .{ .depth_bit = true });
     depth_image.view = try gc.vkd.createImageView(gc.dev, &dview_info, null);
 
     return depth_image;
