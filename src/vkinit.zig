@@ -226,32 +226,22 @@ pub fn writeDescriptorBuffer(desc_type: vk.DescriptorType, dst_set: vk.Descripto
     };
 }
 
-// VkWriteDescriptorSet vkinit::write_descriptor_image(VkDescriptorType type, VkDescriptorSet dstSet, VkDescriptorImageInfo* imageInfo, uint32_t binding)
-// {
-// 	VkWriteDescriptorSet write = {};
-// 	write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-// 	write.pNext = nullptr;
+pub fn writeDescriptorImage(descriptor_type: vk.DescriptorType, dst_set: vk.DescriptorSet, image_info: *const vk.DescriptorImageInfo, binding: u32) vk.WriteDescriptorSet {
+    return std.mem.zeroInit(vk.WriteDescriptorSet, .{
+        .dst_binding = binding,
+        .dst_set = dst_set,
+        .descriptor_count = 1,
+        .descriptor_type = descriptor_type,
+        .p_image_info = @ptrCast([*]const vk.DescriptorImageInfo, image_info),
+    });
+}
 
-// 	write.dstBinding = binding;
-// 	write.dstSet = dstSet;
-// 	write.descriptorCount = 1;
-// 	write.descriptorType = type;
-// 	write.pImageInfo = imageInfo;
-
-// 	return write;
-// }
-
-// VkSamplerCreateInfo vkinit::sampler_create_info(VkFilter filters, VkSamplerAddressMode samplerAdressMode /*= VK_SAMPLER_ADDRESS_MODE_REPEAT*/)
-// {
-// 	VkSamplerCreateInfo info = {};
-// 	info.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
-// 	info.pNext = nullptr;
-
-// 	info.magFilter = filters;
-// 	info.minFilter = filters;
-// 	info.addressModeU = samplerAdressMode;
-// 	info.addressModeV = samplerAdressMode;
-// 	info.addressModeW = samplerAdressMode;
-
-// 	return info;
-// }
+pub fn samplerCreateInfo(filters: vk.Filter, sampler_address_mode: vk.SamplerAddressMode) vk.SamplerCreateInfo {
+    return std.mem.zeroInit(vk.SamplerCreateInfo, .{
+        .mag_filter = filters,
+        .min_filter = filters,
+        .address_mode_u = sampler_address_mode,
+        .address_mode_v = sampler_address_mode,
+        .address_mode_w = sampler_address_mode,
+    });
+}

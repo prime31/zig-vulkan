@@ -38,6 +38,8 @@ pub const InstanceDispatch = vk.InstanceWrapper(.{
 pub const DeviceDispatch = vk.DeviceWrapper(.{
     // vma
     .createImage = true,
+    .createSampler = true,
+    .destroySampler = true,
     .createBuffer = true,
     .destroyImage = true,
     .destroyBuffer = true,

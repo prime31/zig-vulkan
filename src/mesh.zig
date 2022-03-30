@@ -40,11 +40,18 @@ pub const Vertex = extern struct {
             .format = .r32g32b32_sfloat,
             .offset = @offsetOf(Vertex, "color"),
         },
+        .{
+            .binding = 0,
+            .location = 3,
+            .format = .r32g32_sfloat,
+            .offset = @offsetOf(Vertex, "uv"),
+        },
     };
 
     position: [3]f32,
     normal: [3]f32,
     color: [3]f32,
+    uv: [2]f32,
 };
 
 pub const Mesh = struct {
@@ -104,6 +111,18 @@ pub const Mesh = struct {
                     tmp_verts[0].normal[k] = attrib.normals[3 * f0 + k];
                     tmp_verts[1].normal[k] = attrib.normals[3 * f1 + k];
                     tmp_verts[2].normal[k] = attrib.normals[3 * f2 + k];
+
+                    // uvs
+                    f0 = @intCast(usize, idx0.vt_idx);
+                    f1 = @intCast(usize, idx1.vt_idx);
+                    f2 = @intCast(usize, idx2.vt_idx);
+
+                    if (k < 2) {
+                        var uv_fix = @intToFloat(f32, k);
+                        tmp_verts[0].uv[k] = uv_fix - attrib.texcoords[2 * f0 + k];
+                        tmp_verts[1].uv[k] = uv_fix - attrib.texcoords[2 * f1 + k];
+                        tmp_verts[2].uv[k] = uv_fix - attrib.texcoords[2 * f2 + k];
+                    }
 
                     // color either from material or normal
                     if (attrib.material_ids[i] >= 0) {

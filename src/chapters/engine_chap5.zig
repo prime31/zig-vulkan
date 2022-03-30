@@ -208,6 +208,7 @@ const FrameData = struct {
 };
 
 const Material = struct {
+    texture_set: ?vk.DescriptorSet = null,
     pipeline: vk.Pipeline,
     pipeline_layout: vk.PipelineLayout,
 
@@ -216,6 +217,11 @@ const Material = struct {
             .pipeline = pipeline,
             .pipeline_layout = pipeline_layout,
         };
+    }
+
+    pub fn deinit(self: Material, gc: *const GraphicsContext) void {
+        gc.vkd.destroyPipeline(gc.dev, self.pipeline, null);
+        gc.vkd.destroyPipelineLayout(gc.dev, self.pipeline_layout, null);
     }
 };
 
@@ -303,10 +309,11 @@ pub const EngineChap5 = struct {
     textures: std.StringHashMap(Texture),
     camera: FlyCamera,
     global_set_layout: vk.DescriptorSetLayout,
+    object_set_layout: vk.DescriptorSetLayout,
+    single_tex_layout: vk.DescriptorSetLayout,
     descriptor_pool: vk.DescriptorPool,
     scene_params: GpuSceneData,
     scene_param_buffer: vma.AllocatedBuffer,
-    object_set_layout: vk.DescriptorSetLayout,
     upload_context: UploadContext,
 
     pub fn init(app_name: [*:0]const u8) !Self {
@@ -351,10 +358,11 @@ pub const EngineChap5 = struct {
             .textures = std.StringHashMap(Texture).init(gpa),
             .camera = FlyCamera.init(window),
             .global_set_layout = descriptors.layout,
+            .object_set_layout = descriptors.object_set_layout,
+            .single_tex_layout = descriptors.single_tex_layout,
             .descriptor_pool = descriptors.pool,
             .scene_params = .{},
             .scene_param_buffer = descriptors.scene_param_buffer,
-            .object_set_layout = descriptors.object_set_layout,
             .upload_context = try UploadContext.init(gc),
         };
     }
@@ -367,6 +375,7 @@ pub const EngineChap5 = struct {
         self.scene_param_buffer.deinit(self.gc.allocator);
         self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.object_set_layout, null);
         self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.global_set_layout, null);
+        self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.single_tex_layout, null);
         self.gc.vkd.destroyDescriptorPool(self.gc.dev, self.descriptor_pool, null);
 
         self.depth_image.deinit(self.gc);
@@ -386,10 +395,7 @@ pub const EngineChap5 = struct {
         self.allocator.free(self.framebuffers);
 
         var mat_iter = self.materials.valueIterator();
-        while (mat_iter.next()) |mat| {
-            self.gc.vkd.destroyPipeline(self.gc.dev, mat.pipeline, null);
-            self.gc.vkd.destroyPipelineLayout(self.gc.dev, mat.pipeline_layout, null);
-        }
+        while (mat_iter.next()) |mat| mat.deinit(self.gc);
         self.materials.deinit();
 
         self.gc.vkd.destroyRenderPass(self.gc.dev, self.render_pass, null);
@@ -465,20 +471,23 @@ pub const EngineChap5 = struct {
 
     fn loadMeshes(self: *Self) !void {
         var tri_mesh = Mesh.init(gpa);
-        try tri_mesh.vertices.append(.{ .position = .{ 1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 } });
-        try tri_mesh.vertices.append(.{ .position = .{ -1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 } });
-        try tri_mesh.vertices.append(.{ .position = .{ 0, -1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 } });
+        try tri_mesh.vertices.append(.{ .position = .{ 1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 1, 0 } });
+        try tri_mesh.vertices.append(.{ .position = .{ -1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 0, 0 } });
+        try tri_mesh.vertices.append(.{ .position = .{ 0, -1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 0.5, 1 } });
 
         var monkey_mesh = Mesh.initFromObj(gpa, "src/chapters/monkey_flat.obj");
         var cube_thing_mesh = Mesh.initFromObj(gpa, "src/chapters/cube_thing.obj");
+        var cube = Mesh.initFromObj(gpa, "src/chapters/cube.obj");
 
         try uploadMesh(self.gc, &tri_mesh, self.upload_context);
         try uploadMesh(self.gc, &monkey_mesh, self.upload_context);
         try uploadMesh(self.gc, &cube_thing_mesh, self.upload_context);
+        try uploadMesh(self.gc, &cube, self.upload_context);
 
         try self.meshes.put("triangle", tri_mesh);
         try self.meshes.put("monkey", monkey_mesh);
         try self.meshes.put("cube_thing", cube_thing_mesh);
+        try self.meshes.put("cube", cube);
     }
 
     fn initPipelines(self: *Self) !void {
@@ -488,7 +497,7 @@ pub const EngineChap5 = struct {
         // hook the global set layout and object set layout
         const set_layouts = [_]vk.DescriptorSetLayout{ self.global_set_layout, self.object_set_layout };
         pip_layout_info.set_layout_count = 2;
-        pip_layout_info.p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &set_layouts);
+        pip_layout_info.p_set_layouts = &set_layouts;
 
         const pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
         const pipeline = try createPipeline(self.gc, self.allocator, self.render_pass, pipeline_layout, resources.default_lit_frag);
@@ -505,9 +514,54 @@ pub const EngineChap5 = struct {
             .pipeline_layout = pipeline_layout2,
         };
         try self.materials.put("redmesh", material2);
+
+        // create pipeline layout for the textured mesh, which has 3 descriptor sets
+        const textured_set_layouts = [_]vk.DescriptorSetLayout{ self.global_set_layout, self.object_set_layout, self.single_tex_layout };
+
+        var textured_pip_layout_info = vkinit.pipelineLayoutCreateInfo();
+        textured_pip_layout_info.set_layout_count = 4;
+        textured_pip_layout_info.p_set_layouts = &textured_set_layouts;
+
+        const textured_pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &textured_pip_layout_info, null);
+        const textured_pipeline = try createPipeline(self.gc, self.allocator, self.render_pass, textured_pipeline_layout, resources.textured_lit_frag);
+        const textured_material = Material{
+            .pipeline = textured_pipeline,
+            .pipeline_layout = textured_pipeline_layout,
+        };
+        try self.materials.put("texturedmesh", textured_material);
     }
 
     fn initScene(self: *Self) !void {
+        // create a sampler for the texture
+        const sampler_info = vkinit.samplerCreateInfo(.nearest, vk.SamplerAddressMode.repeat);
+        const blocky_sampler = try self.gc.vkd.createSampler(self.gc.dev, &sampler_info, null);
+
+        // TODO: store the sampler somewhere so it can be destroyed later
+        // errdefer self.gc.vkd.destroySampler(self.gc.dev, blocky_sampler, null);
+
+        const textured_mat = self.materials.getPtr("texturedmesh").?;
+
+        // allocate the descriptor set for single-texture to use on the material
+        const alloc_info = std.mem.zeroInit(vk.DescriptorSetAllocateInfo, .{
+            .descriptor_pool = self.descriptor_pool,
+            .descriptor_set_count = 1,
+            .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &self.single_tex_layout),
+        });
+        var texture_set: vk.DescriptorSet = undefined;
+        try self.gc.vkd.allocateDescriptorSets(self.gc.dev, &alloc_info, @ptrCast([*]vk.DescriptorSet, &texture_set));
+        textured_mat.texture_set = texture_set;
+
+        // write to the descriptor set so that it points to our empire_diffuse texture
+        const image_buffer_info = vk.DescriptorImageInfo{
+            .sampler = blocky_sampler,
+            .image_view = self.textures.getPtr("empire_diffuse").?.view,
+            .image_layout = .shader_read_only_optimal,
+        };
+        const texture1 = vkinit.writeDescriptorImage(.combined_image_sampler, textured_mat.texture_set.?, &image_buffer_info, 0);
+        self.gc.vkd.updateDescriptorSets(self.gc.dev, 1, @ptrCast([*]const vk.WriteDescriptorSet, &texture1), 0, undefined);
+
+
+        // create some objects
         var monkey = RenderObject{
             .mesh = self.meshes.getPtr("monkey").?,
             .material = self.materials.getPtr("defaultmesh").?,
@@ -522,8 +576,8 @@ pub const EngineChap5 = struct {
                 var matrix = Mat4.createTranslation(.{ .x = x, .y = 0, .z = y });
                 var scale_matrix = Mat4.createScale(.{ .x = 0.4, .y = 0.4, .z = 0.4 });
 
-                const mesh_material = if (@mod(x, 2) == 0) self.materials.getPtr("defaultmesh").? else self.materials.getPtr("redmesh").?;
-                const mesh = if (@mod(x, 2) == 0 and @mod(x, 6) == 0) self.meshes.getPtr("cube_thing").? else self.meshes.getPtr("triangle").?;
+                const mesh_material = if (@mod(x, 2) == 0) self.materials.getPtr("texturedmesh").? else self.materials.getPtr("redmesh").?;
+                const mesh = if (@mod(x, 2) == 0 and @mod(x, 6) == 0) self.meshes.getPtr("cube").? else self.meshes.getPtr("triangle").?;
                 var object = RenderObject{
                     .mesh = mesh,
                     .material = mesh_material,
@@ -657,6 +711,10 @@ pub const EngineChap5 = struct {
 
                 // bind the object data descriptor
                 self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, object.material.pipeline_layout, 1, 1, @ptrCast([*]const vk.DescriptorSet, &frame.object_descriptor), 0, undefined);
+
+                if (object.material.texture_set) |texture_set| {
+                    self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, object.material.pipeline_layout, 2, 1, @ptrCast([*]const vk.DescriptorSet, &texture_set), 0, undefined);
+                }
             }
 
             var model = object.transform_matrix;
@@ -888,7 +946,7 @@ fn createBuffer(gc: *const GraphicsContext, size: usize, usage: vk.BufferUsageFl
     return try gc.allocator.createBuffer(&buffer_info, &malloc_info, null);
 }
 
-fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorSetLayout, pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBuffer, object_set_layout: vk.DescriptorSetLayout } {
+fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorSetLayout, pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBuffer, object_set_layout: vk.DescriptorSetLayout, single_tex_layout: vk.DescriptorSetLayout } {
     // binding for camera data at 0
     const cam_bind = vkinit.descriptorSetLayoutBinding(.uniform_buffer, .{ .vertex_bit = true }, 0);
 
@@ -896,12 +954,12 @@ fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorS
     const scene_bind = vkinit.descriptorSetLayoutBinding(.uniform_buffer_dynamic, .{ .vertex_bit = true, .fragment_bit = true }, 1);
     const bindings = [_]vk.DescriptorSetLayoutBinding{ cam_bind, scene_bind };
 
-    var set_info = vk.DescriptorSetLayoutCreateInfo{
+    const set_info = vk.DescriptorSetLayoutCreateInfo{
         .flags = .{},
         .binding_count = 2,
         .p_bindings = &bindings,
     };
-    var global_set_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &set_info, null) catch unreachable;
+    const global_set_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &set_info, null) catch unreachable;
 
     // binding for object data at 0
     const object_bind = vkinit.descriptorSetLayoutBinding(.storage_buffer, .{ .vertex_bit = true }, 0);
@@ -911,6 +969,16 @@ fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorS
         .p_bindings = @ptrCast([*]const vk.DescriptorSetLayoutBinding, &object_bind),
     };
     const object_set_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &set_info_object, null) catch unreachable;
+
+    // another set, one that holds a single texture
+    const tex_bind = vkinit.descriptorSetLayoutBinding(.combined_image_sampler, .{ .fragment_bit = true }, 0);
+
+    const tex_set_info = vk.DescriptorSetLayoutCreateInfo{
+        .flags = .{},
+        .binding_count = 1,
+        .p_bindings = @ptrCast([*]const vk.DescriptorSetLayoutBinding, &tex_bind),
+    };
+    const single_tex_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &tex_set_info, null) catch unreachable;
 
     const sizes = [_]vk.DescriptorPoolSize{
         .{
@@ -925,11 +993,15 @@ fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorS
             .@"type" = .storage_buffer,
             .descriptor_count = 10,
         },
+        .{
+            .@"type" = .combined_image_sampler,
+            .descriptor_count = 10,
+        },
     };
     var descriptor_pool = gc.vkd.createDescriptorPool(gc.dev, &.{
         .flags = .{},
         .max_sets = 10,
-        .pool_size_count = 3,
+        .pool_size_count = 4,
         .p_pool_sizes = &sizes,
     }, null) catch unreachable;
 
@@ -941,6 +1013,7 @@ fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorS
         .pool = descriptor_pool,
         .scene_param_buffer = scene_param_buffer,
         .object_set_layout = object_set_layout,
+        .single_tex_layout = single_tex_layout,
     };
 }
 
