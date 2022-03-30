@@ -221,7 +221,7 @@ fn linkVulkanMemoryAllocator(step: *std.build.LibExeObjStep, comptime sdk_root: 
 
 fn linkTinyObjLoader(step: *std.build.LibExeObjStep) void {
     step.addIncludePath("libs/tinyobjloader");
-    step.addCSourceFile("libs/tinyobjloader/tinyobj_loader_c.c", &.{"-std=c99"});
+    step.addCSourceFile("libs/tinyobjloader/obj_loader.cc", &.{});
 }
 
 fn getAllExamples(b: *Builder, root_directory: []const u8) [][2][]const u8 {

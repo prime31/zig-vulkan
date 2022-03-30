@@ -475,19 +475,22 @@ pub const EngineChap5 = struct {
         try tri_mesh.vertices.append(.{ .position = .{ -1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 0, 0 } });
         try tri_mesh.vertices.append(.{ .position = .{ 0, -1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 0.5, 1 } });
 
-        var monkey_mesh = Mesh.initFromObj(gpa, "src/chapters/monkey_flat.obj");
-        var cube_thing_mesh = Mesh.initFromObj(gpa, "src/chapters/cube_thing.obj");
-        var cube = Mesh.initFromObj(gpa, "src/chapters/cube.obj");
+        var monkey_mesh = try Mesh.initFromObj(gpa, "src/chapters/monkey_flat.obj");
+        var cube_thing_mesh = try Mesh.initFromObj(gpa, "src/chapters/cube_thing.obj");
+        var cube = try Mesh.initFromObj(gpa, "src/chapters/cube.obj");
+        var lost_empire = try Mesh.initFromObj(gpa, "src/chapters/lost_empire.obj");
 
         try uploadMesh(self.gc, &tri_mesh, self.upload_context);
         try uploadMesh(self.gc, &monkey_mesh, self.upload_context);
         try uploadMesh(self.gc, &cube_thing_mesh, self.upload_context);
         try uploadMesh(self.gc, &cube, self.upload_context);
+        try uploadMesh(self.gc, &lost_empire, self.upload_context);
 
         try self.meshes.put("triangle", tri_mesh);
         try self.meshes.put("monkey", monkey_mesh);
         try self.meshes.put("cube_thing", cube_thing_mesh);
         try self.meshes.put("cube", cube);
+        try self.meshes.put("lost_empire", lost_empire);
     }
 
     fn initPipelines(self: *Self) !void {
@@ -569,6 +572,13 @@ pub const EngineChap5 = struct {
         };
         try self.renderables.append(monkey);
 
+        var empire = RenderObject{
+            .mesh = self.meshes.getPtr("lost_empire").?,
+            .material = self.materials.getPtr("texturedmesh").?,
+            .transform_matrix = Mat4.createTranslation(Vec3.new(0, 5, 0)),
+        };
+        try self.renderables.append(empire);
+
         var x: f32 = 0;
         while (x < 20) : (x += 1) {
             var y: f32 = 0;
@@ -577,7 +587,7 @@ pub const EngineChap5 = struct {
                 var scale_matrix = Mat4.createScale(.{ .x = 0.4, .y = 0.4, .z = 0.4 });
 
                 const mesh_material = if (@mod(x, 2) == 0) self.materials.getPtr("texturedmesh").? else self.materials.getPtr("redmesh").?;
-                const mesh = if (@mod(x, 2) == 0 and @mod(x, 6) == 0) self.meshes.getPtr("cube").? else self.meshes.getPtr("triangle").?;
+                const mesh = if (@mod(x, 2) == 0 and @mod(x, 6) == 0) self.meshes.getPtr("cube_thing").? else self.meshes.getPtr("triangle").?;
                 var object = RenderObject{
                     .mesh = mesh,
                     .material = mesh_material,

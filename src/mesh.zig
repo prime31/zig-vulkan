@@ -65,86 +65,44 @@ pub const Mesh = struct {
         };
     }
 
-    pub fn initFromObj(allocator: std.mem.Allocator, filename: []const u8) Mesh {
-        var attrib: tiny.tinyobj_attrib_t = undefined;
-        var shapes: [*c]tiny.tinyobj_shape_t = undefined;
-        var num_shapes: usize = 0;
-        var materials: [*c]tiny.tinyobj_material_t = undefined;
-        var num_materials: usize = 0;
-
-        const ret = tiny.tinyobj_parse_obj(&attrib, &shapes, &num_shapes, &materials, &num_materials, filename.ptr, getFileData, null, tiny.TINYOBJ_FLAG_TRIANGULATE);
-        if (ret != tiny.TINYOBJ_SUCCESS) unreachable;
-
-        defer tiny.tinyobj_shapes_free(shapes, num_shapes);
-        defer tiny.tinyobj_materials_free(materials, num_materials);
-        defer tiny.tinyobj_attrib_free(&attrib);
+    pub fn initFromObj(allocator: std.mem.Allocator, filename: []const u8) !Mesh {
+        const ret = tiny.obj_load(filename.ptr);
+        defer tiny.obj_free(ret);
 
         var vertices = std.ArrayList(Vertex).init(allocator);
-        var tmp_verts: [3]Vertex = undefined;
 
-        var face_offset: usize = 0;
-        var i: usize = 0;
-        while (i < attrib.num_face_num_verts) : (i += 1) {
-            // we only deal with tris, no quads
-            std.debug.assert(@mod(attrib.face_num_verts[i], 3) == 0);
-            var f: usize = 0;
-            while (f < @divExact(attrib.face_num_verts[i], 3)) : (f += 1) {
-                var idx0 = attrib.faces[face_offset + 3 * f + 0];
-                var idx1 = attrib.faces[face_offset + 3 * f + 1];
-                var idx2 = attrib.faces[face_offset + 3 * f + 2];
+        var s: usize = 0;
+        while (s < ret.num_shapes) : (s += 1) {
+            const shape = ret.shapes[s];
+            try vertices.ensureTotalCapacity(vertices.items.len + shape.num_vertices);
 
-                var k: usize = 0;
-                while (k < 3) : (k += 1) {
-                    var f0 = @intCast(usize, idx0.v_idx);
-                    var f1 = @intCast(usize, idx1.v_idx);
-                    var f2 = @intCast(usize, idx2.v_idx);
+            var i: usize = 0;
+            while (i < shape.num_vertices) : (i += 1) {
+                var vert: Vertex = undefined;
+                vert.position[0] = shape.vertices[i].x;
+                vert.position[1] = shape.vertices[i].y;
+                vert.position[2] = shape.vertices[i].z;
 
-                    tmp_verts[0].position[k] = attrib.vertices[3 * f0 + k];
-                    tmp_verts[1].position[k] = attrib.vertices[3 * f1 + k];
-                    tmp_verts[2].position[k] = attrib.vertices[3 * f2 + k];
-
-                    // normals
-                    f0 = @intCast(usize, idx0.vn_idx);
-                    f1 = @intCast(usize, idx1.vn_idx);
-                    f2 = @intCast(usize, idx2.vn_idx);
-
-                    tmp_verts[0].normal[k] = attrib.normals[3 * f0 + k];
-                    tmp_verts[1].normal[k] = attrib.normals[3 * f1 + k];
-                    tmp_verts[2].normal[k] = attrib.normals[3 * f2 + k];
-
-                    // uvs
-                    f0 = @intCast(usize, idx0.vt_idx);
-                    f1 = @intCast(usize, idx1.vt_idx);
-                    f2 = @intCast(usize, idx2.vt_idx);
-
-                    if (k < 2) {
-                        var uv_fix = @intToFloat(f32, k);
-                        tmp_verts[0].uv[k] = uv_fix - attrib.texcoords[2 * f0 + k];
-                        tmp_verts[1].uv[k] = uv_fix - attrib.texcoords[2 * f1 + k];
-                        tmp_verts[2].uv[k] = uv_fix - attrib.texcoords[2 * f2 + k];
-                    }
-
-                    // color either from material or normal
-                    if (attrib.material_ids[i] >= 0) {
-                        const mat_id = @intCast(usize, attrib.material_ids[i]);
-                        tmp_verts[0].color[k] = materials[mat_id].diffuse[0];
-                        tmp_verts[1].color[k] = materials[mat_id].diffuse[1];
-                        tmp_verts[2].color[k] = materials[mat_id].diffuse[2];
-                    } else {
-                        tmp_verts[0].color[k] = tmp_verts[0].normal[k];
-                        tmp_verts[1].color[k] = tmp_verts[1].normal[k];
-                        tmp_verts[2].color[k] = tmp_verts[2].normal[k];
-                    }
+                if (shape.num_normals > 0) {
+                    vert.normal[0] = shape.normals[i].x;
+                    vert.normal[1] = shape.normals[i].y;
+                    vert.normal[2] = shape.normals[i].z;
                 }
 
-                for (tmp_verts) |v| {
-                    vertices.append(v) catch unreachable;
+                if (shape.num_uvs > 0) {
+                    vert.uv[0] = shape.uvs[i].u;
+                    vert.uv[1] = shape.uvs[i].v;
                 }
+
+                vert.color[0] = shape.colors[i].x;
+                vert.color[1] = shape.colors[i].y;
+                vert.color[2] = shape.colors[i].z;
+
+                vertices.appendAssumeCapacity(vert);
             }
-            face_offset += @intCast(usize, attrib.face_num_verts[i]);
         }
 
-        return .{
+        return Mesh{
             .vertices = vertices,
             .vert_buffer = undefined,
         };
