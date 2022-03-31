@@ -100,9 +100,12 @@ const vma_pkg = std.build.Pkg{
 };
 
 const stb_pkg = stb_build.getPackage("");
+const imgui_pkg = imgui_build.getPackage("");
+const imgui_vk_pkg = imgui_build.getVkPackage("", vulkan_pkg);
 
 // builders
 const stb_build = @import("libs/stb/build.zig");
+const imgui_build = @import("libs/imgui/build.zig");
 
 const vk_sdk_root = "/Users/mikedesaro/VulkanSDK/1.3.204.1/macOS";
 
@@ -132,10 +135,15 @@ pub fn build(b: *Builder) void {
         exe.addPackage(glfw_pkg);
         glfw.link(b, exe, .{ .opengl = false });
 
+        // Dear ImGui
+        imgui_build.linkArtifact(b, exe, target, "");
+        exe.addPackage(imgui_pkg);
+        exe.addPackage(imgui_vk_pkg);
+
         exe.addPackage(.{
             .name = "vengine",
             .path = .{ .path = "src/v.zig" },
-            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobjloader_pkg, vma_pkg, stb_pkg },
+            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobjloader_pkg, vma_pkg, stb_pkg, imgui_pkg, imgui_vk_pkg },
         });
 
         // vulken-mem

@@ -4,6 +4,8 @@ const vk = @import("vulkan");
 const vma = @import("vma");
 const resources = @import("resources");
 const glfw = @import("glfw");
+const ig = @import("imgui");
+const igvk = @import("imgui_vk");
 const vkinit = @import("../vkinit.zig");
 
 const GraphicsContext = @import("../graphics_context.zig").GraphicsContext;
@@ -413,6 +415,7 @@ pub const EngineChap5 = struct {
     }
 
     pub fn loadContent(self: *Self) !void {
+        try self.initImgui();
         try self.loadImages();
         try self.loadMeshes();
         try self.initPipelines();
@@ -426,6 +429,11 @@ pub const EngineChap5 = struct {
             self.last_frame_time = curr_frame_time;
 
             self.camera.update(self.dt);
+
+            igvk.ImGui_ImplVulkan_NewFrame();
+            igvk.ImGui_ImplGlfw_NewFrame();
+            ig.igNewFrame();
+            ig.igShowDemoWindow(undefined);
 
             // wait for the last frame to complete before filling our CommandBuffer
             const state = self.swapchain.waitForFrame() catch |err| switch (err) {
@@ -457,6 +465,64 @@ pub const EngineChap5 = struct {
             self.frame_num += 1;
             try glfw.pollEvents();
         }
+    }
+
+    fn initImgui(self: *Self) !void {
+        // 1: create descriptor pool for IMGUI
+        const sizes = [_]vk.DescriptorPoolSize{
+            .{ .@"type" = .sampler, .descriptor_count = 1000, },
+            .{ .@"type" = .combined_image_sampler, .descriptor_count = 1000,},
+            .{ .@"type" = .sampled_image, .descriptor_count = 1000,},
+            .{ .@"type" = .storage_image, .descriptor_count = 1000,},
+            .{ .@"type" = .uniform_texel_buffer, .descriptor_count = 1000, },
+            .{ .@"type" = .storage_texel_buffer, .descriptor_count = 1000, },
+            .{ .@"type" = .uniform_buffer, .descriptor_count = 1000,},
+            .{ .@"type" = .storage_buffer, .descriptor_count = 1000,},
+            .{ .@"type" = .uniform_buffer_dynamic, .descriptor_count = 1000,},
+            .{ .@"type" = .storage_buffer_dynamic, .descriptor_count = 1000, },
+            .{ .@"type" = .input_attachment, .descriptor_count = 1000,},
+        };
+
+        const pool_info = vk.DescriptorPoolCreateInfo{
+            .flags = .{},
+            .max_sets = 1000,
+            .pool_size_count = sizes.len,
+            .p_pool_sizes = @ptrCast([*]const vk.DescriptorPoolSize, &sizes),
+        };
+        const imgui_pool = try self.gc.vkd.createDescriptorPool(self.gc.dev, &pool_info, null);
+        _ = imgui_pool;
+
+        // 2: initialize imgui library
+        _ = ig.igCreateContext(undefined);
+        
+        _ = igvk.ImGui_ImplGlfw_InitForVulkan(self.window.handle, true);
+
+        var info = std.mem.zeroInit(igvk.ImGui_ImplVulkan_InitInfo, .{
+            .instance =  self.gc.instance,
+            .physical_device = self.gc.pdev,
+            .device = self.gc.dev,
+            .queue_family = self.gc.graphics_queue.family,
+            .queue = self.gc.graphics_queue.handle,
+            .descriptor_pool = imgui_pool,
+            .subpass = 0,
+            .min_image_count = 3,
+            .image_count = 3,
+            .msaa_samples = .{ .@"1_bit" = true },
+            .allocator = null,
+            .checkVkResultFn = null,
+        });
+        _ = igvk.ImGui_ImplVulkan_Init(&info, self.render_pass);
+
+        // execute a gpu command to upload imgui font textures
+        try self.upload_context.immediateSubmitBegin(self.gc);
+        _ = igvk.ImGui_ImplVulkan_CreateFontsTexture(self.upload_context.cmd_buf);
+        try self.upload_context.immediateSubmitEnd(self.gc);
+
+        // clear font textures from cpu data
+        igvk.ImGui_ImplVulkan_DestroyFontUploadObjects();
+
+        // TODO: store and destroy the imgui_pool
+        // TODO: igvk.ImGui_ImplVulkan_Shutdown()
     }
 
     fn loadImages(self: *Self) !void {
