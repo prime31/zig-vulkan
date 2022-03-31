@@ -382,7 +382,7 @@ pub const EngineChap5 = struct {
         self.upload_context.deinit(self.gc);
 
         self.gc.vkd.destroySampler(self.gc.dev, self.blocky_sampler, null);
-        
+
         self.scene_param_buffer.deinit(self.gc.allocator);
         self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.object_set_layout, null);
         self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.global_set_layout, null);
@@ -538,8 +538,14 @@ pub const EngineChap5 = struct {
         const io = ig.igGetIO();
         io.*.ConfigFlags |= ig.ImGuiConfigFlags_DockingEnable | ig.ImGuiConfigFlags_ViewportsEnable;
 
-        ig.igStyleColorsDark(undefined);
+        ig.igStyleColorsDark(null);
 
+        const closure = struct {
+            pub fn load(function_name:[*:0]const u8, user_data: *anyopaque) callconv(.C) vk.PfnVoidFunction {
+                return glfw.getInstanceProcAddress(user_data, function_name);
+            }
+        }.load;
+        _ = igvk.ImGui_ImplVulkan_LoadFunctions(closure, self.gc.instance);
         _ = igvk.ImGui_ImplGlfw_InitForVulkan(self.window.handle, true);
 
         var info = std.mem.zeroInit(igvk.ImGui_ImplVulkan_InitInfo, .{
@@ -722,8 +728,10 @@ pub const EngineChap5 = struct {
 
     fn draw(self: *Self, framebuffer: vk.Framebuffer, frame: FrameData) !void {
         ig.igRender();
-        ig.igUpdatePlatformWindows();
-        ig.igRenderPlatformWindowsDefault(null, null);
+        if ((ig.igGetIO().*.ConfigFlags & ig.ImGuiConfigFlags_ViewportsEnable) != 0) {
+            ig.igUpdatePlatformWindows();
+            ig.igRenderPlatformWindowsDefault(null, null);
+        }
 
         const cmdbuf = frame.cmd_buffer;
         const clear = vk.ClearValue{

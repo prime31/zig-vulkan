@@ -33,7 +33,7 @@ You must install the LunarG Vulkan SDK: https://vulkan.lunarg.com/sdk/home
 ### Clone the repository and dependencies
 
 ```sh
-git clone --recursive https://github.com/hexops/zig-vulkan
+git clone --recursive https://github.com/prime31/zig-vulkan
 ```
 
 ### Ensure glslc is on your PATH
@@ -50,6 +50,6 @@ zig build --help
 
 ### Cross compilation
 ```sh
-zig build -Dtarget=x86_64-linux-gnu
-zig build -Dtarget=x86_64-windows-gnu
+zig build target -Dtarget=x86_64-linux-gnu
+zig build target -Dtarget=x86_64-windows-gnu
 ```

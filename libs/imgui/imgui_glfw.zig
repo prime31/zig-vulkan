@@ -29,6 +29,7 @@ pub extern fn ImGui_ImplVulkan_RenderDrawData(draw_data: *anyopaque, command_buf
 pub extern fn ImGui_ImplVulkan_CreateFontsTexture(command_buffer: vk.CommandBuffer) bool;
 pub extern fn ImGui_ImplVulkan_DestroyFontUploadObjects() void;
 pub extern fn ImGui_ImplVulkan_SetMinImageCount(min_image_count: u32) void;
+pub extern fn ImGui_ImplVulkan_LoadFunctions(loader_func: fn (function_name: [*:0]const u8, user_data: *anyopaque) callconv(.C) vk.PfnVoidFunction, user_data: vk.Instance) callconv(.C) bool;
 
 
 pub fn shutdown() void {
