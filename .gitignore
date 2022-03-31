@@ -6,3 +6,4 @@ zig-out/
 /build/
 /build-*/
 .DS_Store
+imgui.ini

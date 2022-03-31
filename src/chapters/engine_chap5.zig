@@ -33,7 +33,7 @@ pub const Texture = struct {
     view: vk.ImageView,
 
     pub fn init(image: vma.AllocatedImage) Texture {
-        return .{ .image =image, .view = undefined };
+        return .{ .image = image, .view = undefined };
     }
 
     pub fn deinit(self: Texture, gc: *const GraphicsContext) void {
@@ -314,9 +314,11 @@ pub const EngineChap5 = struct {
     object_set_layout: vk.DescriptorSetLayout,
     single_tex_layout: vk.DescriptorSetLayout,
     descriptor_pool: vk.DescriptorPool,
+    imgui_pool: vk.DescriptorPool = undefined,
     scene_params: GpuSceneData,
     scene_param_buffer: vma.AllocatedBuffer,
     upload_context: UploadContext,
+    blocky_sampler: vk.Sampler = undefined,
 
     pub fn init(app_name: [*:0]const u8) !Self {
         try glfw.init(.{});
@@ -325,6 +327,7 @@ pub const EngineChap5 = struct {
         const window = try glfw.Window.create(extent.width, extent.height, app_name, null, null, .{
             .client_api = .no_api,
         });
+        glfw.c.glfwWindowHint(glfw.c.GLFW_CLIENT_API, glfw.c.GLFW_NO_API);
 
         var gc = try gpa.create(GraphicsContext);
         gc.* = try GraphicsContext.init(gpa, app_name, window);
@@ -372,8 +375,14 @@ pub const EngineChap5 = struct {
     pub fn deinit(self: *Self) void {
         self.gc.vkd.deviceWaitIdle(self.gc.dev) catch unreachable;
 
+        igvk.shutdown();
+        ig.igDestroyContext(null);
+        self.gc.vkd.destroyDescriptorPool(self.gc.dev, self.imgui_pool, null);
+
         self.upload_context.deinit(self.gc);
 
+        self.gc.vkd.destroySampler(self.gc.dev, self.blocky_sampler, null);
+        
         self.scene_param_buffer.deinit(self.gc.allocator);
         self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.object_set_layout, null);
         self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.global_set_layout, null);
@@ -470,40 +479,76 @@ pub const EngineChap5 = struct {
     fn initImgui(self: *Self) !void {
         // 1: create descriptor pool for IMGUI
         const sizes = [_]vk.DescriptorPoolSize{
-            .{ .@"type" = .sampler, .descriptor_count = 1000, },
-            .{ .@"type" = .combined_image_sampler, .descriptor_count = 1000,},
-            .{ .@"type" = .sampled_image, .descriptor_count = 1000,},
-            .{ .@"type" = .storage_image, .descriptor_count = 1000,},
-            .{ .@"type" = .uniform_texel_buffer, .descriptor_count = 1000, },
-            .{ .@"type" = .storage_texel_buffer, .descriptor_count = 1000, },
-            .{ .@"type" = .uniform_buffer, .descriptor_count = 1000,},
-            .{ .@"type" = .storage_buffer, .descriptor_count = 1000,},
-            .{ .@"type" = .uniform_buffer_dynamic, .descriptor_count = 1000,},
-            .{ .@"type" = .storage_buffer_dynamic, .descriptor_count = 1000, },
-            .{ .@"type" = .input_attachment, .descriptor_count = 1000,},
+            .{
+                .@"type" = .sampler,
+                .descriptor_count = 1000,
+            },
+            .{
+                .@"type" = .combined_image_sampler,
+                .descriptor_count = 1000,
+            },
+            .{
+                .@"type" = .sampled_image,
+                .descriptor_count = 1000,
+            },
+            .{
+                .@"type" = .storage_image,
+                .descriptor_count = 1000,
+            },
+            .{
+                .@"type" = .uniform_texel_buffer,
+                .descriptor_count = 1000,
+            },
+            .{
+                .@"type" = .storage_texel_buffer,
+                .descriptor_count = 1000,
+            },
+            .{
+                .@"type" = .uniform_buffer,
+                .descriptor_count = 1000,
+            },
+            .{
+                .@"type" = .storage_buffer,
+                .descriptor_count = 1000,
+            },
+            .{
+                .@"type" = .uniform_buffer_dynamic,
+                .descriptor_count = 1000,
+            },
+            .{
+                .@"type" = .storage_buffer_dynamic,
+                .descriptor_count = 1000,
+            },
+            .{
+                .@"type" = .input_attachment,
+                .descriptor_count = 1000,
+            },
         };
 
         const pool_info = vk.DescriptorPoolCreateInfo{
-            .flags = .{},
-            .max_sets = 1000,
+            .flags = .{ .free_descriptor_set_bit = true },
+            .max_sets = 1000 * sizes.len,
             .pool_size_count = sizes.len,
             .p_pool_sizes = @ptrCast([*]const vk.DescriptorPoolSize, &sizes),
         };
-        const imgui_pool = try self.gc.vkd.createDescriptorPool(self.gc.dev, &pool_info, null);
-        _ = imgui_pool;
+        self.imgui_pool = try self.gc.vkd.createDescriptorPool(self.gc.dev, &pool_info, null);
 
         // 2: initialize imgui library
-        _ = ig.igCreateContext(undefined);
-        
+        _ = ig.igCreateContext(null);
+        const io = ig.igGetIO();
+        io.*.ConfigFlags |= ig.ImGuiConfigFlags_DockingEnable | ig.ImGuiConfigFlags_ViewportsEnable;
+
+        ig.igStyleColorsDark(undefined);
+
         _ = igvk.ImGui_ImplGlfw_InitForVulkan(self.window.handle, true);
 
         var info = std.mem.zeroInit(igvk.ImGui_ImplVulkan_InitInfo, .{
-            .instance =  self.gc.instance,
+            .instance = self.gc.instance,
             .physical_device = self.gc.pdev,
             .device = self.gc.dev,
             .queue_family = self.gc.graphics_queue.family,
             .queue = self.gc.graphics_queue.handle,
-            .descriptor_pool = imgui_pool,
+            .descriptor_pool = self.imgui_pool,
             .subpass = 0,
             .min_image_count = 3,
             .image_count = 3,
@@ -520,9 +565,6 @@ pub const EngineChap5 = struct {
 
         // clear font textures from cpu data
         igvk.ImGui_ImplVulkan_DestroyFontUploadObjects();
-
-        // TODO: store and destroy the imgui_pool
-        // TODO: igvk.ImGui_ImplVulkan_Shutdown()
     }
 
     fn loadImages(self: *Self) !void {
@@ -603,10 +645,7 @@ pub const EngineChap5 = struct {
     fn initScene(self: *Self) !void {
         // create a sampler for the texture
         const sampler_info = vkinit.samplerCreateInfo(.nearest, vk.SamplerAddressMode.repeat);
-        const blocky_sampler = try self.gc.vkd.createSampler(self.gc.dev, &sampler_info, null);
-
-        // TODO: store the sampler somewhere so it can be destroyed later
-        // errdefer self.gc.vkd.destroySampler(self.gc.dev, blocky_sampler, null);
+        self.blocky_sampler = try self.gc.vkd.createSampler(self.gc.dev, &sampler_info, null);
 
         const textured_mat = self.materials.getPtr("texturedmesh").?;
 
@@ -622,13 +661,12 @@ pub const EngineChap5 = struct {
 
         // write to the descriptor set so that it points to our empire_diffuse texture
         const image_buffer_info = vk.DescriptorImageInfo{
-            .sampler = blocky_sampler,
+            .sampler = self.blocky_sampler,
             .image_view = self.textures.getPtr("empire_diffuse").?.view,
             .image_layout = .shader_read_only_optimal,
         };
         const texture1 = vkinit.writeDescriptorImage(.combined_image_sampler, textured_mat.texture_set.?, &image_buffer_info, 0);
         self.gc.vkd.updateDescriptorSets(self.gc.dev, 1, @ptrCast([*]const vk.WriteDescriptorSet, &texture1), 0, undefined);
-
 
         // create some objects
         var monkey = RenderObject{
@@ -683,6 +721,10 @@ pub const EngineChap5 = struct {
     }
 
     fn draw(self: *Self, framebuffer: vk.Framebuffer, frame: FrameData) !void {
+        ig.igRender();
+        ig.igUpdatePlatformWindows();
+        ig.igRenderPlatformWindowsDefault(null, null);
+
         const cmdbuf = frame.cmd_buffer;
         const clear = vk.ClearValue{
             .color = .{ .float_32 = .{ 0.6, 0.5, 0, 1 } },
@@ -728,6 +770,7 @@ pub const EngineChap5 = struct {
 
         try self.drawRenderObjects(frame);
 
+        igvk.ImGui_ImplVulkan_RenderDrawData(ig.igGetDrawData(), cmdbuf, .null_handle);
         self.gc.vkd.cmdEndRenderPass(cmdbuf);
         try self.gc.vkd.endCommandBuffer(cmdbuf);
     }
