@@ -439,10 +439,9 @@ pub const EngineChap5 = struct {
 
             self.camera.update(self.dt);
 
-            igvk.ImGui_ImplVulkan_NewFrame();
-            igvk.ImGui_ImplGlfw_NewFrame();
+            igvk.newFrame();
             ig.igNewFrame();
-            ig.igShowDemoWindow(undefined);
+            @import("autogui.zig").inspect(FlyCamera, &self.camera);
 
             // wait for the last frame to complete before filling our CommandBuffer
             const state = self.swapchain.waitForFrame() catch |err| switch (err) {

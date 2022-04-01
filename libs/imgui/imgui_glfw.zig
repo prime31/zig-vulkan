@@ -1,9 +1,9 @@
 const vk = @import("vulkan");
 
+// ImGui glfw
 pub extern fn ImGui_ImplGlfw_InitForVulkan(window: ?*anyopaque, install_callbacks: bool) bool;
 pub extern fn ImGui_ImplGlfw_Shutdown() void;
 pub extern fn ImGui_ImplGlfw_NewFrame() void;
-
 
 pub const ImGui_ImplVulkan_InitInfo = extern struct {
     instance: vk.Instance,
@@ -21,7 +21,7 @@ pub const ImGui_ImplVulkan_InitInfo = extern struct {
     checkVkResultFn: ?fn (vk.Result) callconv(.C) void,
 };
 
-// Called by user code
+// ImGui Vulkan
 pub extern fn ImGui_ImplVulkan_Init(info: *ImGui_ImplVulkan_InitInfo, render_pass: vk.RenderPass) bool;
 pub extern fn ImGui_ImplVulkan_Shutdown() void;
 pub extern fn ImGui_ImplVulkan_NewFrame() void;
@@ -33,9 +33,12 @@ pub extern fn ImGui_ImplVulkan_SetMinImageCount(min_image_count: u32) void;
 pub extern fn ImGui_ImplVulkan_AddTexture(sampler: vk.Sampler, image_view: vk.ImageView, image_layout: vk.ImageLayout) vk.DescriptorSet;
 pub extern fn ImGui_ImplVulkan_LoadFunctions(loader_func: fn (function_name: [*:0]const u8, user_data: *anyopaque) callconv(.C) vk.PfnVoidFunction, user_data: vk.Instance) bool;
 
+pub fn newFrame() void {
+    ImGui_ImplVulkan_NewFrame();
+    ImGui_ImplGlfw_NewFrame();
+}
 
 pub fn shutdown() void {
     ImGui_ImplGlfw_Shutdown();
     ImGui_ImplVulkan_Shutdown();
 }
-
