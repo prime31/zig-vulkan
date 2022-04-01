@@ -101,7 +101,7 @@ pub const GraphicsContext = struct {
             .flags = .{},
             .physicalDevice = self.pdev,
             .device = self.dev,
-            .pVulkanFunctions = &dispatch.getVmaVulkanFunction(self.vki, self.vkd),
+            .pVulkanFunctions = &dispatch.getVmaVulkanFunctions(self.vki, self.vkd),
             .instance = self.instance,
             .vulkanApiVersion = vk.API_VERSION_1_2,
         });
@@ -157,6 +157,10 @@ pub const GraphicsContext = struct {
             .allocation_size = requirements.size,
             .memory_type_index = try self.findMemoryTypeIndex(requirements.memory_type_bits, flags),
         }, null);
+    }
+
+    pub fn destroy(self: GraphicsContext, resource: anytype) void {
+        dispatch.destroy(self.vkd, self.dev, resource);
     }
 };
 

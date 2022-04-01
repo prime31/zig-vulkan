@@ -117,7 +117,7 @@ pub const DeviceDispatch = vk.DeviceWrapper(.{
     .updateDescriptorSets = true,
 });
 
-pub fn getVmaVulkanFunction(vki: InstanceDispatch, vkd: DeviceDispatch) vma.VmaVulkanFunctions {
+pub fn getVmaVulkanFunctions(vki: InstanceDispatch, vkd: DeviceDispatch) vma.VmaVulkanFunctions {
     return .{
         .vkGetInstanceProcAddr = undefined,
         .vkGetDeviceProcAddr = undefined,
@@ -145,6 +145,33 @@ pub fn getVmaVulkanFunction(vki: InstanceDispatch, vkd: DeviceDispatch) vma.VmaV
         .vkGetPhysicalDeviceMemoryProperties2KHR = vki.dispatch.vkGetPhysicalDeviceMemoryProperties2,
     };
 }
+
+pub fn destroy(vkd: DeviceDispatch, dev: vk.Device, resource: anytype) void {
+    const ResourceType = @TypeOf(resource);
+    const name = @typeName(ResourceType);
+    if (ResourceType == vk.Image or ResourceType == vk.Buffer) {
+        @panic("Cannot destroy single vk." ++ name ++ ". use " ++ name ++ ".deinit() instead");
+    }
+
+    @field(DestroyLookupTable, name)(vkd, dev, resource, null);
+}
+
+const DestroyLookupTable = struct {
+    const Fence = DeviceDispatch.destroyFence;
+    const Sampler = DeviceDispatch.destroySampler;
+    const Pipeline = DeviceDispatch.destroyPipeline;
+    const ImageView = DeviceDispatch.destroyImageView;
+    const Semaphore = DeviceDispatch.destroySemaphore;
+    const RenderPass = DeviceDispatch.destroyRenderPass;
+    const CommandPool = DeviceDispatch.destroyCommandPool;
+    const Framebuffer = DeviceDispatch.destroyFramebuffer;
+    const ShaderModule = DeviceDispatch.destroyShaderModule;
+    const SwapchainKHR = DeviceDispatch.destroySwapchainKHR;
+    const PipelineCache = DeviceDispatch.destroyPipelineCache;
+    const PipelineLayout = DeviceDispatch.destroyPipelineLayout;
+    const DescriptorPool = DeviceDispatch.destroyDescriptorPool;
+    const DescriptorSetLayout = DeviceDispatch.destroyDescriptorSetLayout;
+};
 
 fn allFuncs(comptime T: type) T {
     var inst = T{};

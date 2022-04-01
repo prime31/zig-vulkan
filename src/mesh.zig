@@ -5,15 +5,6 @@ const tiny = @import("tiny");
 
 const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 
-pub const AllocatedBuffer = struct {
-    buffer: vk.Buffer,
-    allocation: vma.VmaAllocation,
-
-    pub fn deinit(self: AllocatedBuffer, vk_allocator: vma.VmaAllocator) void {
-        if (self.allocation) |alloc| vma.vmaDestroyBuffer(vk_allocator, self.buffer, alloc);
-    }
-};
-
 pub const Vertex = extern struct {
     pub const binding_description = vk.VertexInputBindingDescription{
         .binding = 0,
@@ -113,27 +104,3 @@ pub const Mesh = struct {
         self.vertices.deinit();
     }
 };
-
-fn getFileData(ctx: ?*anyopaque, filename: [*c]const u8, is_mtl: c_int, obj_filename: [*c]const u8, data: [*c][*c]u8, len: [*c]usize) callconv(.C) void {
-    _ = ctx;
-
-    var file: std.fs.File = undefined;
-
-    if (is_mtl == 1) {
-        var fname = std.mem.sliceTo(obj_filename, 0);
-        var buff = std.heap.c_allocator.alloc(u8, fname.len) catch unreachable;
-        _ = std.mem.replace(u8, fname, ".obj", ".mtl", buff);
-        file = std.fs.cwd().openFile(std.mem.sliceTo(buff, 0), .{}) catch unreachable;
-    } else {
-        file = std.fs.cwd().openFile(std.mem.sliceTo(filename, 0), .{}) catch unreachable;
-    }
-
-    defer file.close();
-
-    const file_size = file.getEndPos() catch unreachable;
-    var buffer = std.heap.c_allocator.alloc(u8, file_size) catch unreachable;
-    _ = file.read(buffer) catch unreachable;
-
-    len.* = file_size;
-    data.* = buffer.ptr;
-}

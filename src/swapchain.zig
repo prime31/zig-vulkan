@@ -64,11 +64,11 @@ pub const Swapchain = struct {
             .clipped = vk.TRUE,
             .old_swapchain = old_handle,
         }, null);
-        errdefer gc.vkd.destroySwapchainKHR(gc.dev, handle, null);
+        errdefer gc.destroy(handle);
 
         if (old_handle != .null_handle) {
             // Apparently, the old swapchain handle still needs to be destroyed after recreating.
-            gc.vkd.destroySwapchainKHR(gc.dev, old_handle, null);
+            gc.destroy(old_handle);
         }
 
         const swap_images = try initSwapchainImages(gc, handle, surface_format.format, allocator);
@@ -98,7 +98,7 @@ pub const Swapchain = struct {
 
     pub fn deinit(self: Swapchain) void {
         self.deinitExceptSwapchain();
-        self.gc.vkd.destroySwapchainKHR(self.gc.dev, self.handle, null);
+        self.gc.destroy(self.handle);
     }
 
     pub fn waitForAllFences(self: Swapchain) !void {
@@ -207,13 +207,13 @@ const FrameSyncStructure = struct {
 
     fn init(gc: *const GraphicsContext) !FrameSyncStructure {
         const present_semaphore = try gc.vkd.createSemaphore(gc.dev, &.{ .flags = .{} }, null);
-        errdefer gc.vkd.destroySemaphore(gc.dev, present_semaphore, null);
+        errdefer gc.destroy(present_semaphore);
 
         const render_semaphore = try gc.vkd.createSemaphore(gc.dev, &.{ .flags = .{} }, null);
-        errdefer gc.vkd.destroySemaphore(gc.dev, render_semaphore, null);
+        errdefer gc.destroy(render_semaphore);
 
         const render_fence = try gc.vkd.createFence(gc.dev, &.{ .flags = .{ .signaled_bit = true } }, null);
-        errdefer gc.vkd.destroyFence(gc.dev, frame_fence, null);
+        errdefer gc.destroy(frame_fence);
 
         return FrameSyncStructure{
             .present_semaphore = present_semaphore,
@@ -224,9 +224,9 @@ const FrameSyncStructure = struct {
 
     fn deinit(self: FrameSyncStructure, gc: *const GraphicsContext) void {
         self.waitForFence(gc) catch return;
-        gc.vkd.destroySemaphore(gc.dev, self.present_semaphore, null);
-        gc.vkd.destroySemaphore(gc.dev, self.render_semaphore, null);
-        gc.vkd.destroyFence(gc.dev, self.render_fence, null);
+        gc.destroy(self.present_semaphore);
+        gc.destroy(self.render_semaphore);
+        gc.destroy(self.render_fence);
     }
 
     fn waitForFence(self: FrameSyncStructure, gc: *const GraphicsContext) !void {
@@ -253,7 +253,7 @@ const SwapImage = struct {
                 .layer_count = 1,
             },
         }, null);
-        errdefer gc.vkd.destroyImageView(gc.dev, view, null);
+        errdefer gc.destroy(view);
 
         return SwapImage{
             .image = image,
@@ -262,7 +262,7 @@ const SwapImage = struct {
     }
 
     fn deinit(self: SwapImage, gc: *const GraphicsContext) void {
-        gc.vkd.destroyImageView(gc.dev, self.view, null);
+        gc.destroy(self.view);
     }
 };
 

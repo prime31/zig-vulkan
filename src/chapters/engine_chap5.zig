@@ -37,7 +37,7 @@ pub const Texture = struct {
     }
 
     pub fn deinit(self: Texture, gc: *const GraphicsContext) void {
-        gc.vkd.destroyImageView(gc.dev, self.view, null);
+        gc.destroy(self.view);
         self.image.deinit(gc.allocator);
     }
 };
@@ -203,7 +203,7 @@ const FrameData = struct {
 
     pub fn deinit(self: *FrameData, gc: *GraphicsContext) void {
         gc.vkd.freeCommandBuffers(gc.dev, self.cmd_pool, 1, @ptrCast([*]vk.CommandBuffer, &self.cmd_buffer));
-        gc.vkd.destroyCommandPool(gc.dev, self.cmd_pool, null);
+        gc.destroy(self.cmd_pool);
         self.camera_buffer.deinit(gc.allocator);
         self.object_buffer.deinit(gc.allocator);
     }
@@ -222,8 +222,8 @@ const Material = struct {
     }
 
     pub fn deinit(self: Material, gc: *const GraphicsContext) void {
-        gc.vkd.destroyPipeline(gc.dev, self.pipeline, null);
-        gc.vkd.destroyPipelineLayout(gc.dev, self.pipeline_layout, null);
+        gc.destroy(self.pipeline);
+        gc.destroy(self.pipeline_layout);
     }
 };
 
@@ -261,8 +261,8 @@ const UploadContext = struct {
     }
 
     pub fn deinit(self: UploadContext, gc: *const GraphicsContext) void {
-        gc.vkd.destroyCommandPool(gc.dev, self.cmd_pool, null);
-        gc.vkd.destroyFence(gc.dev, self.upload_fence, null);
+        gc.destroy(self.cmd_pool);
+        gc.destroy(self.upload_fence);
     }
 
     pub fn immediateSubmitBegin(self: UploadContext, gc: *const GraphicsContext) !void {
@@ -377,17 +377,17 @@ pub const EngineChap5 = struct {
 
         igvk.shutdown();
         ig.igDestroyContext(null);
-        self.gc.vkd.destroyDescriptorPool(self.gc.dev, self.imgui_pool, null);
+        self.gc.destroy(self.imgui_pool);
 
         self.upload_context.deinit(self.gc);
 
-        self.gc.vkd.destroySampler(self.gc.dev, self.blocky_sampler, null);
+        self.gc.destroy(self.blocky_sampler);
 
         self.scene_param_buffer.deinit(self.gc.allocator);
-        self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.object_set_layout, null);
-        self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.global_set_layout, null);
-        self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.single_tex_layout, null);
-        self.gc.vkd.destroyDescriptorPool(self.gc.dev, self.descriptor_pool, null);
+        self.gc.destroy(self.object_set_layout);
+        self.gc.destroy(self.global_set_layout);
+        self.gc.destroy(self.single_tex_layout);
+        self.gc.destroy(self.descriptor_pool);
 
         self.depth_image.deinit(self.gc);
 
@@ -402,14 +402,14 @@ pub const EngineChap5 = struct {
         for (self.frames) |*frame| frame.deinit(self.gc);
         self.allocator.free(self.frames);
 
-        for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
+        for (self.framebuffers) |fb| self.gc.destroy(fb);
         self.allocator.free(self.framebuffers);
 
         var mat_iter = self.materials.valueIterator();
         while (mat_iter.next()) |mat| mat.deinit(self.gc);
         self.materials.deinit();
 
-        self.gc.vkd.destroyRenderPass(self.gc.dev, self.render_pass, null);
+        self.gc.destroy(self.render_pass);
 
         self.swapchain.deinit();
         self.gc.deinit();
@@ -463,7 +463,7 @@ pub const EngineChap5 = struct {
                 var extent = vk.Extent2D{ .width = size.width, .height = size.height };
                 try self.swapchain.recreate(extent);
 
-                for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
+                for (self.framebuffers) |fb| self.gc.destroy(fb);
                 self.allocator.free(self.framebuffers);
 
                 self.depth_image.deinit(self.gc);
@@ -980,7 +980,7 @@ fn createFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_p
     errdefer allocator.free(framebuffers);
 
     var i: usize = 0;
-    errdefer for (framebuffers[0..i]) |fb| gc.vkd.destroyFramebuffer(gc.dev, fb, null);
+    errdefer for (framebuffers[0..i]) |fb| gc.destroy(fb);
 
     for (framebuffers) |*fb| {
         var attachments = [2]vk.ImageView{ swapchain.swap_images[i].view, depth_image_view };
@@ -1027,8 +1027,8 @@ fn createPipeline(
     const vert = try createShaderModule(gc, @ptrCast([*]const u32, resources.tri_mesh_descriptors_vert), resources.tri_mesh_descriptors_vert.len);
     const frag = try createShaderModule(gc, @ptrCast([*]const u32, @alignCast(@alignOf(u32), frag_shader_bytes)), frag_shader_bytes.len);
 
-    defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
-    defer gc.vkd.destroyShaderModule(gc.dev, frag, null);
+    defer gc.destroy(vert);
+    defer gc.destroy(frag);
 
     var builder = PipelineBuilder.init(allocator, pipeline_layout);
     builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less_or_equal);
