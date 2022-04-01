@@ -541,7 +541,7 @@ pub const EngineChap5 = struct {
         ig.igStyleColorsDark(null);
 
         const closure = struct {
-            pub fn load(function_name:[*:0]const u8, user_data: *anyopaque) callconv(.C) vk.PfnVoidFunction {
+            pub fn load(function_name: [*:0]const u8, user_data: *anyopaque) callconv(.C) vk.PfnVoidFunction {
                 return glfw.getInstanceProcAddress(user_data, function_name);
             }
         }.load;
@@ -945,14 +945,15 @@ fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Render
 
     var attachments: [2]vk.AttachmentDescription = [_]vk.AttachmentDescription{ color_attachment, depth_attachment };
     var dependencies: [2]vk.SubpassDependency = [_]vk.SubpassDependency{ dependency, depth_dependency };
+
     return try gc.vkd.createRenderPass(gc.dev, &.{
         .flags = .{},
-        .attachment_count = 2,
-        .p_attachments = @ptrCast([*]const vk.AttachmentDescription, &attachments),
+        .attachment_count = attachments.len,
+        .p_attachments = &attachments,
         .subpass_count = 1,
         .p_subpasses = @ptrCast([*]const vk.SubpassDescription, &subpass),
-        .dependency_count = 1,
-        .p_dependencies = @ptrCast([*]const vk.SubpassDependency, &dependencies),
+        .dependency_count = dependencies.len,
+        .p_dependencies = &dependencies,
     }, null);
 }
 
