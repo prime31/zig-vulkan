@@ -24,7 +24,7 @@ pub const PipelineBuilder = struct {
                 .vertex_attribute_description_count = 0,
                 .p_vertex_attribute_descriptions = undefined,
             },
-            .input_assembly = vkinit.pipelineInputAssempblyCreateInfo(.triangle_list),
+            .input_assembly = vkinit.pipelineInputAssemblyCreateInfo(.triangle_list),
             .rasterizer = vkinit.pipelineRasterizationStateCreateInfo(.fill),
             .color_blend_attachment = vkinit.pipelineColorBlendAttachmentState(),
             .multisampling = vkinit.pipelineMultisampleStateCreateInfo(),

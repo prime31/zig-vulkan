@@ -94,7 +94,7 @@ pub fn pipelineVertexInputStateCreateInfo() vk.PipelineVertexInputStateCreateInf
 }
 
 /// input assembly is the configuration for drawing triangle lists, strips, or individual points
-pub fn pipelineInputAssempblyCreateInfo(topology: vk.PrimitiveTopology) vk.PipelineInputAssemblyStateCreateInfo {
+pub fn pipelineInputAssemblyCreateInfo(topology: vk.PrimitiveTopology) vk.PipelineInputAssemblyStateCreateInfo {
     return .{
         .flags = .{},
         .topology = topology,
