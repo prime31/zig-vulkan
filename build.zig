@@ -161,10 +161,9 @@ pub fn build(b: *Builder) void {
     const exe_tests = b.addTest("src/tests.zig");
     exe_tests.setTarget(target);
     exe_tests.setBuildMode(mode);
-   
+
     linkExeDeps(exe_tests, b, target);
     exe_tests.addPackage(vma_pkg);
-    exe_tests.addPackage(spirv_reflect_pkg);
     exe_tests.addPackage(.{
         .name = "vengine",
         .path = .{ .path = "src/v.zig" },
@@ -173,12 +172,15 @@ pub fn build(b: *Builder) void {
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&exe_tests.step);
+
+    // asset baker
+    createAssetBaker(b, target);
 }
 
 fn linkExeDeps(exe: *std.build.LibExeObjStep, b: *Builder, target: std.zig.CrossTarget) void {
     // vulkan
     exe.addPackage(vulkan_pkg);
-    
+
     // mach-glfw
     glfw.link(b, exe, .{ .opengl = false });
     exe.addPackage(glfw_pkg);
@@ -190,6 +192,7 @@ fn linkExeDeps(exe: *std.build.LibExeObjStep, b: *Builder, target: std.zig.Cross
 
     // spirv-reflect
     linkSpirvReflect(exe);
+    exe.addPackage(spirv_reflect_pkg);
 
     // vulkan-mem
     linkVulkanMemoryAllocator(exe, vk_sdk_root);
@@ -200,6 +203,23 @@ fn linkExeDeps(exe: *std.build.LibExeObjStep, b: *Builder, target: std.zig.Cross
     // stb
     stb_build.linkArtifact(exe, "");
     exe.addPackage(stb_pkg);
+}
+
+fn createAssetBaker(b: *Builder, target: std.zig.CrossTarget) void {
+    var exe = b.addExecutable("asset_baker", "src/assetlib/asset_baker.zig");
+    exe.setOutputDir("zig-cache/bin");
+    exe.setBuildMode(b.standardReleaseOptions());
+    linkExeDeps(exe, b, target);
+
+    const run_cmd = exe.run();
+    run_cmd.step.dependOn(b.getInstallStep());
+    run_cmd.addArgs(&[_][]const u8{
+        "src/chapters",
+        "zig-cache/baked_assets",
+    });
+
+    const run_step = b.step("asset_baker", "run asset_baker.zig");
+    run_step.dependOn(&run_cmd.step);
 }
 
 /// if always_compile_shaders is true, every build will compile shaders. If it is false, shader compilation will only occur
