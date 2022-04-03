@@ -1,15 +1,16 @@
 const std = @import("std");
+const stb = @import("stb");
+const tiny = @import("tiny");
+
 const fs = std.fs;
 const path = std.fs.path;
-const stb = @import("stb");
 const assets = @import("assets.zig");
-
 
 var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
 const gpa = general_purpose_allocator.allocator();
 
 // all the extensions supported. each one must be handled in bakeFnForFileExtension
-const asset_extensions = &[_][]const u8{".png", ".jpg", ".tga"};
+const asset_extensions = &[_][]const u8{ ".png", ".jpg", ".tga", ".obj" };
 
 pub fn main() !void {
     var args = std.process.args();
@@ -60,7 +61,10 @@ fn bake(src: []const u8, dst: []const u8) !void {
         var dst_file = try std.fmt.allocPrint(gpa, "{s}/{s}", .{ dst_subfolder, filename_no_ext });
         defer gpa.free(dst_file);
 
+        var timer = try std.time.Timer.start();
         try bakeFnForFileExtension(extension)(file, dst_file);
+        var elapsed = timer.lap();
+        std.debug.print("elapsed: {} ms\n\n", .{@intToFloat(f32, elapsed) / 1000000.0});
     }
 }
 
@@ -102,11 +106,12 @@ fn hasAssetExtension(file: []const u8) bool {
 
 fn bakeFnForFileExtension(ext: []const u8) fn ([]const u8, []const u8) anyerror!void {
     if (std.mem.eql(u8, ext, ".png") or std.mem.eql(u8, ext, ".jpg") or std.mem.eql(u8, ext, ".tga")) return bakeTexture;
+    if (std.mem.eql(u8, ext, ".obj")) return bakeMesh;
     unreachable;
 }
 
 fn bakeTexture(src: []const u8, dst: []const u8) !void {
-    std.debug.print("processing texture: {s}\n", .{ src });
+    std.debug.print("processing texture: {s}\n", .{src});
 
     const img = try stb.loadFromFile(gpa, src);
     defer img.deinit();
@@ -121,7 +126,6 @@ fn bakeTexture(src: []const u8, dst: []const u8) !void {
 
     var json_buffer = std.ArrayList(u8).init(gpa);
     defer json_buffer.deinit();
-
     try std.json.stringify(tex_info, .{}, json_buffer.writer());
 
     var asset = assets.AssetFile{
@@ -131,6 +135,90 @@ fn bakeTexture(src: []const u8, dst: []const u8) !void {
     };
 
     const dst_file = try std.fmt.allocPrint(gpa, "{s}.tx", .{dst});
+    defer gpa.free(dst_file);
+
+    try assets.save(dst_file, &asset);
+}
+
+fn bakeMesh(src: []const u8, dst: []const u8) !void {
+    std.debug.print("processing mesh: {s}\n", .{src});
+
+    const srcz = try gpa.dupeZ(u8, src);
+    defer gpa.free(srcz);
+
+    const ret = tiny.obj_load(srcz.ptr);
+    defer tiny.obj_free(ret);
+
+    var vertices = std.ArrayList(assets.VertexF32PNCV).init(gpa);
+    defer vertices.deinit();
+
+    var indices = std.ArrayList(u32).init(gpa);
+    defer indices.deinit();
+
+    var s: usize = 0;
+    while (s < ret.num_shapes) : (s += 1) {
+        const shape = ret.shapes[s];
+        try vertices.ensureTotalCapacity(vertices.items.len + shape.num_vertices);
+        try indices.ensureTotalCapacity(vertices.items.len + shape.num_vertices);
+
+        var i: usize = 0;
+        while (i < shape.num_vertices) : (i += 1) {
+            var vert: assets.VertexF32PNCV = undefined;
+            vert.position[0] = shape.vertices[i].x;
+            vert.position[1] = shape.vertices[i].y;
+            vert.position[2] = shape.vertices[i].z;
+
+            if (shape.num_normals > 0) {
+                vert.normal[0] = shape.normals[i].x;
+                vert.normal[1] = shape.normals[i].y;
+                vert.normal[2] = shape.normals[i].z;
+            }
+
+            if (shape.num_uvs > 0) {
+                vert.uv[0] = shape.uvs[i].u;
+                vert.uv[1] = shape.uvs[i].v;
+            }
+
+            vert.color[0] = shape.colors[i].x;
+            vert.color[1] = shape.colors[i].y;
+            vert.color[2] = shape.colors[i].z;
+
+            indices.appendAssumeCapacity(@intCast(u32, vertices.items.len));
+            vertices.appendAssumeCapacity(vert);
+        }
+    }
+
+    // prep AssetFile data
+    var mesh_info = assets.MeshInfo {
+        .vert_buffer_size = vertices.items.len * @sizeOf(assets.VertexF32PNCV),
+        .index_buffer_size = indices.items.len * @sizeOf(u32),
+        .vert_format = .pncv_f32,
+        .index_size = @sizeOf(u32),
+        .orig_file = src,
+    };
+
+    var json_buffer = std.ArrayList(u8).init(gpa);
+    defer json_buffer.deinit();
+    try std.json.stringify(mesh_info, .{}, json_buffer.writer());
+
+    // create the blob, merging the vert and index buffers
+    const vert_bytes = std.mem.sliceAsBytes(vertices.items);
+    const indices_bytes = std.mem.sliceAsBytes(indices.items);
+
+    const merged_blob = try gpa.alloc(u8, vert_bytes.len + indices_bytes.len);
+    defer gpa.free(merged_blob);
+
+    // @memcpy(merged_blob, vert_bytes, vert_bytes.len);
+    std.mem.copy(u8, merged_blob, vert_bytes);
+    std.mem.copy(u8, merged_blob[vert_bytes.len..], indices_bytes);
+
+    var asset = assets.AssetFile{
+        .kind = [_]u8{ 'M', 'E', 'S', 'H' },
+        .json = json_buffer.items,
+        .blob = merged_blob,
+    };
+
+    const dst_file = try std.fmt.allocPrint(gpa, "{s}.mesh", .{dst});
     defer gpa.free(dst_file);
 
     try assets.save(dst_file, &asset);

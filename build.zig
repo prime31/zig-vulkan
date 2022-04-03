@@ -209,7 +209,9 @@ fn createAssetBaker(b: *Builder, target: std.zig.CrossTarget) void {
     var exe = b.addExecutable("asset_baker", "src/assetlib/asset_baker.zig");
     exe.setOutputDir("zig-cache/bin");
     exe.setBuildMode(b.standardReleaseOptions());
+    
     linkExeDeps(exe, b, target);
+    exe.addPackage(tinyobjloader_pkg);
 
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());
