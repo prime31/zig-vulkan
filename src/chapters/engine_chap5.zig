@@ -478,50 +478,17 @@ pub const EngineChap5 = struct {
     fn initImgui(self: *Self) !void {
         // 1: create descriptor pool for IMGUI
         const sizes = [_]vk.DescriptorPoolSize{
-            .{
-                .@"type" = .sampler,
-                .descriptor_count = 1000,
-            },
-            .{
-                .@"type" = .combined_image_sampler,
-                .descriptor_count = 1000,
-            },
-            .{
-                .@"type" = .sampled_image,
-                .descriptor_count = 1000,
-            },
-            .{
-                .@"type" = .storage_image,
-                .descriptor_count = 1000,
-            },
-            .{
-                .@"type" = .uniform_texel_buffer,
-                .descriptor_count = 1000,
-            },
-            .{
-                .@"type" = .storage_texel_buffer,
-                .descriptor_count = 1000,
-            },
-            .{
-                .@"type" = .uniform_buffer,
-                .descriptor_count = 1000,
-            },
-            .{
-                .@"type" = .storage_buffer,
-                .descriptor_count = 1000,
-            },
-            .{
-                .@"type" = .uniform_buffer_dynamic,
-                .descriptor_count = 1000,
-            },
-            .{
-                .@"type" = .storage_buffer_dynamic,
-                .descriptor_count = 1000,
-            },
-            .{
-                .@"type" = .input_attachment,
-                .descriptor_count = 1000,
-            },
+            .{ .@"type" = .sampler, .descriptor_count = 1000 },
+            .{ .@"type" = .combined_image_sampler, .descriptor_count = 1000 },
+            .{ .@"type" = .sampled_image, .descriptor_count = 1000 },
+            .{ .@"type" = .storage_image, .descriptor_count = 1000 },
+            .{ .@"type" = .uniform_texel_buffer, .descriptor_count = 1000 },
+            .{ .@"type" = .storage_texel_buffer, .descriptor_count = 1000 },
+            .{ .@"type" = .uniform_buffer, .descriptor_count = 1000 },
+            .{ .@"type" = .storage_buffer, .descriptor_count = 1000 },
+            .{ .@"type" = .uniform_buffer_dynamic, .descriptor_count = 1000 },
+            .{ .@"type" = .storage_buffer_dynamic, .descriptor_count = 1000 },
+            .{ .@"type" = .input_attachment, .descriptor_count = 1000 },
         };
 
         const pool_info = vk.DescriptorPoolCreateInfo{
@@ -1108,22 +1075,10 @@ fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorS
     const single_tex_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &tex_set_info, null) catch unreachable;
 
     const sizes = [_]vk.DescriptorPoolSize{
-        .{
-            .@"type" = .uniform_buffer,
-            .descriptor_count = 10,
-        },
-        .{
-            .@"type" = .uniform_buffer_dynamic,
-            .descriptor_count = 10,
-        },
-        .{
-            .@"type" = .storage_buffer,
-            .descriptor_count = 10,
-        },
-        .{
-            .@"type" = .combined_image_sampler,
-            .descriptor_count = 10,
-        },
+        .{ .@"type" = .uniform_buffer, .descriptor_count = 10 },
+        .{ .@"type" = .uniform_buffer_dynamic, .descriptor_count = 10 },
+        .{ .@"type" = .storage_buffer, .descriptor_count = 10 },
+        .{ .@"type" = .combined_image_sampler, .descriptor_count = 10 },
     };
     var descriptor_pool = gc.vkd.createDescriptorPool(gc.dev, &.{
         .flags = .{},

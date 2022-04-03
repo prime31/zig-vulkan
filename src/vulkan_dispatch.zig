@@ -5,7 +5,8 @@ const vma = @import("vma");
 // TODO: hack that should disable validation if @root wants to or if this is a cross-compile
 pub const enableValidationLayers = if (@hasDecl(@import("root"), "disable_validation")) blk: {
     break :blk !@field(@import("root"), "disable_validation");
-} else if (@import("builtin").os.tag == .macos) blk: {
+} else if (@import("builtin").os.tag == .macos)
+blk: {
     break :blk true;
 } else false;
 
@@ -25,6 +26,7 @@ pub const InstanceDispatch = vk.InstanceWrapper(.{
     .enumeratePhysicalDevices = true,
     .getPhysicalDeviceProperties = true,
     .getPhysicalDeviceFeatures2 = true,
+    .getPhysicalDeviceProperties2 = true,
     .enumerateDeviceExtensionProperties = true,
     .getPhysicalDeviceSurfaceFormatsKHR = true,
     .getPhysicalDeviceSurfacePresentModesKHR = true,

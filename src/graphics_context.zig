@@ -10,6 +10,7 @@ const InstanceDispatch = dispatch.InstanceDispatch;
 const DeviceDispatch = dispatch.DeviceDispatch;
 const enableValidationLayers = dispatch.enableValidationLayers;
 
+// we want this but MoltenVK 1.3 doesnt seem to support it. vk.extension_info.ext_sampler_filter_minmax.name
 const required_device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name} ++ if (@import("builtin").os.tag == .macos) [_][*:0]const u8{vk.extension_info.khr_portability_subset.name} else [_][*:0]const u8{};
 const required_instance_extensions = if (enableValidationLayers) [_][*:0]const u8{vk.extension_info.ext_debug_utils.name} else [_][*:0]const u8{};
 const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
@@ -209,7 +210,16 @@ fn initializeCandidate(vki: InstanceDispatch, candidate: DeviceCandidate) !vk.De
 
     // required for access to gl_BaseInstance: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/html/vkspec.html#features-shaderDrawParameters
     var physical_features2 = std.mem.zeroInit(vk.PhysicalDeviceFeatures2, .{
+        .features = .{
+            .multi_draw_indirect = vk.TRUE,
+            .sampler_anisotropy = vk.TRUE,
+            .pipeline_statistics_query = vk.TRUE, // not available in MoltenVK 1.3
+            .draw_indirect_first_instance = vk.TRUE,
+        },
         .p_next = &std.mem.zeroInit(vk.PhysicalDeviceVulkan11Features, .{
+            .p_next = &std.mem.zeroInit(vk.PhysicalDeviceVulkan12Features, .{
+                .sampler_filter_minmax = vk.TRUE, // not available in MoltenVK 1.3
+            }),
             .shader_draw_parameters = vk.TRUE,
         }),
     });
