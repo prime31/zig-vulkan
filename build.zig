@@ -99,6 +99,12 @@ const vma_pkg = std.build.Pkg{
     .dependencies = &[_]std.build.Pkg{vulkan_pkg},
 };
 
+const spirv_reflect_pkg = std.build.Pkg{
+    .name = "spirv",
+    .path = .{ .path = "libs/spirv_reflect/spirv_reflect.zig" },
+    .dependencies = &[_]std.build.Pkg{},
+};
+
 const stb_pkg = stb_build.getPackage("");
 const imgui_pkg = imgui_build.getPackage("");
 const imgui_vk_pkg = imgui_build.getVkPackage("", vulkan_pkg);
@@ -126,30 +132,12 @@ pub fn build(b: *Builder) void {
         exe.setTarget(target);
         exe.setBuildMode(mode);
 
-        // packages
-        exe.addPackage(vulkan_pkg);
-        exe.addPackage(resources_pkg);
-        exe.addPackage(stb_pkg);
-
-        // mach-glfw
-        exe.addPackage(glfw_pkg);
-        glfw.link(b, exe, .{ .opengl = false });
-
-        // Dear ImGui
-        imgui_build.linkArtifact(b, exe, target, "");
-        exe.addPackage(imgui_pkg);
-        exe.addPackage(imgui_vk_pkg);
-
+        linkExeDeps(exe, b, target);
         exe.addPackage(.{
             .name = "vengine",
             .path = .{ .path = "src/v.zig" },
-            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobjloader_pkg, vma_pkg, stb_pkg, imgui_pkg, imgui_vk_pkg },
+            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobjloader_pkg, vma_pkg, stb_pkg, imgui_pkg, imgui_vk_pkg, spirv_reflect_pkg },
         });
-
-        // vulken-mem
-        linkVulkanMemoryAllocator(exe, vk_sdk_root);
-        linkTinyObjLoader(exe);
-        stb_build.linkArtifact(exe, "");
 
         const run_cmd = exe.run();
         run_cmd.step.dependOn(b.getInstallStep());
@@ -171,24 +159,47 @@ pub fn build(b: *Builder) void {
 
     // tests
     const exe_tests = b.addTest("src/tests.zig");
-    glfw.link(b, exe_tests, .{});
-    linkVulkanMemoryAllocator(exe_tests, vk_sdk_root);
-    linkTinyObjLoader(exe_tests);
-    stb_build.linkArtifact(exe_tests, "");
-
-    exe_tests.addPackage(vulkan_pkg);
-    exe_tests.addPackage(glfw_pkg);
+    exe_tests.setTarget(target);
+    exe_tests.setBuildMode(mode);
+   
+    linkExeDeps(exe_tests, b, target);
+    exe_tests.addPackage(vma_pkg);
+    exe_tests.addPackage(spirv_reflect_pkg);
     exe_tests.addPackage(.{
         .name = "vengine",
         .path = .{ .path = "src/v.zig" },
-        .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobjloader_pkg, vma_pkg },
+        .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobjloader_pkg, vma_pkg, stb_pkg, imgui_pkg, imgui_vk_pkg },
     });
-
-    exe_tests.setTarget(target);
-    exe_tests.setBuildMode(b.standardReleaseOptions());
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&exe_tests.step);
+}
+
+fn linkExeDeps(exe: *std.build.LibExeObjStep, b: *Builder, target: std.zig.CrossTarget) void {
+    // vulkan
+    exe.addPackage(vulkan_pkg);
+    
+    // mach-glfw
+    glfw.link(b, exe, .{ .opengl = false });
+    exe.addPackage(glfw_pkg);
+
+    // Dear ImGui
+    imgui_build.linkArtifact(b, exe, target, "");
+    exe.addPackage(imgui_pkg);
+    exe.addPackage(imgui_vk_pkg);
+
+    // spirv-reflect
+    linkSpirvReflect(exe);
+
+    // vulkan-mem
+    linkVulkanMemoryAllocator(exe, vk_sdk_root);
+
+    // tinyobjloader
+    linkTinyObjLoader(exe);
+
+    // stb
+    stb_build.linkArtifact(exe, "");
+    exe.addPackage(stb_pkg);
 }
 
 /// if always_compile_shaders is true, every build will compile shaders. If it is false, shader compilation will only occur
@@ -230,6 +241,11 @@ fn linkVulkanMemoryAllocator(step: *std.build.LibExeObjStep, comptime sdk_root: 
 fn linkTinyObjLoader(step: *std.build.LibExeObjStep) void {
     step.addIncludePath("libs/tinyobjloader");
     step.addCSourceFile("libs/tinyobjloader/obj_loader.cc", &.{});
+}
+
+fn linkSpirvReflect(step: *std.build.LibExeObjStep) void {
+    step.addIncludePath("libs/spirv_reflect");
+    step.addCSourceFile("libs/spirv_reflect/spirv_reflect.c", &.{});
 }
 
 fn getAllExamples(b: *Builder, root_directory: []const u8) [][2][]const u8 {
