@@ -11,6 +11,29 @@ pub const AssetFile = struct {
     blob: []const u8,
 };
 
+pub fn Asset(comptime T: type) type {
+    return struct {
+        const Self = @This();
+
+        info: T,
+        blob: []const u8,
+        json_parse_options: std.json.ParseOptions,
+
+        pub fn init(info: T, blob: []const u8, json_parse_options: std.json.ParseOptions) Self {
+            return .{
+                .info = info,
+                .blob = blob,
+                .json_parse_options = json_parse_options,
+            };
+        }
+
+        pub fn deinit(self: Self) void {
+            std.heap.c_allocator.free(self.blob);
+            std.json.parseFree(T, self.info, self.json_parse_options);
+        }
+    };
+}
+
 pub fn save(filename: []const u8, asset: *AssetFile) !void {
     var handle = try std.fs.cwd().createFile(filename, .{});
     defer handle.close();
@@ -25,14 +48,15 @@ pub fn save(filename: []const u8, asset: *AssetFile) !void {
     _ = try writer.write(asset.blob);
 }
 
-pub fn load(filename: []const u8) !AssetFile {
+/// T should be the info struct that corresponds to the format of the file loaded. The returned Asset(T)
+/// must have deinit called to cleanup allocations!
+pub fn load(comptime T: type, filename: []const u8) !Asset(T) {
     var handle = try std.fs.cwd().openFile(filename, .{});
     defer handle.close();
 
-    var asset: AssetFile = undefined;
-
     var reader = handle.reader();
-    _ = try reader.read(&asset.kind);
+    var kind: [4]u8 = undefined;
+    _ = try reader.read(&kind);
 
     const json_len = try reader.readInt(u64, .Little);
     const blob_len = try reader.readInt(u64, .Little);
@@ -43,24 +67,28 @@ pub fn load(filename: []const u8) !AssetFile {
     _ = try reader.read(json);
     _ = try reader.read(blob);
 
-    asset.json = json;
-    asset.blob = blob;
+    var stream = std.json.TokenStream.init(json);
+    const parse_options: std.json.ParseOptions = .{ .allocator = std.heap.c_allocator };
+    const info = try std.json.parse(T, &stream, parse_options);
 
-    return asset;
+    std.heap.c_allocator.free(json);
+
+    return Asset(T).init(info, blob, parse_options);
 }
 
 test "AssetFile save/load" {
-    std.testing.refAllDecls(@This());
+    const TestType = struct {
+        t: u8,
+    };
 
     var asset = AssetFile{
-        .kind = [_]u8{'F', 'A', 'R', 'T'},
-        .json = "{ 't': 6 }",
+        .kind = [_]u8{ 'F', 'A', 'R', 'T' },
+        .json = "{ \"t\": 6 }",
         .blob = "ldskajflksadjfkldsajfkldsjafklsdjfdklsjasdklf",
     };
     try save("/Users/desaro/Desktop/fart.txt", &asset);
 
-    var new_asset = try load("/Users/desaro/Desktop/fart.txt");
-    try std.testing.expectEqual(asset.kind, new_asset.kind);
-    try std.testing.expectEqualSlices(u8, asset.json, new_asset.json);
+    var new_asset = try load(TestType, "/Users/desaro/Desktop/fart.txt");
+    try std.testing.expectEqual(new_asset.info.t, 6);
     try std.testing.expectEqualSlices(u8, asset.blob, new_asset.blob);
 }
