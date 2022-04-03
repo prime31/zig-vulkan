@@ -259,5 +259,4 @@ pub const DescriptorBuilder = struct {
 
 test "descriptors refAllDecls" {
     std.testing.refAllDecls(@This());
-    std.debug.print("fook: {}\n", .{ @import("spirv") });
 }
