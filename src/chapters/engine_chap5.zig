@@ -420,7 +420,6 @@ pub const EngineChap5 = struct {
 
         self.renderables.deinit();
         _ = general_purpose_allocator.deinit();
-        // _ = general_purpose_allocator.detectLeaks();
     }
 
     pub fn loadContent(self: *Self) !void {
@@ -820,9 +819,11 @@ pub const EngineChap5 = struct {
                 // bind the mesh vertex buffer with offset 0
                 var offset: vk.DeviceSize = 0;
                 self.gc.vkd.cmdBindVertexBuffers(cmdbuf, 0, 1, @ptrCast([*]const vk.Buffer, &object.mesh.vert_buffer.buffer), @ptrCast([*]const vk.DeviceSize, &offset));
+                self.gc.vkd.cmdBindIndexBuffer(cmdbuf, object.mesh.index_buffer.buffer, 0, .uint32);
             }
 
-            self.gc.vkd.cmdDraw(cmdbuf, @intCast(u32, object.mesh.vertices.items.len), 1, 0, @intCast(u32, i));
+            // self.gc.vkd.cmdDraw(cmdbuf, @intCast(u32, object.mesh.vertices.items.len), 1, 0, @intCast(u32, i));
+            self.gc.vkd.cmdDrawIndexed(cmdbuf, last_mesh.index_count, 1, 0, 0, @intCast(u32, i));
         }
     }
 };
@@ -1100,28 +1101,60 @@ fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorS
 }
 
 fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh, upload_context: UploadContext) !void {
-    const buffer_size = mesh.vertices.items.len * @sizeOf(Vertex);
+    // vert buffer
+    {
+        const buffer_size = mesh.vertices.items.len * @sizeOf(Vertex);
 
-    const staging_buffer = try createBuffer(gc, buffer_size, .{ .transfer_src_bit = true }, .cpu_only);
-    defer staging_buffer.deinit(gc.allocator);
+        const staging_buffer = try createBuffer(gc, buffer_size, .{ .transfer_src_bit = true }, .cpu_only);
+        defer staging_buffer.deinit(gc.allocator);
 
-    // copy vertex data
-    const verts = try gc.allocator.mapMemory(Vertex, staging_buffer.allocation);
-    std.mem.copy(Vertex, verts[0..mesh.vertices.items.len], mesh.vertices.items);
-    gc.allocator.unmapMemory(staging_buffer.allocation);
+        // copy vertex data
+        const verts = try gc.allocator.mapMemory(Vertex, staging_buffer.allocation);
+        std.mem.copy(Vertex, verts[0..mesh.vertices.items.len], mesh.vertices.items);
+        gc.allocator.unmapMemory(staging_buffer.allocation);
 
-    // create Mesh buffer
-    mesh.vert_buffer = try createBuffer(gc, buffer_size, .{ .vertex_buffer_bit = true, .transfer_dst_bit = true }, .gpu_only);
+        // create Mesh buffer
+        mesh.vert_buffer = try createBuffer(gc, buffer_size, .{ .vertex_buffer_bit = true, .transfer_dst_bit = true }, .gpu_only);
 
-    // execute the copy command on the GPU
-    try upload_context.immediateSubmitBegin(gc);
-    const copy_region = vk.BufferCopy{
-        .src_offset = 0,
-        .dst_offset = 0,
-        .size = buffer_size,
-    };
-    gc.vkd.cmdCopyBuffer(upload_context.cmd_buf, staging_buffer.buffer, mesh.vert_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &copy_region));
-    try upload_context.immediateSubmitEnd(gc);
+        // execute the copy command on the GPU
+        try upload_context.immediateSubmitBegin(gc);
+        const copy_region = vk.BufferCopy{
+            .src_offset = 0,
+            .dst_offset = 0,
+            .size = buffer_size,
+        };
+        gc.vkd.cmdCopyBuffer(upload_context.cmd_buf, staging_buffer.buffer, mesh.vert_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &copy_region));
+        try upload_context.immediateSubmitEnd(gc);
+    }
+
+    // index buffer
+    {
+        const buffer_size = mesh.vertices.items.len * @sizeOf(u32);
+
+        const staging_buffer = try createBuffer(gc, buffer_size, .{ .transfer_src_bit = true }, .cpu_only);
+        defer staging_buffer.deinit(gc.allocator);
+
+        // copy index data
+        const indices = try mesh.getIndices(gpa);
+        defer gpa.free(indices);
+
+        const dst_indices = try gc.allocator.mapMemory(u32, staging_buffer.allocation);
+        std.mem.copy(u32, dst_indices[0..mesh.vertices.items.len], indices);
+        gc.allocator.unmapMemory(staging_buffer.allocation);
+
+        // create Mesh buffer
+        mesh.index_buffer = try createBuffer(gc, buffer_size, .{ .index_buffer_bit = true, .transfer_dst_bit = true }, .gpu_only);
+
+        // execute the copy command on the GPU
+        try upload_context.immediateSubmitBegin(gc);
+        const copy_region = vk.BufferCopy{
+            .src_offset = 0,
+            .dst_offset = 0,
+            .size = buffer_size,
+        };
+        gc.vkd.cmdCopyBuffer(upload_context.cmd_buf, staging_buffer.buffer, mesh.index_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &copy_region));
+        try upload_context.immediateSubmitEnd(gc);
+    }
 }
 
 fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: []const u8, upload_context: UploadContext) !vma.AllocatedImage {

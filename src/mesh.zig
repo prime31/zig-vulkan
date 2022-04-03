@@ -47,13 +47,12 @@ pub const Vertex = extern struct {
 
 pub const Mesh = struct {
     vertices: std.ArrayList(Vertex),
-    vert_buffer: vma.AllocatedBuffer,
+    index_count: u32 = 0,
+    vert_buffer: vma.AllocatedBuffer = undefined,
+    index_buffer: vma.AllocatedBuffer = undefined,
 
     pub fn init(allocator: std.mem.Allocator) Mesh {
-        return .{
-            .vertices = std.ArrayList(Vertex).init(allocator),
-            .vert_buffer = undefined,
-        };
+        return .{ .vertices = std.ArrayList(Vertex).init(allocator) };
     }
 
     pub fn initFromObj(allocator: std.mem.Allocator, filename: []const u8) !Mesh {
@@ -101,6 +100,15 @@ pub const Mesh = struct {
 
     pub fn deinit(self: Mesh, allocator: vma.Allocator) void {
         self.vert_buffer.deinit(allocator);
+        self.index_buffer.deinit(allocator);
         self.vertices.deinit();
+    }
+
+    pub fn getIndices(self: *Mesh, allocator: std.mem.Allocator) ![]u32 {
+        self.index_count = @intCast(u32, self.vertices.items.len);
+
+        var indices = try allocator.alloc(u32, self.vertices.items.len);
+        for (indices) |*index, i| index.* = @intCast(u32, i);
+        return indices;
     }
 };
