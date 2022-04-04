@@ -6,78 +6,6 @@ const vkgen = @import("libs/vulkan-zig/generator/index.zig");
 const Step = std.build.Step;
 const Builder = std.build.Builder;
 
-/// compiles all shaders with glslc and generates a resources.zig file to access them at runtime.
-pub const ResourceGenStep = struct {
-    step: Step,
-    shader_step: *vkgen.ShaderCompileStep,
-    builder: *Builder,
-    package: std.build.Pkg,
-    output_file: std.build.GeneratedFile,
-    resources: std.ArrayList(u8),
-
-    pub fn init(builder: *Builder, out: []const u8) *ResourceGenStep {
-        const self = builder.allocator.create(ResourceGenStep) catch unreachable;
-        const full_out_path = std.fs.path.join(builder.allocator, &[_][]const u8{
-            builder.build_root,
-            builder.cache_root,
-            out,
-        }) catch unreachable;
-
-        self.* = .{
-            .step = Step.init(.custom, "resources", builder.allocator, make),
-            .shader_step = vkgen.ShaderCompileStep.init(builder, &[_][]const u8{ "glslc", "--target-env=vulkan1.1" }, "shaders"),
-            .builder = builder,
-            .package = .{
-                .name = "resources",
-                .path = .{ .generated = &self.output_file },
-                .dependencies = null,
-            },
-            .output_file = .{
-                .step = &self.step,
-                .path = full_out_path,
-            },
-            .resources = std.ArrayList(u8).init(builder.allocator),
-        };
-
-        self.step.dependOn(&self.shader_step.step);
-        return self;
-    }
-
-    fn renderPath(path: []const u8, writer: anytype) void {
-        const separators = &[_]u8{ std.fs.path.sep_windows, std.fs.path.sep_posix };
-        var i: usize = 0;
-        while (std.mem.indexOfAnyPos(u8, path, i, separators)) |j| {
-            writer.writeAll(path[i..j]) catch unreachable;
-            switch (std.fs.path.sep) {
-                std.fs.path.sep_windows => writer.writeAll("\\\\") catch unreachable,
-                std.fs.path.sep_posix => writer.writeByte(std.fs.path.sep_posix) catch unreachable,
-                else => unreachable,
-            }
-
-            i = j + 1;
-        }
-        writer.writeAll(path[i..]) catch unreachable;
-    }
-
-    pub fn addShader(self: *ResourceGenStep, name: []const u8, source: []const u8) void {
-        const shader_out_path = self.shader_step.add(source);
-        var writer = self.resources.writer();
-
-        writer.print("pub const {s} = @embedFile(\"", .{name}) catch unreachable;
-        renderPath(shader_out_path, writer);
-        writer.writeAll("\");\n") catch unreachable;
-    }
-
-    fn make(step: *Step) !void {
-        const self = @fieldParentPtr(ResourceGenStep, "step", step);
-        const cwd = std.fs.cwd();
-
-        const dir = std.fs.path.dirname(self.output_file.path.?).?;
-        try cwd.makePath(dir);
-        try cwd.writeFile(self.output_file.path.?, self.resources.items);
-    }
-};
-
 // packages
 const vulkan_pkg = std.build.Pkg{
     .name = "vulkan",
@@ -211,16 +139,21 @@ fn createAssetBaker(b: *Builder, target: std.zig.CrossTarget) void {
     var exe = b.addExecutable("asset_baker", "src/assetlib/asset_baker.zig");
     exe.setOutputDir("zig-cache/bin");
     exe.setBuildMode(b.standardReleaseOptions());
-    
+
     linkExeDeps(exe, b, target);
     exe.addPackage(tinyobjloader_pkg);
 
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());
-    run_cmd.addArgs(&[_][]const u8{
-        "src/chapters",
-        "zig-cache/baked_assets",
-    });
+
+    if (b.args) |args| {
+        run_cmd.addArgs(args);
+    } else {
+        run_cmd.addArgs(&[_][]const u8{
+            "src/chapters",
+            "zig-cache/baked_assets",
+        });
+    }
 
     const run_step = b.step("asset_baker", "run asset_baker.zig");
     run_step.dependOn(&run_cmd.step);
@@ -332,3 +265,75 @@ fn getAllShaders(b: *Builder, root_directory: []const u8) [][2][]const u8 {
 
     return list.toOwnedSlice();
 }
+
+/// compiles all shaders with glslc and generates a resources.zig file to access them at runtime.
+pub const ResourceGenStep = struct {
+    step: Step,
+    shader_step: *vkgen.ShaderCompileStep,
+    builder: *Builder,
+    package: std.build.Pkg,
+    output_file: std.build.GeneratedFile,
+    resources: std.ArrayList(u8),
+
+    pub fn init(builder: *Builder, out: []const u8) *ResourceGenStep {
+        const self = builder.allocator.create(ResourceGenStep) catch unreachable;
+        const full_out_path = std.fs.path.join(builder.allocator, &[_][]const u8{
+            builder.build_root,
+            builder.cache_root,
+            out,
+        }) catch unreachable;
+
+        self.* = .{
+            .step = Step.init(.custom, "resources", builder.allocator, make),
+            .shader_step = vkgen.ShaderCompileStep.init(builder, &[_][]const u8{ "glslc", "--target-env=vulkan1.1" }, "shaders"),
+            .builder = builder,
+            .package = .{
+                .name = "resources",
+                .path = .{ .generated = &self.output_file },
+                .dependencies = null,
+            },
+            .output_file = .{
+                .step = &self.step,
+                .path = full_out_path,
+            },
+            .resources = std.ArrayList(u8).init(builder.allocator),
+        };
+
+        self.step.dependOn(&self.shader_step.step);
+        return self;
+    }
+
+    fn renderPath(path: []const u8, writer: anytype) void {
+        const separators = &[_]u8{ std.fs.path.sep_windows, std.fs.path.sep_posix };
+        var i: usize = 0;
+        while (std.mem.indexOfAnyPos(u8, path, i, separators)) |j| {
+            writer.writeAll(path[i..j]) catch unreachable;
+            switch (std.fs.path.sep) {
+                std.fs.path.sep_windows => writer.writeAll("\\\\") catch unreachable,
+                std.fs.path.sep_posix => writer.writeByte(std.fs.path.sep_posix) catch unreachable,
+                else => unreachable,
+            }
+
+            i = j + 1;
+        }
+        writer.writeAll(path[i..]) catch unreachable;
+    }
+
+    pub fn addShader(self: *ResourceGenStep, name: []const u8, source: []const u8) void {
+        const shader_out_path = self.shader_step.add(source);
+        var writer = self.resources.writer();
+
+        writer.print("pub const {s} = @embedFile(\"", .{name}) catch unreachable;
+        renderPath(shader_out_path, writer);
+        writer.writeAll("\");\n") catch unreachable;
+    }
+
+    fn make(step: *Step) !void {
+        const self = @fieldParentPtr(ResourceGenStep, "step", step);
+        const cwd = std.fs.cwd();
+
+        const dir = std.fs.path.dirname(self.output_file.path.?).?;
+        try cwd.makePath(dir);
+        try cwd.writeFile(self.output_file.path.?, self.resources.items);
+    }
+};
