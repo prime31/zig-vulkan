@@ -110,6 +110,99 @@ void obj_free_indexed(obj_indexed_mesh_t mesh) {
     free(mesh.indices);
 }
 
+
+obj_vec3_t obj_vec3_sub(obj_vec3_t first, obj_vec3_t second) {
+    obj_vec3_t res;
+    res.x = first.x - second.x;
+    res.y = first.y - second.y;
+    res.z = first.z - second.z;
+    return res;
+}
+
+obj_vec3_t obj_vec3_add(obj_vec3_t first, obj_vec3_t second) {
+    obj_vec3_t res;
+    res.x = first.x + second.x;
+    res.y = first.y + second.y;
+    res.z = first.z + second.z;
+    return res;
+}
+
+obj_vec3_t obj_vec3_normalize(obj_vec3_t n) {
+    float mag = sqrt(n.x * n.x + n.y * n.y + n.z * n.z);
+
+    obj_vec3_t res;
+    res.x = n.x / mag;
+    res.y = n.y / mag;
+    res.z = n.z / mag;
+    return res;
+}
+
+void calcNormal(const obj_vec3_t& _v0, const obj_vec3_t& _v1, const obj_vec3_t& _v2, obj_vec3_t& _N) {
+    obj_vec3_t v10 = obj_vec3_sub(_v1, _v0);
+    obj_vec3_t v20 = obj_vec3_sub(_v2, _v0);
+
+    _N.x = v20.x * v10.z - v20.z * v10.y;
+    _N.y = v20.z * v10.x - v20.x * v10.z;
+    _N.z = v20.x * v10.y - v20.y * v10.x;
+    
+    _N = obj_vec3_normalize(_N);
+}
+
+obj_vec3_t getVertex(const tinyobj::attrib_t& _attrib, int _index) {
+    return obj_vec3_t{ _attrib.vertices[3 * _index + 0], _attrib.vertices[3 * _index + 1], _attrib.vertices[3 * _index + 2] };
+}
+
+// Check if `mesh_t` contains smoothing group id.
+bool hasSmoothingGroup(const tinyobj::shape_t& shape) {
+    for (size_t i = 0; i < shape.mesh.smoothing_group_ids.size(); i++)
+        if (shape.mesh.smoothing_group_ids[i] > 0)
+            return true;
+        
+    return false;
+}
+
+void computeSmoothingNormals(const tinyobj::attrib_t& _attrib, const tinyobj::shape_t& _shape, std::map<int, obj_vec3_t>& smoothVertexNormals) {
+    smoothVertexNormals.clear();
+
+    std::map<int, obj_vec3_t>::iterator iter;
+
+    for (size_t f = 0; f < _shape.mesh.indices.size() / 3; f++) {
+        // Get the three indexes of the face (all faces are triangular)
+        tinyobj::index_t idx0 = _shape.mesh.indices[3 * f + 0];
+        tinyobj::index_t idx1 = _shape.mesh.indices[3 * f + 1];
+        tinyobj::index_t idx2 = _shape.mesh.indices[3 * f + 2];
+
+        // Get the three vertex indexes and coordinates
+        int vi[3];      // indexes
+        vi[0] = idx0.vertex_index;
+        vi[1] = idx1.vertex_index;
+        vi[2] = idx2.vertex_index;
+
+        obj_vec3_t v[3];  // coordinates
+        for (size_t i = 0; i < 3; i++)
+            v[i] = getVertex(_attrib, vi[i]);
+
+        // Compute the normal of the face
+        obj_vec3_t normal;
+        calcNormal(v[0], v[1], v[2], normal);
+
+        // Add the normal to the three vertexes
+        for (size_t i = 0; i < 3; ++i) {
+            iter = smoothVertexNormals.find(vi[i]);
+            // add
+            if (iter != smoothVertexNormals.end())
+                iter->second = obj_vec3_add(iter->second, normal);
+            else
+                smoothVertexNormals[vi[i]] = normal;
+        }
+    }  // f
+
+    // Normalize the normals, that is, make them unit vectors
+    for (iter = smoothVertexNormals.begin(); iter != smoothVertexNormals.end(); iter++) {
+        iter->second = obj_vec3_normalize(iter->second);
+    }
+}
+
 obj_indexed_mesh_t obj_load_indexed(const char* file) {
     tinyobj::ObjReaderConfig reader_config;
     reader_config.triangulate = true;
@@ -136,7 +229,13 @@ obj_indexed_mesh_t obj_load_indexed(const char* file) {
     std::vector<obj_uv_t> uvs;
     std::vector<unsigned int> indices;
 
+    std::map<int, obj_vec3_t> smoothVertexNormals;
     for (size_t s = 0; s < shapes.size(); s++) {
+        if (hasSmoothingGroup(shapes[s]) > 0) {
+            printf("---- shape[%d] has smoothing group\n", s);
+            computeSmoothingNormals(attrib, shapes[s], smoothVertexNormals);
+        }
+
         for (size_t i = 0; i < shapes[s].mesh.indices.size(); i++) {
             int f = (int)floor(i / 3);
 
@@ -161,7 +260,14 @@ obj_indexed_mesh_t obj_load_indexed(const char* file) {
 
                 verts.push_back({ attrib.vertices[3 * vi + 0], attrib.vertices[3 * vi + 1], attrib.vertices[3 * vi + 2] });
                 colors.push_back({ attrib.colors[3 * vi + 0], attrib.colors[3 * vi + 1], attrib.colors[3 * vi + 2] });
-                normals.push_back({ attrib.normals[3 * ni + 0], attrib.normals[3 * ni + 1], attrib.normals[3 * ni + 2] });
+
+                if (attrib.normals.size() > 0) {
+                    normals.push_back({ attrib.normals[3 * ni + 0], attrib.normals[3 * ni + 1], attrib.normals[3 * ni + 2] });
+                } else if (smoothVertexNormals.size() > 0) {
+                    if ( smoothVertexNormals.find(vi) != smoothVertexNormals.end() ) {
+                        normals.push_back(smoothVertexNormals.at(vi));
+                    }
+                }
                 uvs.push_back({ attrib.texcoords[2 * ti + 0], 1 - attrib.texcoords[2 * ti + 1] });
 
                 indices.push_back(iCounter++);
