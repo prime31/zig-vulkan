@@ -2,6 +2,7 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #define TINYOBJLOADER_USE_MAPBOX_EARCUT
 #include "tiny_obj_loader.h"
+#include <map>
 
 void obj_free(obj_mesh_t mesh) {
     for (int i = 0; i < mesh.num_shapes; i++) {
@@ -29,7 +30,7 @@ obj_mesh_t obj_load(const char* file) {
     
     auto& attrib = reader.GetAttrib();
     auto& shapes = reader.GetShapes();
-//    auto& materials = reader.GetMaterials();
+    // auto& materials = reader.GetMaterials();
     
     obj_mesh_t mesh;
     mesh.num_shapes = shapes.size();
@@ -56,12 +57,9 @@ obj_mesh_t obj_load(const char* file) {
         
         // Loop over faces(polygon)
         size_t index_offset = 0;
-        for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {
-            size_t fv = size_t(shapes[s].mesh.num_face_vertices[f]);
-            assert(fv == 3);
-            
+        for (size_t f = 0; f < shapes[s].mesh.num_face_vertices.size(); f++) {            
             // Loop over vertices in the face. hardcode loading to triangles
-            for (size_t v = 0; v < fv; v++) {
+            for (size_t v = 0; v < 3; v++) {
                 // access to vertex
                 tinyobj::index_t idx = shapes[s].mesh.indices[index_offset + v];
                 tinyobj::real_t vx = attrib.vertices[3 * size_t(idx.vertex_index) + 0];
@@ -97,12 +95,95 @@ obj_mesh_t obj_load(const char* file) {
                 shape->colors[index_offset + v].y = green;
                 shape->colors[index_offset + v].z = blue;
             }
-            index_offset += fv;
-            
-            // per-face material
-            shapes[s].mesh.material_ids[f];
+            index_offset += 3;
         }
     }
     
+    return mesh;
+}
+
+void obj_free_indexed(obj_indexed_mesh_t mesh) {
+    free(mesh.vertices);
+    free(mesh.normals);
+    free(mesh.uvs);
+    free(mesh.colors);
+    free(mesh.indices);
+}
+
+obj_indexed_mesh_t obj_load_indexed(const char* file) {
+    tinyobj::ObjReaderConfig reader_config;
+    reader_config.triangulate = true;
+    
+    tinyobj::ObjReader reader;
+    
+    if (!reader.ParseFromFile(std::string(file), reader_config)) {
+        if (!reader.Error().empty()) printf("Error parsing file: %s", reader.Error().c_str());
+        exit(1);
+    }
+    
+    if (!reader.Warning().empty()) printf("Warning parsing file: %s" ,reader.Warning().c_str());
+    
+    auto& attrib = reader.GetAttrib();
+    auto& shapes = reader.GetShapes();
+
+    int iCounter = 0;
+    std::map<int, tinyobj::index_t> unique_indices;
+    std::map<int, tinyobj::index_t>::iterator iter;
+
+    std::vector<obj_vec3_t> verts;
+    std::vector<obj_vec3_t> colors;
+    std::vector<obj_vec3_t> normals;
+    std::vector<obj_uv_t> uvs;
+    std::vector<unsigned int> indices;
+
+    for (size_t s = 0; s < shapes.size(); s++) {
+        for (size_t i = 0; i < shapes[s].mesh.indices.size(); i++) {
+            int f = (int)floor(i / 3);
+
+            tinyobj::index_t index = shapes[s].mesh.indices[i];
+            int vi = index.vertex_index;
+            int ni = index.normal_index;
+            int ti = index.texcoord_index;
+
+            bool reuse = false;
+            iter = unique_indices.find(vi);
+
+            if (iter != unique_indices.end())
+                if ((iter->second.normal_index == ni) && (iter->second.texcoord_index == ti) )
+                    reuse = true;
+
+            if (reuse) {
+                indices.push_back(iter->second.vertex_index);
+            } else {
+                unique_indices[vi].vertex_index = (int)iCounter;
+                unique_indices[vi].normal_index = ni;
+                unique_indices[vi].texcoord_index = ti;
+
+                verts.push_back({ attrib.vertices[3 * vi + 0], attrib.vertices[3 * vi + 1], attrib.vertices[3 * vi + 2] });
+                colors.push_back({ attrib.colors[3 * vi + 0], attrib.colors[3 * vi + 1], attrib.colors[3 * vi + 2] });
+                normals.push_back({ attrib.normals[3 * ni + 0], attrib.normals[3 * ni + 1], attrib.normals[3 * ni + 2] });
+                uvs.push_back({ attrib.texcoords[2 * ti + 0], 1 - attrib.texcoords[2 * ti + 1] });
+
+                indices.push_back(iCounter++);
+            }
+        }
+    }
+
+    obj_indexed_mesh_t mesh;
+    mesh.num_vertices = verts.size();
+    mesh.num_indices = indices.size();
+    
+    mesh.vertices = (obj_vec3_t*)malloc(sizeof(obj_vec3_t) * mesh.num_vertices);
+    mesh.normals = (obj_vec3_t*)malloc(sizeof(obj_vec3_t) * mesh.num_vertices);
+    mesh.uvs = (obj_uv_t*)malloc(sizeof(obj_uv_t) * mesh.num_vertices);
+    mesh.colors = (obj_vec3_t*)malloc(sizeof(obj_vec3_t) * mesh.num_vertices);
+    mesh.indices = (unsigned int*)malloc(sizeof(unsigned int) * mesh.num_indices);
+
+    memcpy(mesh.vertices, verts.data(), sizeof(obj_vec3_t) * mesh.num_vertices);
+    memcpy(mesh.normals, normals.data(), sizeof(obj_vec3_t) * mesh.num_vertices);
+    memcpy(mesh.uvs, uvs.data(), sizeof(obj_uv_t) * uvs.size());
+    memcpy(mesh.colors, colors.data(), sizeof(obj_vec3_t) * mesh.num_vertices);
+    memcpy(mesh.indices, indices.data(), sizeof(unsigned int) * mesh.num_indices);
+
     return mesh;
 }

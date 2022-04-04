@@ -47,54 +47,53 @@ pub const Vertex = extern struct {
 
 pub const Mesh = struct {
     vertices: std.ArrayList(Vertex),
+    indices: []u32,
     index_count: u32 = 0,
     vert_buffer: vma.AllocatedBuffer = undefined,
     index_buffer: vma.AllocatedBuffer = undefined,
 
     pub fn init(allocator: std.mem.Allocator) Mesh {
-        return .{ .vertices = std.ArrayList(Vertex).init(allocator) };
+        var indices = allocator.alloc(u32, 3) catch unreachable;
+        indices[0] = 0;
+        indices[1] = 1;
+        indices[2] = 2;
+        return .{ .vertices = std.ArrayList(Vertex).init(allocator), .indices = indices, .index_count = 3 };
     }
 
     pub fn initFromObj(allocator: std.mem.Allocator, filename: []const u8) !Mesh {
-        const ret = tiny.obj_load(filename.ptr);
-        defer tiny.obj_free(ret);
+        const tiny_mesh = tiny.obj_load_indexed(filename.ptr);
+        defer tiny.obj_free_indexed(tiny_mesh);
 
-        var vertices = std.ArrayList(Vertex).init(allocator);
+        var vertices = try std.ArrayList(Vertex).initCapacity(allocator, tiny_mesh.num_vertices);
 
-        var s: usize = 0;
-        while (s < ret.num_shapes) : (s += 1) {
-            const shape = ret.shapes[s];
-            try vertices.ensureTotalCapacity(vertices.items.len + shape.num_vertices);
+        var i: usize = 0;
+        while (i < tiny_mesh.num_vertices) : (i += 1) {
+            var vert: Vertex = undefined;
+            vert.position[0] = tiny_mesh.vertices[i].x;
+            vert.position[1] = tiny_mesh.vertices[i].y;
+            vert.position[2] = tiny_mesh.vertices[i].z;
 
-            var i: usize = 0;
-            while (i < shape.num_vertices) : (i += 1) {
-                var vert: Vertex = undefined;
-                vert.position[0] = shape.vertices[i].x;
-                vert.position[1] = shape.vertices[i].y;
-                vert.position[2] = shape.vertices[i].z;
+            vert.normal[0] = tiny_mesh.normals[i].x;
+            vert.normal[1] = tiny_mesh.normals[i].y;
+            vert.normal[2] = tiny_mesh.normals[i].z;
 
-                if (shape.num_normals > 0) {
-                    vert.normal[0] = shape.normals[i].x;
-                    vert.normal[1] = shape.normals[i].y;
-                    vert.normal[2] = shape.normals[i].z;
-                }
+            vert.uv[0] = tiny_mesh.uvs[i].u;
+            vert.uv[1] = tiny_mesh.uvs[i].v;
 
-                if (shape.num_uvs > 0) {
-                    vert.uv[0] = shape.uvs[i].u;
-                    vert.uv[1] = shape.uvs[i].v;
-                }
+            vert.color[0] = tiny_mesh.colors[i].x;
+            vert.color[1] = tiny_mesh.colors[i].y;
+            vert.color[2] = tiny_mesh.colors[i].z;
 
-                vert.color[0] = shape.colors[i].x;
-                vert.color[1] = shape.colors[i].y;
-                vert.color[2] = shape.colors[i].z;
-
-                vertices.appendAssumeCapacity(vert);
-            }
+            vertices.appendAssumeCapacity(vert);
         }
+
+        var indices = try allocator.alloc(u32, tiny_mesh.num_indices);
+        std.mem.copy(u32, indices, tiny_mesh.indices[0..tiny_mesh.num_indices]);
 
         return Mesh{
             .vertices = vertices,
-            .vert_buffer = undefined,
+            .indices = indices,
+            .index_count = @intCast(u32, indices.len),
         };
     }
 
@@ -102,13 +101,6 @@ pub const Mesh = struct {
         self.vert_buffer.deinit(allocator);
         self.index_buffer.deinit(allocator);
         self.vertices.deinit();
-    }
-
-    pub fn getIndices(self: *Mesh, allocator: std.mem.Allocator) ![]u32 {
-        self.index_count = @intCast(u32, self.vertices.items.len);
-
-        var indices = try allocator.alloc(u32, self.vertices.items.len);
-        for (indices) |*index, i| index.* = @intCast(u32, i);
-        return indices;
+        self.vertices.allocator.free(self.indices);
     }
 };

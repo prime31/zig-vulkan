@@ -31,8 +31,22 @@ extern "C" {
         obj_shape_t* shapes;
     } obj_mesh_t;
 
+    typedef struct {
+        unsigned long long num_vertices;
+        unsigned long long num_indices;
+
+        obj_vec3_t *vertices;
+        obj_vec3_t *normals;
+        obj_uv_t *uvs;
+        obj_vec3_t *colors;
+        unsigned int *indices;
+    } obj_indexed_mesh_t;
+
     void obj_free(obj_mesh_t mesh);
     obj_mesh_t obj_load(const char* file);
+
+    void obj_free_indexed(obj_indexed_mesh_t mesh);
+    obj_indexed_mesh_t obj_load_indexed(const char* file);
 }
 
 #endif

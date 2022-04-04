@@ -1129,17 +1129,14 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh, upload_context: UploadCon
 
     // index buffer
     {
-        const buffer_size = mesh.vertices.items.len * @sizeOf(u32);
+        const buffer_size = mesh.indices.len * @sizeOf(u32);
 
         const staging_buffer = try createBuffer(gc, buffer_size, .{ .transfer_src_bit = true }, .cpu_only);
         defer staging_buffer.deinit(gc.allocator);
 
         // copy index data
-        const indices = try mesh.getIndices(gpa);
-        defer gpa.free(indices);
-
         const dst_indices = try gc.allocator.mapMemory(u32, staging_buffer.allocation);
-        std.mem.copy(u32, dst_indices[0..mesh.vertices.items.len], indices);
+        std.mem.copy(u32, dst_indices[0..mesh.indices.len], mesh.indices);
         gc.allocator.unmapMemory(staging_buffer.allocation);
 
         // create Mesh buffer

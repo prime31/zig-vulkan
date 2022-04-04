@@ -146,52 +146,43 @@ fn bakeMesh(src: []const u8, dst: []const u8) !void {
     const srcz = try gpa.dupeZ(u8, src);
     defer gpa.free(srcz);
 
-    const ret = tiny.obj_load(srcz.ptr);
-    defer tiny.obj_free(ret);
+    const tiny_mesh = tiny.obj_load_indexed(srcz.ptr);
+    defer tiny.obj_free_indexed(tiny_mesh);
 
-    var vertices = std.ArrayList(assets.VertexF32PNCV).init(gpa);
-    defer vertices.deinit();
+    var vertices = try gpa.alloc(assets.VertexF32PNCV, tiny_mesh.num_vertices);
+    defer gpa.free(vertices);
 
-    var indices = std.ArrayList(u32).init(gpa);
-    defer indices.deinit();
+    var i: usize = 0;
+    while (i < tiny_mesh.num_vertices) : (i += 1) {
+        var vert: assets.VertexF32PNCV = undefined;
+        vert.position[0] = tiny_mesh.vertices[i].x;
+        vert.position[1] = tiny_mesh.vertices[i].y;
+        vert.position[2] = tiny_mesh.vertices[i].z;
 
-    var s: usize = 0;
-    while (s < ret.num_shapes) : (s += 1) {
-        const shape = ret.shapes[s];
-        try vertices.ensureTotalCapacity(vertices.items.len + shape.num_vertices);
-        try indices.ensureTotalCapacity(vertices.items.len + shape.num_vertices);
+        vert.normal[0] = tiny_mesh.normals[i].x;
+        vert.normal[1] = tiny_mesh.normals[i].y;
+        vert.normal[2] = tiny_mesh.normals[i].z;
 
-        var i: usize = 0;
-        while (i < shape.num_vertices) : (i += 1) {
-            var vert: assets.VertexF32PNCV = undefined;
-            vert.position[0] = shape.vertices[i].x;
-            vert.position[1] = shape.vertices[i].y;
-            vert.position[2] = shape.vertices[i].z;
+        vert.uv[0] = tiny_mesh.uvs[i].u;
+        vert.uv[1] = tiny_mesh.uvs[i].v;
 
-            if (shape.num_normals > 0) {
-                vert.normal[0] = shape.normals[i].x;
-                vert.normal[1] = shape.normals[i].y;
-                vert.normal[2] = shape.normals[i].z;
-            }
+        vert.color[0] = tiny_mesh.colors[i].x;
+        vert.color[1] = tiny_mesh.colors[i].y;
+        vert.color[2] = tiny_mesh.colors[i].z;
 
-            if (shape.num_uvs > 0) {
-                vert.uv[0] = shape.uvs[i].u;
-                vert.uv[1] = shape.uvs[i].v;
-            }
-
-            vert.color[0] = shape.colors[i].x;
-            vert.color[1] = shape.colors[i].y;
-            vert.color[2] = shape.colors[i].z;
-
-            indices.appendAssumeCapacity(@intCast(u32, vertices.items.len));
-            vertices.appendAssumeCapacity(vert);
-        }
+        vertices[i] = vert;
     }
+
+    var indices = try gpa.alloc(u32, tiny_mesh.num_indices);
+    defer gpa.free(indices);
+
+    std.mem.copy(u32, indices, tiny_mesh.indices[0..tiny_mesh.num_indices]);
+
 
     // prep AssetFile data
     var mesh_info = assets.MeshInfo {
-        .vert_buffer_size = vertices.items.len * @sizeOf(assets.VertexF32PNCV),
-        .index_buffer_size = indices.items.len * @sizeOf(u32),
+        .vert_buffer_size = vertices.len * @sizeOf(assets.VertexF32PNCV),
+        .index_buffer_size = indices.len * @sizeOf(u32),
         .vert_format = .pncv_f32,
         .index_size = @sizeOf(u32),
         .orig_file = src,
@@ -202,8 +193,8 @@ fn bakeMesh(src: []const u8, dst: []const u8) !void {
     try std.json.stringify(mesh_info, .{}, json_buffer.writer());
 
     // create the blob, merging the vert and index buffers
-    const vert_bytes = std.mem.sliceAsBytes(vertices.items);
-    const indices_bytes = std.mem.sliceAsBytes(indices.items);
+    const vert_bytes = std.mem.sliceAsBytes(vertices);
+    const indices_bytes = std.mem.sliceAsBytes(indices);
 
     const merged_blob = try gpa.alloc(u8, vert_bytes.len + indices_bytes.len);
     defer gpa.free(merged_blob);
