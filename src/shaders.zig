@@ -11,6 +11,19 @@ const print = std.debug.print;
 pub const ShaderModule = struct {
     code: []const u32,
     module: vk.ShaderModule = .null_handle,
+
+    pub fn init(gc: *const GraphicsContext, comptime res_path: []const u8) !ShaderModule {
+        const data = @field(resources, res_path);
+
+        return ShaderModule{
+            .code = @alignCast(@alignOf(u32), std.mem.bytesAsSlice(u32, data)),
+            .module = try gc.vkd.createShaderModule(gc.dev, &.{
+                .flags = .{},
+                .code_size = data.len,
+                .p_code = @ptrCast([*]const u32, data),
+            }, null),
+        };
+    }
 };
 
 pub const ShaderEffect = struct {
@@ -219,10 +232,33 @@ const DescriptorSetLayoutData = struct {
     }
 };
 
-pub const ReflectedBinding = struct {
+const ReflectedBinding = struct {
     set: u32,
     binding: u32,
     descriptor_type: vk.DescriptorType,
+};
+
+pub const ShaderCache = struct {
+    module_cache: std.StringHashMap(ShaderModule),
+
+    pub fn init(gpa: std.mem.Allocator) ShaderCache {
+        return .{
+            .module_cache = std.StringHashMap(ShaderModule).init(gpa),
+        };
+    }
+
+    pub fn deinit(self: ShaderCache) void {
+        var iter = self.module_cache.valueIterator();
+        while (iter.next()) |sm| sm.deinit();
+        self.module_cache.deinit();
+    }
+
+    pub fn getShader(self: ShaderCache, path: []const u8) *ShaderModule {
+        if (!self.module_cache.contains(path)) {
+            try self.module_cache.put(path, ShaderModule.init());
+        }
+        return self.module_cache.getPtr(path);
+    }
 };
 
 test "shaders reflection" {
@@ -244,10 +280,12 @@ test "shaders reflection" {
     var overrides: []ShaderEffect.ReflectionOverrides = &[_]ShaderEffect.ReflectionOverrides{};
 
     try shader_effect.stages.append(.{
-        .shader_module = &.{
-            .code = @alignCast(@alignOf(u32), std.mem.bytesAsSlice(u32, resources.tri_mesh_descriptors_vert)),
-        },
+        .shader_module = &try ShaderModule.init(gc, "tri_mesh_descriptors_vert"),
         .stage = .{ .vertex_bit = true },
+    });
+    try shader_effect.stages.append(.{
+        .shader_module = &try ShaderModule.init(gc, "default_lit_frag"),
+        .stage = .{ .fragment_bit = true },
     });
 
     try shader_effect.reflectLayout(gc, overrides);
