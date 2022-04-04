@@ -83,6 +83,7 @@ const vulkan_pkg = std.build.Pkg{
     .name = "vulkan",
     .path = .{ .path = "src/vk.zig" },
 };
+
 const glfw_pkg = std.build.Pkg{
     .name = "glfw",
     .path = .{ .path = "libs/mach-glfw/src/main.zig" },
@@ -169,6 +170,7 @@ pub fn build(b: *Builder) void {
         .path = .{ .path = "src/v.zig" },
         .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobjloader_pkg, vma_pkg, stb_pkg, imgui_pkg, imgui_vk_pkg },
     });
+    exe_tests.addPackage(resources_pkg);
 
     const test_step = b.step("test", "Run unit tests");
     test_step.dependOn(&exe_tests.step);
@@ -311,7 +313,7 @@ fn getAllShaders(b: *Builder, root_directory: []const u8) [][2][]const u8 {
             var iter = dir.iterate();
             while (iter.next() catch unreachable) |entry| {
                 if (entry.kind == .File) {
-                    if (std.mem.endsWith(u8, entry.name, ".vert") or std.mem.endsWith(u8, entry.name, ".frag")) {
+                    if (std.mem.endsWith(u8, entry.name, ".vert") or std.mem.endsWith(u8, entry.name, ".frag") or std.mem.endsWith(u8, entry.name, ".comp")) {
                         const abs_path = std.fs.path.join(alloc, &[_][]const u8{ directory, entry.name }) catch unreachable;
                         const name = alloc.dupe(u8, std.fs.path.basename(abs_path)) catch unreachable;
                         if (std.mem.indexOf(u8, name, ".")) |index| name[index] = '_';
