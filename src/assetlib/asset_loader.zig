@@ -86,9 +86,12 @@ test "AssetFile save/load" {
         .json = "{ \"t\": 6 }",
         .blob = "ldskajflksadjfkldsajfkldsjafklsdjfdklsjasdklf",
     };
-    try save("/Users/desaro/Desktop/fart.txt", &asset);
 
-    var new_asset = try load(TestType, "/Users/desaro/Desktop/fart.txt");
+    const output_file = "zig-cache/tmp/fart.txt";
+
+    try save(output_file, &asset);
+
+    var new_asset = try load(TestType, output_file);
     try std.testing.expectEqual(new_asset.info.t, 6);
     try std.testing.expectEqualSlices(u8, asset.blob, new_asset.blob);
 }
