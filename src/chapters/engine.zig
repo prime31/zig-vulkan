@@ -346,7 +346,6 @@ pub const Engine = struct {
         const window = try glfw.Window.create(extent.width, extent.height, app_name, null, null, .{
             .client_api = .no_api,
         });
-        glfw.c.glfwWindowHint(glfw.c.GLFW_CLIENT_API, glfw.c.GLFW_NO_API);
 
         var gc = try gpa.create(GraphicsContext);
         gc.* = try GraphicsContext.init(gpa, app_name, window);

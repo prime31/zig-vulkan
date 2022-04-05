@@ -381,9 +381,7 @@ pub inline fn create(
     hints: Hints,
 ) error{ APIUnavailable, VersionUnavailable, FormatUnavailable, PlatformError }!Window {
     internal_debug.assertInitialized();
-    const ignore_hints_struct = if (comptime @import("builtin").is_test) testing_ignore_window_hints_struct else false;
-    if (!ignore_hints_struct) hints.set();
-    defer if (!ignore_hints_struct) defaultHints();
+    hints.set();
 
     if (c.glfwCreateWindow(
         @intCast(c_int, width),
