@@ -9,8 +9,4 @@ pub usingnamespace @import("vk_objs/frame_buffer_attachment.zig");
 pub usingnamespace @import("vk_objs/offscreen_pass.zig");
 
 // engines per chapter
-pub usingnamespace @import("chapters/engine_chap2.zig");
-pub usingnamespace @import("chapters/engine_chap3.zig");
-pub usingnamespace @import("chapters/engine_chap3s.zig");
-pub usingnamespace @import("chapters/engine_chap4.zig");
-pub usingnamespace @import("chapters/engine_chap5.zig");
+pub usingnamespace @import("chapters/engine.zig");

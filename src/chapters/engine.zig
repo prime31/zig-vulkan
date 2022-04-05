@@ -1,9 +1,13 @@
 const std = @import("std");
+const stb = @import("stb");
 const vk = @import("vulkan");
 const vma = @import("vma");
 const resources = @import("resources");
 const glfw = @import("glfw");
+const ig = @import("imgui");
+const igvk = @import("imgui_vk");
 const vkinit = @import("../vkinit.zig");
+const vkutil = @import("../vk_util/vk_util.zig");
 
 const GraphicsContext = @import("../graphics_context.zig").GraphicsContext;
 const Swapchain = @import("../swapchain.zig").Swapchain;
@@ -24,6 +28,20 @@ fn toRadians(deg: anytype) @TypeOf(deg) {
 fn toDegrees(rad: anytype) @TypeOf(rad) {
     return 180.0 * rad / std.math.pi;
 }
+
+pub const Texture = struct {
+    image: vma.AllocatedImage,
+    view: vk.ImageView,
+
+    pub fn init(image: vma.AllocatedImage) Texture {
+        return .{ .image = image, .view = undefined };
+    }
+
+    pub fn deinit(self: Texture, gc: *const GraphicsContext) void {
+        gc.destroy(self.view);
+        self.image.deinit(gc.allocator);
+    }
+};
 
 const FlyCamera = struct {
     window: glfw.Window,
@@ -85,6 +103,24 @@ const FlyCamera = struct {
 
     pub fn getViewMatrix(self: FlyCamera) Mat4 {
         return Mat4.createLookAt(self.pos, self.pos.add(self.front), self.up);
+    }
+
+    pub fn getProjMatrix(_: FlyCamera, extent: vk.Extent2D) Mat4 {
+        var proj = Mat4.createPerspective(toRadians(70.0), @intToFloat(f32, extent.width) / @intToFloat(f32, extent.height), 0.1, 5000);
+        proj.fields[1][1] *= -1;
+        return proj;
+    }
+
+    pub fn getReversedProjMatrix(_: FlyCamera, extent: vk.Extent2D) Mat4 {
+        var proj = Mat4.createPerspective(toRadians(70.0), @intToFloat(f32, extent.width) / @intToFloat(f32, extent.height), 5000, 0.1, 5000);
+        proj.fields[1][1] *= -1;
+        return proj;
+    }
+
+    pub fn getRotationMatrix(_: FlyCamera, extent: vk.Extent2D) Mat4 {
+        var proj = Mat4.createPerspective(toRadians(70.0), @intToFloat(f32, extent.width) / @intToFloat(f32, extent.height), 0.1, 5000);
+        proj.fields[1][1] *= -1;
+        return proj;
     }
 };
 
@@ -186,13 +222,14 @@ const FrameData = struct {
 
     pub fn deinit(self: *FrameData, gc: *GraphicsContext) void {
         gc.vkd.freeCommandBuffers(gc.dev, self.cmd_pool, 1, @ptrCast([*]vk.CommandBuffer, &self.cmd_buffer));
-        gc.vkd.destroyCommandPool(gc.dev, self.cmd_pool, null);
+        gc.destroy(self.cmd_pool);
         self.camera_buffer.deinit(gc.allocator);
         self.object_buffer.deinit(gc.allocator);
     }
 };
 
 const Material = struct {
+    texture_set: ?vk.DescriptorSet = null,
     pipeline: vk.Pipeline,
     pipeline_layout: vk.PipelineLayout,
 
@@ -202,6 +239,11 @@ const Material = struct {
             .pipeline_layout = pipeline_layout,
         };
     }
+
+    pub fn deinit(self: Material, gc: *const GraphicsContext) void {
+        gc.destroy(self.pipeline);
+        gc.destroy(self.pipeline_layout);
+    }
 };
 
 const RenderObject = struct {
@@ -210,17 +252,65 @@ const RenderObject = struct {
     transform_matrix: Mat4,
 };
 
+const UploadContext = struct {
+    upload_fence: vk.Fence,
+    cmd_pool: vk.CommandPool,
+    cmd_buf: vk.CommandBuffer,
+
+    pub fn init(gc: *const GraphicsContext) !UploadContext {
+        const fence = try gc.vkd.createFence(gc.dev, &.{ .flags = .{} }, null);
+
+        const cmd_pool = try gc.vkd.createCommandPool(gc.dev, &.{
+            .flags = .{},
+            .queue_family_index = gc.graphics_queue.family,
+        }, null);
+
+        var cmd_buffer: vk.CommandBuffer = undefined;
+        try gc.vkd.allocateCommandBuffers(gc.dev, &.{
+            .command_pool = cmd_pool,
+            .level = .primary,
+            .command_buffer_count = 1,
+        }, @ptrCast([*]vk.CommandBuffer, &cmd_buffer));
+
+        return UploadContext{
+            .upload_fence = fence,
+            .cmd_pool = cmd_pool,
+            .cmd_buf = cmd_buffer,
+        };
+    }
+
+    pub fn deinit(self: UploadContext, gc: *const GraphicsContext) void {
+        gc.destroy(self.cmd_pool);
+        gc.destroy(self.upload_fence);
+    }
+
+    pub fn immediateSubmitBegin(self: UploadContext, gc: *const GraphicsContext) !void {
+        try gc.vkd.beginCommandBuffer(self.cmd_buf, &.{
+            .flags = .{ .one_time_submit_bit = true },
+            .p_inheritance_info = null,
+        });
+    }
+
+    pub fn immediateSubmitEnd(self: UploadContext, gc: *const GraphicsContext) !void {
+        try gc.vkd.endCommandBuffer(self.cmd_buf);
+
+        // submit command buffer to the queue and execute it
+        const submit = vkinit.submitInfo(&self.cmd_buf);
+        try gc.vkd.queueSubmit(gc.graphics_queue.handle, 1, @ptrCast([*]const vk.SubmitInfo, &submit), self.upload_fence);
+
+        _ = try gc.vkd.waitForFences(gc.dev, 1, @ptrCast([*]const vk.Fence, &self.upload_fence), vk.TRUE, std.math.maxInt(u64));
+        try gc.vkd.resetCommandPool(gc.dev, self.cmd_pool, .{});
+
+        try gc.vkd.resetFences(gc.dev, 1, @ptrCast([*]const vk.Fence, &self.upload_fence));
+    }
+};
+
 var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
 const gpa = general_purpose_allocator.allocator();
 
 const depth_format = vk.Format.d32_sfloat;
 
-const MeshPushConstants = struct {
-    data: Vec4 = .{},
-    render_matrix: Mat4,
-};
-
-pub const EngineChap4 = struct {
+pub const Engine = struct {
     const Self = @This();
 
     allocator: Allocator,
@@ -233,17 +323,21 @@ pub const EngineChap4 = struct {
     frame_num: f32 = 0,
     dt: f64 = 0.0,
     last_frame_time: f64 = 0.0,
-    depth_image: vma.AllocatedImage,
+    depth_image: Texture,
     renderables: std.ArrayList(RenderObject),
     materials: std.StringHashMap(Material),
     meshes: std.StringHashMap(Mesh),
+    textures: std.StringHashMap(Texture),
     camera: FlyCamera,
     global_set_layout: vk.DescriptorSetLayout,
+    object_set_layout: vk.DescriptorSetLayout,
+    single_tex_layout: vk.DescriptorSetLayout,
     descriptor_pool: vk.DescriptorPool,
-    gpu_props: vk.PhysicalDeviceProperties,
+    imgui_pool: vk.DescriptorPool = undefined,
     scene_params: GpuSceneData,
     scene_param_buffer: vma.AllocatedBuffer,
-    object_set_layout: vk.DescriptorSetLayout,
+    upload_context: UploadContext,
+    blocky_sampler: vk.Sampler = undefined,
 
     pub fn init(app_name: [*:0]const u8) !Self {
         try glfw.init(.{});
@@ -252,6 +346,7 @@ pub const EngineChap4 = struct {
         const window = try glfw.Window.create(extent.width, extent.height, app_name, null, null, .{
             .client_api = .no_api,
         });
+        glfw.c.glfwWindowHint(glfw.c.GLFW_CLIENT_API, glfw.c.GLFW_NO_API);
 
         var gc = try gpa.create(GraphicsContext);
         gc.* = try GraphicsContext.init(gpa, app_name, window);
@@ -262,11 +357,10 @@ pub const EngineChap4 = struct {
 
         // depth image
         const depth_image = try createDepthImage(gc, swapchain);
-        const framebuffers = try createFramebuffers(gc, gpa, render_pass, swapchain, depth_image.view.?);
+        const framebuffers = try createFramebuffers(gc, gpa, render_pass, swapchain, depth_image.view);
 
         // descriptors
-        const gpu_props = gc.vki.getPhysicalDeviceProperties(gc.pdev);
-        const descriptors = createDescriptors(gc, gpu_props);
+        const descriptors = createDescriptors(gc);
 
         // create our FrameDatas
         const frames = try gpa.alloc(FrameData, swapchain.swap_images.len);
@@ -285,45 +379,58 @@ pub const EngineChap4 = struct {
             .renderables = std.ArrayList(RenderObject).init(gpa),
             .materials = std.StringHashMap(Material).init(gpa),
             .meshes = std.StringHashMap(Mesh).init(gpa),
+            .textures = std.StringHashMap(Texture).init(gpa),
             .camera = FlyCamera.init(window),
             .global_set_layout = descriptors.layout,
+            .object_set_layout = descriptors.object_set_layout,
+            .single_tex_layout = descriptors.single_tex_layout,
             .descriptor_pool = descriptors.pool,
-            .gpu_props = gpu_props,
             .scene_params = .{},
             .scene_param_buffer = descriptors.scene_param_buffer,
-            .object_set_layout = descriptors.object_set_layout,
+            .upload_context = try UploadContext.init(gc),
         };
     }
 
     pub fn deinit(self: *Self) void {
-        self.gc.vkd.deviceWaitIdle(self.gc.dev) catch return;
+        self.gc.vkd.deviceWaitIdle(self.gc.dev) catch unreachable;
+
+        igvk.shutdown();
+        ig.igDestroyContext(null);
+        self.gc.destroy(self.imgui_pool);
+
+        self.upload_context.deinit(self.gc);
+
+        self.gc.destroy(self.blocky_sampler);
 
         self.scene_param_buffer.deinit(self.gc.allocator);
-        self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.object_set_layout, null);
-        self.gc.vkd.destroyDescriptorSetLayout(self.gc.dev, self.global_set_layout, null);
-        self.gc.vkd.destroyDescriptorPool(self.gc.dev, self.descriptor_pool, null);
+        self.gc.destroy(self.object_set_layout);
+        self.gc.destroy(self.global_set_layout);
+        self.gc.destroy(self.single_tex_layout);
+        self.gc.destroy(self.descriptor_pool);
 
-        self.depth_image.deinit(self.gc.allocator);
-        self.gc.vkd.destroyImageView(self.gc.dev, self.depth_image.view.?, null);
+        self.depth_image.deinit(self.gc);
 
         var iter = self.meshes.valueIterator();
-        while (iter.next()) |mesh| mesh.*.deinit(self.gc.allocator);
+        while (iter.next()) |mesh| mesh.deinit(self.gc.allocator);
+        self.meshes.deinit();
+
+        var tex_iter = self.textures.valueIterator();
+        while (tex_iter.next()) |tex| tex.deinit(self.gc);
+        self.textures.deinit();
 
         for (self.frames) |*frame| frame.deinit(self.gc);
         self.allocator.free(self.frames);
 
-        for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
+        for (self.framebuffers) |fb| self.gc.destroy(fb);
         self.allocator.free(self.framebuffers);
 
         var mat_iter = self.materials.valueIterator();
-        while (mat_iter.next()) |mat| {
-            self.gc.vkd.destroyPipeline(self.gc.dev, mat.pipeline, null);
-            self.gc.vkd.destroyPipelineLayout(self.gc.dev, mat.pipeline_layout, null);
-        }
-        self.gc.vkd.destroyRenderPass(self.gc.dev, self.render_pass, null);
+        while (mat_iter.next()) |mat| mat.deinit(self.gc);
+        self.materials.deinit();
+
+        self.gc.destroy(self.render_pass);
 
         self.swapchain.deinit();
-
         self.gc.deinit();
         self.allocator.destroy(self.gc);
 
@@ -331,13 +438,12 @@ pub const EngineChap4 = struct {
         glfw.terminate();
 
         self.renderables.deinit();
-        self.materials.deinit();
-        self.meshes.deinit();
         _ = general_purpose_allocator.deinit();
-        // _ = general_purpose_allocator.detectLeaks();
     }
 
     pub fn loadContent(self: *Self) !void {
+        try self.initImgui();
+        try self.loadImages();
         try self.loadMeshes();
         try self.initPipelines();
         try self.initScene();
@@ -350,6 +456,10 @@ pub const EngineChap4 = struct {
             self.last_frame_time = curr_frame_time;
 
             self.camera.update(self.dt);
+
+            igvk.newFrame();
+            ig.igNewFrame();
+            @import("autogui.zig").inspect(FlyCamera, &self.camera);
 
             // wait for the last frame to complete before filling our CommandBuffer
             const state = self.swapchain.waitForFrame() catch |err| switch (err) {
@@ -370,13 +480,12 @@ pub const EngineChap4 = struct {
                 var extent = vk.Extent2D{ .width = size.width, .height = size.height };
                 try self.swapchain.recreate(extent);
 
-                for (self.framebuffers) |fb| self.gc.vkd.destroyFramebuffer(self.gc.dev, fb, null);
+                for (self.framebuffers) |fb| self.gc.destroy(fb);
                 self.allocator.free(self.framebuffers);
 
-                self.depth_image.deinit(self.gc.allocator);
-                self.gc.vkd.destroyImageView(self.gc.dev, self.depth_image.view.?, null);
+                self.depth_image.deinit(self.gc);
                 self.depth_image = try createDepthImage(self.gc, self.swapchain);
-                self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain, self.depth_image.view.?);
+                self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain, self.depth_image.view);
             }
 
             self.frame_num += 1;
@@ -384,40 +493,112 @@ pub const EngineChap4 = struct {
         }
     }
 
+    fn initImgui(self: *Self) !void {
+        // 1: create descriptor pool for IMGUI
+        const sizes = [_]vk.DescriptorPoolSize{
+            .{ .@"type" = .sampler, .descriptor_count = 1000 },
+            .{ .@"type" = .combined_image_sampler, .descriptor_count = 1000 },
+            .{ .@"type" = .sampled_image, .descriptor_count = 1000 },
+            .{ .@"type" = .storage_image, .descriptor_count = 1000 },
+            .{ .@"type" = .uniform_texel_buffer, .descriptor_count = 1000 },
+            .{ .@"type" = .storage_texel_buffer, .descriptor_count = 1000 },
+            .{ .@"type" = .uniform_buffer, .descriptor_count = 1000 },
+            .{ .@"type" = .storage_buffer, .descriptor_count = 1000 },
+            .{ .@"type" = .uniform_buffer_dynamic, .descriptor_count = 1000 },
+            .{ .@"type" = .storage_buffer_dynamic, .descriptor_count = 1000 },
+            .{ .@"type" = .input_attachment, .descriptor_count = 1000 },
+        };
+
+        const pool_info = vk.DescriptorPoolCreateInfo{
+            .flags = .{ .free_descriptor_set_bit = true },
+            .max_sets = 1000 * sizes.len,
+            .pool_size_count = sizes.len,
+            .p_pool_sizes = @ptrCast([*]const vk.DescriptorPoolSize, &sizes),
+        };
+        self.imgui_pool = try self.gc.vkd.createDescriptorPool(self.gc.dev, &pool_info, null);
+
+        // 2: initialize imgui library
+        _ = ig.igCreateContext(null);
+        const io = ig.igGetIO();
+        io.*.ConfigFlags |= ig.ImGuiConfigFlags_DockingEnable | ig.ImGuiConfigFlags_ViewportsEnable;
+
+        ig.igStyleColorsDark(null);
+
+        const closure = struct {
+            pub fn load(function_name: [*:0]const u8, user_data: *anyopaque) callconv(.C) vk.PfnVoidFunction {
+                return glfw.getInstanceProcAddress(user_data, function_name);
+            }
+        }.load;
+        _ = igvk.ImGui_ImplVulkan_LoadFunctions(closure, self.gc.instance);
+        _ = igvk.ImGui_ImplGlfw_InitForVulkan(self.window.handle, true);
+
+        var info = std.mem.zeroInit(igvk.ImGui_ImplVulkan_InitInfo, .{
+            .instance = self.gc.instance,
+            .physical_device = self.gc.pdev,
+            .device = self.gc.dev,
+            .queue_family = self.gc.graphics_queue.family,
+            .queue = self.gc.graphics_queue.handle,
+            .descriptor_pool = self.imgui_pool,
+            .subpass = 0,
+            .min_image_count = 2,
+            .image_count = 2,
+            .msaa_samples = .{ .@"1_bit" = true },
+            .allocator = null,
+            .checkVkResultFn = null,
+        });
+        _ = igvk.ImGui_ImplVulkan_Init(&info, self.render_pass);
+
+        // execute a gpu command to upload imgui font textures
+        try self.upload_context.immediateSubmitBegin(self.gc);
+        _ = igvk.ImGui_ImplVulkan_CreateFontsTexture(self.upload_context.cmd_buf);
+        try self.upload_context.immediateSubmitEnd(self.gc);
+
+        // clear font textures from cpu data
+        igvk.ImGui_ImplVulkan_DestroyFontUploadObjects();
+    }
+
+    fn loadImages(self: *Self) !void {
+        const lost_empire_img = try loadTextureFromFile(self.gc, self.allocator, "src/chapters/lost_empire-RGBA.png", self.upload_context);
+        const image_info = vkinit.imageViewCreateInfo(.r8g8b8a8_srgb, lost_empire_img.image, .{ .color_bit = true });
+        const lost_empire_tex = Texture{
+            .image = lost_empire_img,
+            .view = try self.gc.vkd.createImageView(self.gc.dev, &image_info, null),
+        };
+        try self.textures.put("empire_diffuse", lost_empire_tex);
+    }
+
     fn loadMeshes(self: *Self) !void {
         var tri_mesh = Mesh.init(gpa);
-        try tri_mesh.vertices.append(.{ .position = .{ 1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 } });
-        try tri_mesh.vertices.append(.{ .position = .{ -1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 } });
-        try tri_mesh.vertices.append(.{ .position = .{ 0, -1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 } });
+        try tri_mesh.vertices.append(.{ .position = .{ 1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 1, 0 } });
+        try tri_mesh.vertices.append(.{ .position = .{ -1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 0, 0 } });
+        try tri_mesh.vertices.append(.{ .position = .{ 0, -1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 0.5, 1 } });
 
-        var monkey_mesh = Mesh.initFromObj(gpa, "src/chapters/monkey_flat.obj");
-        var cube_thing_mesh = Mesh.initFromObj(gpa, "src/chapters/cube_thing.obj");
+        var monkey_mesh = try Mesh.initFromObj(gpa, "src/chapters/monkey_flat.obj");
+        var cube_thing_mesh = try Mesh.initFromObj(gpa, "src/chapters/cube_thing.obj");
+        var cube = try Mesh.initFromObj(gpa, "src/chapters/cube.obj");
+        var lost_empire = try Mesh.initFromObj(gpa, "src/chapters/lost_empire.obj");
 
-        try uploadMesh(self.gc, &tri_mesh);
-        try uploadMesh(self.gc, &monkey_mesh);
-        try uploadMesh(self.gc, &cube_thing_mesh);
+        try uploadMesh(self.gc, &tri_mesh, self.upload_context);
+        try uploadMesh(self.gc, &monkey_mesh, self.upload_context);
+        try uploadMesh(self.gc, &cube_thing_mesh, self.upload_context);
+        try uploadMesh(self.gc, &cube, self.upload_context);
+        try uploadMesh(self.gc, &lost_empire, self.upload_context);
 
         try self.meshes.put("triangle", tri_mesh);
         try self.meshes.put("monkey", monkey_mesh);
         try self.meshes.put("cube_thing", cube_thing_mesh);
+        try self.meshes.put("cube", cube);
+        try self.meshes.put("lost_empire", lost_empire);
     }
 
     fn initPipelines(self: *Self) !void {
-        var push_constant = vk.PushConstantRange{
-            .stage_flags = .{ .vertex_bit = true },
-            .offset = 0,
-            .size = @sizeOf(MeshPushConstants),
-        };
-
         // push-constant setup
         var pip_layout_info = vkinit.pipelineLayoutCreateInfo();
-        pip_layout_info.push_constant_range_count = 1;
-        pip_layout_info.p_push_constant_ranges = @ptrCast([*]const vk.PushConstantRange, &push_constant);
 
         // hook the global set layout and object set layout
         const set_layouts = [_]vk.DescriptorSetLayout{ self.global_set_layout, self.object_set_layout };
         pip_layout_info.set_layout_count = 2;
-        pip_layout_info.p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &set_layouts);
+        pip_layout_info.p_set_layouts = &set_layouts;
 
         const pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
         const pipeline = try createPipeline(self.gc, self.allocator, self.render_pass, pipeline_layout, resources.default_lit_frag);
@@ -434,15 +615,63 @@ pub const EngineChap4 = struct {
             .pipeline_layout = pipeline_layout2,
         };
         try self.materials.put("redmesh", material2);
+
+        // create pipeline layout for the textured mesh, which has 3 descriptor sets
+        const textured_set_layouts = [_]vk.DescriptorSetLayout{ self.global_set_layout, self.object_set_layout, self.single_tex_layout };
+
+        var textured_pip_layout_info = vkinit.pipelineLayoutCreateInfo();
+        textured_pip_layout_info.set_layout_count = 4;
+        textured_pip_layout_info.p_set_layouts = &textured_set_layouts;
+
+        const textured_pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &textured_pip_layout_info, null);
+        const textured_pipeline = try createPipeline(self.gc, self.allocator, self.render_pass, textured_pipeline_layout, resources.textured_lit_frag);
+        const textured_material = Material{
+            .pipeline = textured_pipeline,
+            .pipeline_layout = textured_pipeline_layout,
+        };
+        try self.materials.put("texturedmesh", textured_material);
     }
 
     fn initScene(self: *Self) !void {
+        // create a sampler for the texture
+        const sampler_info = vkinit.samplerCreateInfo(.nearest, vk.SamplerAddressMode.repeat);
+        self.blocky_sampler = try self.gc.vkd.createSampler(self.gc.dev, &sampler_info, null);
+
+        const textured_mat = self.materials.getPtr("texturedmesh").?;
+
+        // allocate the descriptor set for single-texture to use on the material
+        const alloc_info = std.mem.zeroInit(vk.DescriptorSetAllocateInfo, .{
+            .descriptor_pool = self.descriptor_pool,
+            .descriptor_set_count = 1,
+            .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &self.single_tex_layout),
+        });
+        var texture_set: vk.DescriptorSet = undefined;
+        try self.gc.vkd.allocateDescriptorSets(self.gc.dev, &alloc_info, @ptrCast([*]vk.DescriptorSet, &texture_set));
+        textured_mat.texture_set = texture_set;
+
+        // write to the descriptor set so that it points to our empire_diffuse texture
+        const image_buffer_info = vk.DescriptorImageInfo{
+            .sampler = self.blocky_sampler,
+            .image_view = self.textures.getPtr("empire_diffuse").?.view,
+            .image_layout = .shader_read_only_optimal,
+        };
+        const texture1 = vkinit.writeDescriptorImage(.combined_image_sampler, textured_mat.texture_set.?, &image_buffer_info, 0);
+        self.gc.vkd.updateDescriptorSets(self.gc.dev, 1, @ptrCast([*]const vk.WriteDescriptorSet, &texture1), 0, undefined);
+
+        // create some objects
         var monkey = RenderObject{
             .mesh = self.meshes.getPtr("monkey").?,
             .material = self.materials.getPtr("defaultmesh").?,
             .transform_matrix = Mat4.createTranslation(Vec3.new(0, 2, 0)),
         };
         try self.renderables.append(monkey);
+
+        var empire = RenderObject{
+            .mesh = self.meshes.getPtr("lost_empire").?,
+            .material = self.materials.getPtr("texturedmesh").?,
+            .transform_matrix = Mat4.createTranslation(Vec3.new(0, 5, 0)),
+        };
+        try self.renderables.append(empire);
 
         var x: f32 = 0;
         while (x < 20) : (x += 1) {
@@ -451,7 +680,7 @@ pub const EngineChap4 = struct {
                 var matrix = Mat4.createTranslation(.{ .x = x, .y = 0, .z = y });
                 var scale_matrix = Mat4.createScale(.{ .x = 0.4, .y = 0.4, .z = 0.4 });
 
-                const mesh_material = if (@mod(x, 2) == 0) self.materials.getPtr("defaultmesh").? else self.materials.getPtr("redmesh").?;
+                const mesh_material = if (@mod(x, 2) == 0) self.materials.getPtr("texturedmesh").? else self.materials.getPtr("redmesh").?;
                 const mesh = if (@mod(x, 2) == 0 and @mod(x, 6) == 0) self.meshes.getPtr("cube_thing").? else self.meshes.getPtr("triangle").?;
                 var object = RenderObject{
                     .mesh = mesh,
@@ -482,6 +711,12 @@ pub const EngineChap4 = struct {
     }
 
     fn draw(self: *Self, framebuffer: vk.Framebuffer, frame: FrameData) !void {
+        ig.igRender();
+        if ((ig.igGetIO().*.ConfigFlags & ig.ImGuiConfigFlags_ViewportsEnable) != 0) {
+            ig.igUpdatePlatformWindows();
+            ig.igRenderPlatformWindowsDefault(null, null);
+        }
+
         const cmdbuf = frame.cmd_buffer;
         const clear = vk.ClearValue{
             .color = .{ .float_32 = .{ 0.6, 0.5, 0, 1 } },
@@ -527,6 +762,7 @@ pub const EngineChap4 = struct {
 
         try self.drawRenderObjects(frame);
 
+        igvk.ImGui_ImplVulkan_RenderDrawData(ig.igGetDrawData(), cmdbuf, .null_handle);
         self.gc.vkd.cmdEndRenderPass(cmdbuf);
         try self.gc.vkd.endCommandBuffer(cmdbuf);
     }
@@ -556,7 +792,7 @@ pub const EngineChap4 = struct {
         self.scene_params.ambient_color = Vec4.new((std.math.sin(framed) + 1) * 0.5, 1, (std.math.cos(framed) + 1) * 0.5, 1);
 
         const frame_index = @floatToInt(usize, self.frame_num) % FRAME_OVERLAP;
-        const data_offset = padUniformBufferSize(self.gpu_props, @sizeOf(GpuSceneData)) * frame_index;
+        const data_offset = padUniformBufferSize(self.gc, @sizeOf(GpuSceneData)) * frame_index;
         const scene_data_ptr = (try self.gc.allocator.mapMemoryAtOffset(GpuSceneData, self.scene_param_buffer.allocation, data_offset));
         scene_data_ptr.* = self.scene_params;
         self.gc.allocator.unmapMemory(self.scene_param_buffer.allocation);
@@ -579,23 +815,22 @@ pub const EngineChap4 = struct {
                 self.gc.vkd.cmdBindPipeline(cmdbuf, .graphics, object.material.pipeline);
 
                 // offset for our scene buffer
-                const uniform_offset = padUniformBufferSize(self.gpu_props, @sizeOf(GpuSceneData)) * frame_index;
+                const uniform_offset = padUniformBufferSize(self.gc, @sizeOf(GpuSceneData)) * frame_index;
 
                 // bind the descriptor set when changing pipeline
                 self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, object.material.pipeline_layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &frame.global_descriptor), 1, @ptrCast([*]const u32, &uniform_offset));
 
                 // bind the object data descriptor
                 self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, object.material.pipeline_layout, 1, 1, @ptrCast([*]const vk.DescriptorSet, &frame.object_descriptor), 0, undefined);
+
+                if (object.material.texture_set) |texture_set| {
+                    self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, object.material.pipeline_layout, 2, 1, @ptrCast([*]const vk.DescriptorSet, &texture_set), 0, undefined);
+                }
             }
 
             var model = object.transform_matrix;
             var rot = Mat4.createAngleAxis(.{ .y = 1 }, toRadians(25.0) * self.frame_num * 0.04);
             model = model.mul(rot);
-
-            var constants = MeshPushConstants{
-                .render_matrix = model,
-            };
-            self.gc.vkd.cmdPushConstants(cmdbuf, object.material.pipeline_layout, .{ .vertex_bit = true }, 0, @sizeOf(MeshPushConstants), &constants);
 
             // only bind the mesh if its a different one from last bind
             if (object.mesh != last_mesh) {
@@ -603,9 +838,11 @@ pub const EngineChap4 = struct {
                 // bind the mesh vertex buffer with offset 0
                 var offset: vk.DeviceSize = 0;
                 self.gc.vkd.cmdBindVertexBuffers(cmdbuf, 0, 1, @ptrCast([*]const vk.Buffer, &object.mesh.vert_buffer.buffer), @ptrCast([*]const vk.DeviceSize, &offset));
+                self.gc.vkd.cmdBindIndexBuffer(cmdbuf, object.mesh.index_buffer.buffer, 0, .uint32);
             }
 
-            self.gc.vkd.cmdDraw(cmdbuf, @intCast(u32, object.mesh.vertices.items.len), 1, 0, @intCast(u32, i));
+            // self.gc.vkd.cmdDraw(cmdbuf, @intCast(u32, object.mesh.vertices.items.len), 1, 0, @intCast(u32, i));
+            self.gc.vkd.cmdDrawIndexed(cmdbuf, last_mesh.index_count, 1, 0, 0, @intCast(u32, i));
         }
     }
 };
@@ -694,18 +931,19 @@ fn createRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Render
 
     var attachments: [2]vk.AttachmentDescription = [_]vk.AttachmentDescription{ color_attachment, depth_attachment };
     var dependencies: [2]vk.SubpassDependency = [_]vk.SubpassDependency{ dependency, depth_dependency };
+
     return try gc.vkd.createRenderPass(gc.dev, &.{
         .flags = .{},
-        .attachment_count = 2,
-        .p_attachments = @ptrCast([*]const vk.AttachmentDescription, &attachments),
+        .attachment_count = attachments.len,
+        .p_attachments = &attachments,
         .subpass_count = 1,
         .p_subpasses = @ptrCast([*]const vk.SubpassDescription, &subpass),
-        .dependency_count = 1,
-        .p_dependencies = @ptrCast([*]const vk.SubpassDependency, &dependencies),
+        .dependency_count = dependencies.len,
+        .p_dependencies = &dependencies,
     }, null);
 }
 
-fn createDepthImage(gc: *const GraphicsContext, swapchain: Swapchain) !vma.AllocatedImage {
+fn createDepthImage(gc: *const GraphicsContext, swapchain: Swapchain) !Texture {
     const depth_extent = vk.Extent3D{ .width = swapchain.extent.width, .height = swapchain.extent.height, .depth = 1 };
     const dimg_info = vkinit.imageCreateInfo(depth_format, depth_extent, .{ .depth_stencil_attachment_bit = true });
 
@@ -715,9 +953,9 @@ fn createDepthImage(gc: *const GraphicsContext, swapchain: Swapchain) !vma.Alloc
         .usage = .gpu_only,
         .requiredFlags = .{ .device_local_bit = true },
     });
-    var depth_image = try gc.allocator.createImage(&dimg_info, &malloc_info, null);
+    var depth_image = Texture.init(try gc.allocator.createImage(&dimg_info, &malloc_info, null));
 
-    const dview_info = vkinit.imageViewCreateInfo(depth_format, depth_image.image, .{ .depth_bit = true });
+    const dview_info = vkinit.imageViewCreateInfo(depth_format, depth_image.image.image, .{ .depth_bit = true });
     depth_image.view = try gc.vkd.createImageView(gc.dev, &dview_info, null);
 
     return depth_image;
@@ -728,7 +966,7 @@ fn createFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_p
     errdefer allocator.free(framebuffers);
 
     var i: usize = 0;
-    errdefer for (framebuffers[0..i]) |fb| gc.vkd.destroyFramebuffer(gc.dev, fb, null);
+    errdefer for (framebuffers[0..i]) |fb| gc.destroy(fb);
 
     for (framebuffers) |*fb| {
         var attachments = [2]vk.ImageView{ swapchain.swap_images[i].view, depth_image_view };
@@ -775,8 +1013,8 @@ fn createPipeline(
     const vert = try createShaderModule(gc, @ptrCast([*]const u32, resources.tri_mesh_descriptors_vert), resources.tri_mesh_descriptors_vert.len);
     const frag = try createShaderModule(gc, @ptrCast([*]const u32, @alignCast(@alignOf(u32), frag_shader_bytes)), frag_shader_bytes.len);
 
-    defer gc.vkd.destroyShaderModule(gc.dev, vert, null);
-    defer gc.vkd.destroyShaderModule(gc.dev, frag, null);
+    defer gc.destroy(vert);
+    defer gc.destroy(frag);
 
     var builder = PipelineBuilder.init(allocator, pipeline_layout);
     builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less_or_equal);
@@ -791,8 +1029,8 @@ fn createPipeline(
     return try builder.build(gc, render_pass);
 }
 
-fn padUniformBufferSize(gpu_props: vk.PhysicalDeviceProperties, size: usize) usize {
-    const min_ubo_alignment = gpu_props.limits.min_uniform_buffer_offset_alignment;
+fn padUniformBufferSize(gc: *const GraphicsContext, size: usize) usize {
+    const min_ubo_alignment = gc.gpu_props.limits.min_uniform_buffer_offset_alignment;
     var aligned_size = size;
     if (min_ubo_alignment > 0)
         aligned_size = (aligned_size + min_ubo_alignment - 1) & ~(min_ubo_alignment - 1);
@@ -822,7 +1060,7 @@ fn createBuffer(gc: *const GraphicsContext, size: usize, usage: vk.BufferUsageFl
     return try gc.allocator.createBuffer(&buffer_info, &malloc_info, null);
 }
 
-fn createDescriptors(gc: *const GraphicsContext, gpu_props: vk.PhysicalDeviceProperties) struct { layout: vk.DescriptorSetLayout, pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBuffer, object_set_layout: vk.DescriptorSetLayout } {
+fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorSetLayout, pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBuffer, object_set_layout: vk.DescriptorSetLayout, single_tex_layout: vk.DescriptorSetLayout } {
     // binding for camera data at 0
     const cam_bind = vkinit.descriptorSetLayoutBinding(.uniform_buffer, .{ .vertex_bit = true }, 0);
 
@@ -830,12 +1068,12 @@ fn createDescriptors(gc: *const GraphicsContext, gpu_props: vk.PhysicalDevicePro
     const scene_bind = vkinit.descriptorSetLayoutBinding(.uniform_buffer_dynamic, .{ .vertex_bit = true, .fragment_bit = true }, 1);
     const bindings = [_]vk.DescriptorSetLayoutBinding{ cam_bind, scene_bind };
 
-    var set_info = vk.DescriptorSetLayoutCreateInfo{
+    const set_info = vk.DescriptorSetLayoutCreateInfo{
         .flags = .{},
         .binding_count = 2,
         .p_bindings = &bindings,
     };
-    var global_set_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &set_info, null) catch unreachable;
+    const global_set_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &set_info, null) catch unreachable;
 
     // binding for object data at 0
     const object_bind = vkinit.descriptorSetLayoutBinding(.storage_buffer, .{ .vertex_bit = true }, 0);
@@ -846,28 +1084,30 @@ fn createDescriptors(gc: *const GraphicsContext, gpu_props: vk.PhysicalDevicePro
     };
     const object_set_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &set_info_object, null) catch unreachable;
 
+    // another set, one that holds a single texture
+    const tex_bind = vkinit.descriptorSetLayoutBinding(.combined_image_sampler, .{ .fragment_bit = true }, 0);
+
+    const tex_set_info = vk.DescriptorSetLayoutCreateInfo{
+        .flags = .{},
+        .binding_count = 1,
+        .p_bindings = @ptrCast([*]const vk.DescriptorSetLayoutBinding, &tex_bind),
+    };
+    const single_tex_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &tex_set_info, null) catch unreachable;
+
     const sizes = [_]vk.DescriptorPoolSize{
-        .{
-            .@"type" = .uniform_buffer,
-            .descriptor_count = 10,
-        },
-        .{
-            .@"type" = .uniform_buffer_dynamic,
-            .descriptor_count = 10,
-        },
-        .{
-            .@"type" = .storage_buffer,
-            .descriptor_count = 10,
-        },
+        .{ .@"type" = .uniform_buffer, .descriptor_count = 10 },
+        .{ .@"type" = .uniform_buffer_dynamic, .descriptor_count = 10 },
+        .{ .@"type" = .storage_buffer, .descriptor_count = 10 },
+        .{ .@"type" = .combined_image_sampler, .descriptor_count = 10 },
     };
     var descriptor_pool = gc.vkd.createDescriptorPool(gc.dev, &.{
         .flags = .{},
         .max_sets = 10,
-        .pool_size_count = 3,
+        .pool_size_count = 4,
         .p_pool_sizes = &sizes,
     }, null) catch unreachable;
 
-    const scene_param_buffer_size = FRAME_OVERLAP * padUniformBufferSize(gpu_props, @sizeOf(GpuSceneData));
+    const scene_param_buffer_size = FRAME_OVERLAP * padUniformBufferSize(gc, @sizeOf(GpuSceneData));
     const scene_param_buffer = createBuffer(gc, scene_param_buffer_size, .{ .uniform_buffer_bit = true }, .cpu_to_gpu) catch unreachable;
 
     return .{
@@ -875,12 +1115,134 @@ fn createDescriptors(gc: *const GraphicsContext, gpu_props: vk.PhysicalDevicePro
         .pool = descriptor_pool,
         .scene_param_buffer = scene_param_buffer,
         .object_set_layout = object_set_layout,
+        .single_tex_layout = single_tex_layout,
     };
 }
 
-fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
-    mesh.vert_buffer = try createBuffer(gc, mesh.vertices.items.len * @sizeOf(Vertex), .{ .vertex_buffer_bit = true }, .auto_prefer_device);
-    const verts = try gc.allocator.mapMemory(Vertex, mesh.vert_buffer.allocation);
-    std.mem.copy(Vertex, verts[0..mesh.vertices.items.len], mesh.vertices.items);
-    gc.allocator.unmapMemory(mesh.vert_buffer.allocation);
+fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh, upload_context: UploadContext) !void {
+    // vert buffer
+    {
+        const buffer_size = mesh.vertices.items.len * @sizeOf(Vertex);
+
+        const staging_buffer = try createBuffer(gc, buffer_size, .{ .transfer_src_bit = true }, .cpu_only);
+        defer staging_buffer.deinit(gc.allocator);
+
+        // copy vertex data
+        const verts = try gc.allocator.mapMemory(Vertex, staging_buffer.allocation);
+        std.mem.copy(Vertex, verts[0..mesh.vertices.items.len], mesh.vertices.items);
+        gc.allocator.unmapMemory(staging_buffer.allocation);
+
+        // create Mesh buffer
+        mesh.vert_buffer = try createBuffer(gc, buffer_size, .{ .vertex_buffer_bit = true, .transfer_dst_bit = true }, .gpu_only);
+
+        // execute the copy command on the GPU
+        try upload_context.immediateSubmitBegin(gc);
+        const copy_region = vk.BufferCopy{
+            .src_offset = 0,
+            .dst_offset = 0,
+            .size = buffer_size,
+        };
+        gc.vkd.cmdCopyBuffer(upload_context.cmd_buf, staging_buffer.buffer, mesh.vert_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &copy_region));
+        try upload_context.immediateSubmitEnd(gc);
+    }
+
+    // index buffer
+    {
+        const buffer_size = mesh.indices.len * @sizeOf(u32);
+
+        const staging_buffer = try createBuffer(gc, buffer_size, .{ .transfer_src_bit = true }, .cpu_only);
+        defer staging_buffer.deinit(gc.allocator);
+
+        // copy index data
+        const dst_indices = try gc.allocator.mapMemory(u32, staging_buffer.allocation);
+        std.mem.copy(u32, dst_indices[0..mesh.indices.len], mesh.indices);
+        gc.allocator.unmapMemory(staging_buffer.allocation);
+
+        // create Mesh buffer
+        mesh.index_buffer = try createBuffer(gc, buffer_size, .{ .index_buffer_bit = true, .transfer_dst_bit = true }, .gpu_only);
+
+        // execute the copy command on the GPU
+        try upload_context.immediateSubmitBegin(gc);
+        const copy_region = vk.BufferCopy{
+            .src_offset = 0,
+            .dst_offset = 0,
+            .size = buffer_size,
+        };
+        gc.vkd.cmdCopyBuffer(upload_context.cmd_buf, staging_buffer.buffer, mesh.index_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &copy_region));
+        try upload_context.immediateSubmitEnd(gc);
+    }
+}
+
+fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: []const u8, upload_context: UploadContext) !vma.AllocatedImage {
+    const img = try stb.loadFromFile(allocator, file);
+    defer img.deinit();
+
+    // allocate temporary buffer for holding texture data to upload and copy image data to it
+    const img_pixels = img.asSlice();
+    const staging_buffer = try createBuffer(gc, img_pixels.len, .{ .transfer_src_bit = true }, .cpu_only);
+    const data = try gc.allocator.mapMemory(u8, staging_buffer.allocation);
+    std.mem.copy(u8, data[0..img_pixels.len], img_pixels);
+    gc.allocator.unmapMemory(staging_buffer.allocation);
+
+    const img_extent = vk.Extent3D{
+        .width = @intCast(u32, img.w),
+        .height = @intCast(u32, img.h),
+        .depth = 1,
+    };
+    const dimg_info = vkinit.imageCreateInfo(vk.Format.r8g8b8a8_srgb, img_extent, .{ .sampled_bit = true, .transfer_dst_bit = true });
+    const malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
+        .usage = .gpu_only,
+    });
+    const new_img = try gc.allocator.createImage(&dimg_info, &malloc_info, null);
+
+    try upload_context.immediateSubmitBegin(gc);
+    {
+        // barrier the image into the transfer-receive layout
+        const range = vk.ImageSubresourceRange{
+            .aspect_mask = .{ .color_bit = true },
+            .base_mip_level = 0,
+            .level_count = 1,
+            .base_array_layer = 0,
+            .layer_count = 1,
+        };
+        const img_barrier_to_transfer = std.mem.zeroInit(vk.ImageMemoryBarrier, .{
+            .old_layout = .@"undefined",
+            .new_layout = .transfer_dst_optimal,
+            .dst_access_mask = .{ .transfer_write_bit = true },
+            .image = new_img.image,
+            .subresource_range = range,
+        });
+
+        gc.vkd.cmdPipelineBarrier(upload_context.cmd_buf, .{ .top_of_pipe_bit = true }, .{ .transfer_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &img_barrier_to_transfer));
+
+        const copy_region = vk.BufferImageCopy{
+            .buffer_offset = 0,
+            .buffer_row_length = 0,
+            .buffer_image_height = 0,
+            .image_subresource = .{
+                .aspect_mask = .{ .color_bit = true },
+                .mip_level = 0,
+                .base_array_layer = 0,
+                .layer_count = 1,
+            },
+            .image_offset = std.mem.zeroes(vk.Offset3D),
+            .image_extent = img_extent,
+        };
+        gc.vkd.cmdCopyBufferToImage(upload_context.cmd_buf, staging_buffer.buffer, new_img.image, .transfer_dst_optimal, 1, @ptrCast([*]const vk.BufferImageCopy, &copy_region));
+
+        // barrier the image into the shader readable layout
+        const img_barrier_to_readable = std.mem.zeroInit(vk.ImageMemoryBarrier, .{
+            .old_layout = .transfer_dst_optimal,
+            .new_layout = .shader_read_only_optimal,
+            .src_access_mask = .{ .transfer_write_bit = true },
+            .dst_access_mask = .{ .shader_read_bit = true },
+            .image = new_img.image,
+            .subresource_range = range,
+        });
+        gc.vkd.cmdPipelineBarrier(upload_context.cmd_buf, .{ .transfer_bit = true }, .{ .fragment_shader_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &img_barrier_to_readable));
+    }
+    try upload_context.immediateSubmitEnd(gc);
+
+    staging_buffer.deinit(gc.allocator);
+    return new_img;
 }
