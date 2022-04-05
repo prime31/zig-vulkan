@@ -11,13 +11,17 @@ pub const Options = struct {
     linux_window_manager: LinuxWindowManager = .X11,
 };
 
+fn pwd() []const u8 {
+    return std.fs.path.dirname(@src().file).? ++ "/";
+}
+
 // TODO: this function assumes the host OS is macOS. It should detect if it is a cross compilation from any platform to any platform.
-pub fn link(b: *Builder, step: *std.build.LibExeObjStep, options: Options, comptime prefix_path: []const u8) void {
+pub fn link(b: *Builder, step: *std.build.LibExeObjStep, options: Options) void {
     step.linkLibC();
     const target = (std.zig.system.NativeTargetInfo.detect(b.allocator, step.target) catch unreachable).target;
     switch (target.os.tag) {
         .windows => {
-            step.addLibraryPath(prefix_path ++ "libs/glfw/binaries");
+            step.addLibraryPath(pwd() ++ "binaries");
             step.linkSystemLibrary("glfw");
 
             step.linkSystemLibrary("gdi32");
@@ -36,7 +40,7 @@ pub fn link(b: *Builder, step: *std.build.LibExeObjStep, options: Options, compt
             step.linkFramework("Foundation");
         },
         else => {
-            step.addLibraryPath(prefix_path ++ "libs/glfw/binaries");
+            step.addLibraryPath(pwd() ++ "binaries");
             step.linkSystemLibrary("glfw");
 
             // Assume Linux-like
@@ -55,10 +59,10 @@ pub fn link(b: *Builder, step: *std.build.LibExeObjStep, options: Options, compt
     }
 }
 
-pub fn getPackage(comptime prefix_path: []const u8, vulkan_pkg: std.build.Pkg) std.build.Pkg {
+pub fn getPackage(vulkan_pkg: std.build.Pkg) std.build.Pkg {
     return .{
         .name = "glfw",
-        .path = .{ .path = prefix_path ++ "libs/glfw/src/main.zig" },
+        .path = .{ .path = pwd() ++ "src/main.zig" },
         .dependencies = &[_]std.build.Pkg{vulkan_pkg},
     };
 }

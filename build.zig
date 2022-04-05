@@ -20,14 +20,9 @@ const vulkan_pkg = std.build.Pkg{
     .path = .{ .path = "src/vk.zig" },
 };
 
-const glfw_pkg = glfw_build.getPackage("", vulkan_pkg);
-const stb_pkg = stb_build.getPackage("");
-const lz4_pkg = lz4_build.getPackage("");
-const vma_pkg = vma_build.getPackage("", vulkan_pkg);
-const tinyobjloader_pkg = tinyobj_build.getPackage("");
-const imgui_pkg = imgui_build.getPackage("");
-const imgui_vk_pkg = imgui_build.getVkPackage("", vulkan_pkg);
-const spirv_reflect_pkg = spirv_build.getPackage("");
+const glfw_pkg = glfw_build.getPackage(vulkan_pkg);
+const vma_pkg = vma_build.getPackage(vulkan_pkg);
+const imgui_vk_pkg = imgui_build.getVkPackage(vulkan_pkg);
 
 pub fn build(b: *Builder) void {
     const target = b.standardTargetOptions(.{});
@@ -50,7 +45,7 @@ pub fn build(b: *Builder) void {
         exe.addPackage(.{
             .name = "vengine",
             .path = .{ .path = "src/v.zig" },
-            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobjloader_pkg, vma_pkg, stb_pkg, imgui_pkg, imgui_vk_pkg, spirv_reflect_pkg },
+            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobj_build.pkg, vma_pkg, stb_build.pkg, imgui_build.pkg, imgui_vk_pkg, spirv_build.pkg },
         });
 
         const run_cmd = exe.run();
@@ -84,7 +79,7 @@ pub fn build(b: *Builder) void {
     exe_tests.addPackage(.{
         .name = "vengine",
         .path = .{ .path = "src/v.zig" },
-        .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobjloader_pkg, vma_pkg, stb_pkg, imgui_pkg, imgui_vk_pkg },
+        .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobj_build.pkg, vma_pkg, stb_build.pkg, imgui_build.pkg, imgui_vk_pkg },
     });
     exe_tests.addPackage(resources_pkg);
 
@@ -100,33 +95,33 @@ fn linkExeDeps(exe: *std.build.LibExeObjStep, b: *Builder, target: std.zig.Cross
     exe.addPackage(vulkan_pkg);
 
     // glfw
-    glfw_build.link(b, exe, .{}, "");
+    glfw_build.link(b, exe, .{});
     exe.addPackage(glfw_pkg);
 
     // Dear ImGui
-    imgui_build.link(b, exe, target, "");
-    exe.addPackage(imgui_pkg);
+    imgui_build.link(exe, target);
+    exe.addPackage(imgui_build.pkg);
     exe.addPackage(imgui_vk_pkg);
 
     // spirv-reflect
-    spirv_build.link(exe, "");
-    exe.addPackage(spirv_reflect_pkg);
+    spirv_build.link(exe);
+    exe.addPackage(spirv_build.pkg);
 
     // vulkan-mem
-    vma_build.link(exe, "");
+    vma_build.link(exe);
     exe.addPackage(vma_pkg);
 
     // tinyobjloader
-    tinyobj_build.link(exe, "");
-    exe.addPackage(tinyobjloader_pkg);
+    tinyobj_build.link(exe);
+    exe.addPackage(tinyobj_build.pkg);
 
     // stb
-    stb_build.link(exe, "");
-    exe.addPackage(stb_pkg);
+    stb_build.link(exe);
+    exe.addPackage(stb_build.pkg);
 
     // lz4
-    lz4_build.link(exe, "");
-    exe.addPackage(lz4_pkg);
+    lz4_build.link(exe);
+    exe.addPackage(lz4_build.pkg);
 }
 
 fn createAssetBaker(b: *Builder, target: std.zig.CrossTarget) void {
@@ -135,7 +130,7 @@ fn createAssetBaker(b: *Builder, target: std.zig.CrossTarget) void {
     exe.setBuildMode(b.standardReleaseOptions());
 
     linkExeDeps(exe, b, target);
-    exe.addPackage(tinyobjloader_pkg);
+    exe.addPackage(tinyobj_build.pkg);
 
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());
