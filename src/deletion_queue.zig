@@ -1,6 +1,5 @@
 const std = @import("std");
 const vk = @import("vulkan");
-const glfw = @import("glfw");
 const vma = @import("vma");
 const vkinit = @import("vkinit.zig");
 
@@ -99,16 +98,9 @@ fn ReverseSliceIterator(comptime T: type) type {
 }
 
 test "deletion queue" {
-    try glfw.init(.{});
-
-    var extent = vk.Extent2D{ .width = 800, .height = 600 };
-    const window = try glfw.Window.create(extent.width, extent.height, "tests", null, null, .{
-        .client_api = .no_api,
-    });
-
-    var gc = try std.testing.allocator.create(GraphicsContext);
-    gc.* = try GraphicsContext.init(std.testing.allocator, "test", window);
-    defer std.testing.allocator.destroy(gc);
+    const ctx = @import("tests.zig").initTestContext();
+    const gc = ctx.gc;
+    defer ctx.deinit();
 
     var q = DeletionQueue.init(std.testing.allocator, gc);
     defer q.deinit();
@@ -154,6 +146,4 @@ test "deletion queue" {
     }
 
     q.flush();
-    window.destroy();
-    glfw.terminate();
 }

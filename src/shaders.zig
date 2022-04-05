@@ -24,6 +24,10 @@ pub const ShaderModule = struct {
             }, null),
         };
     }
+
+    pub fn deinit(self: ShaderModule, gc: *const GraphicsContext) void {
+        gc.destroy(self.module);
+    }
 };
 
 pub const ShaderEffect = struct {
@@ -35,6 +39,10 @@ pub const ShaderEffect = struct {
     const ShaderStage = struct {
         shader_module: *ShaderModule,
         stage: vk.ShaderStageFlags,
+
+        pub fn deinit(self: ShaderStage, gc: *const GraphicsContext) void {
+            self.shader_module.deinit(gc);
+        }
     };
 
     bindings: std.StringHashMap(ReflectedBinding),
@@ -50,8 +58,10 @@ pub const ShaderEffect = struct {
         };
     }
 
-    pub fn deinit(self: *ShaderEffect) void {
+    pub fn deinit(self: *ShaderEffect, gc: *const GraphicsContext) void {
+        gc.destroy(self.built_layout);
         self.bindings.deinit();
+        for (self.stages.items) |s| s.deinit(gc);
         self.stages.deinit();
     }
 
@@ -263,19 +273,12 @@ pub const ShaderCache = struct {
 
 test "shaders reflection" {
     var gpa = std.testing.allocator;
-    try @import("glfw").init(.{});
-
-    var extent = vk.Extent2D{ .width = 800, .height = 600 };
-    const window = try @import("glfw").Window.create(extent.width, extent.height, "tests", null, null, .{
-        .client_api = .no_api,
-    });
-
-    var gc = try std.testing.allocator.create(GraphicsContext);
-    gc.* = try GraphicsContext.init(std.testing.allocator, "test", window);
-    defer std.testing.allocator.destroy(gc);
+    const ctx = @import("tests.zig").initTestContext();
+    const gc = ctx.gc;
+    defer ctx.deinit();
 
     var shader_effect = ShaderEffect.init(gpa);
-    defer shader_effect.deinit();
+    defer shader_effect.deinit(gc);
 
     var overrides: []ShaderEffect.ReflectionOverrides = &[_]ShaderEffect.ReflectionOverrides{};
 

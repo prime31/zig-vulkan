@@ -1,7 +1,26 @@
+const std = @import("std");
 const vk = @import("vulkan");
 
 // https://github.com/SpexGuy/Zig-VMA/blob/main/vma.zig
 // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/index.html
+
+pub const AllocatedBufferUntyped = struct {
+    buffer: vk.Buffer,
+    allocation: VmaAllocation,
+    size: vk.DeviceSize = 0,
+
+    pub fn deinit(self: AllocatedBufferUntyped, allocator: Allocator) void {
+        vmaDestroyBuffer(allocator.allocator, self.buffer, self.allocation);
+    }
+
+    pub fn getInfo(self: AllocatedBufferUntyped, offset: vk.DeviceSize) vk.DescriptorBufferInfo {
+        return .{
+            .buffer = self.buffer,
+            .offset = offset,
+            .range = self.size,
+        };
+    }
+};
 
 pub const AllocatedImage = struct {
     image: vk.Image,
@@ -34,6 +53,44 @@ pub const Allocator = struct {
 
     pub fn deinit(self: Allocator) void {
         vmaDestroyAllocator(self.allocator);
+    }
+
+    pub fn createUntypedBuffer(self: Allocator, alloc_size: vk.DeviceSize, usage: vk.BufferUsageFlags, memory_usage: VmaMemoryUsage, required_flags: vk.MemoryPropertyFlags) !AllocatedBufferUntyped {
+        const buffer_info = std.mem.zeroInit(vk.BufferCreateInfo, .{
+            .flags = .{},
+            .size = alloc_size,
+            .usage = usage,
+        });
+
+        const alloc_info = std.mem.zeroInit(VmaAllocationCreateInfo, .{
+            .flags = .{},
+            .usage = memory_usage,
+            .requiredFlags = required_flags,
+        });
+
+        var buffer: AllocatedBufferUntyped = undefined;
+        buffer.size = alloc_size;
+
+        const res = vmaCreateBuffer(
+            self.allocator,
+            &buffer_info,
+            &alloc_info,
+            &buffer.buffer,
+            &buffer.allocation,
+            null,
+        );
+        if (res == vk.Result.success) return buffer;
+        return switch (res) {
+            .error_out_of_host_memory => error.out_of_host_memory,
+            .error_out_of_device_memory => error.out_of_device_memory,
+            .error_too_many_objects => error.too_many_objects,
+            .error_invalid_external_handle => error.invalid_external_handle,
+            .error_invalid_opaque_capture_address => error.invalid_opaque_capture_address,
+            .error_memory_map_failed => error.memory_map_failed,
+            .error_fragmented_pool => error.fragmented_pool,
+            .error_out_of_pool_memory => error.out_of_pool_memory,
+            else => error.undocumented_error,
+        };
     }
 
     pub fn createBuffer(self: Allocator, buffer_create_info: *const vk.BufferCreateInfo, alloc_info: *const VmaAllocationCreateInfo, allocation_info: ?*VmaAllocationInfo) !AllocatedBuffer {
