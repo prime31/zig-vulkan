@@ -1,10 +1,10 @@
 const std = @import("std");
 const vk = @import("vulkan");
 const spv = @import("spirv");
-const vkinit = @import("vkinit.zig");
+const vkinit = @import("../vkinit.zig");
 const resources = @import("resources");
 
-const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
+const GraphicsContext = @import("../graphics_context.zig").GraphicsContext;
 
 const print = std.debug.print;
 
@@ -273,7 +273,7 @@ pub const ShaderCache = struct {
 
 test "shaders reflection" {
     var gpa = std.testing.allocator;
-    const ctx = @import("tests.zig").initTestContext();
+    const ctx = @import("../tests.zig").initTestContext();
     const gc = ctx.gc;
     defer ctx.deinit();
 

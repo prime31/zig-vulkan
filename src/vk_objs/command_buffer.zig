@@ -26,11 +26,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn bindPipeline(
-        self: CommandBuffer,
-        pipeline_bind_point: vk.PipelineBindPoint,
-        pipeline: vk.Pipeline,
-    ) void {
+    pub fn bindPipeline(self: CommandBuffer, pipeline_bind_point: vk.PipelineBindPoint, pipeline: vk.Pipeline) void {
         self.gc.vkd.vkCmdBindPipeline(
             self.cmdbuf,
             pipeline_bind_point,
@@ -38,12 +34,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn setViewport(
-        self: CommandBuffer,
-        first_viewport: u32,
-        viewport_count: u32,
-        p_viewports: [*]const vk.Viewport,
-    ) void {
+    pub fn setViewport(self: CommandBuffer, first_viewport: u32, viewport_count: u32, p_viewports: [*]const vk.Viewport) void {
         self.gc.vkd.vkCmdSetViewport(
             self.cmdbuf,
             first_viewport,
@@ -52,12 +43,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn setScissor(
-        self: CommandBuffer,
-        first_scissor: u32,
-        scissor_count: u32,
-        p_scissors: [*]const vk.Rect2D,
-    ) void {
+    pub fn setScissor(self: CommandBuffer, first_scissor: u32, scissor_count: u32, p_scissors: [*]const vk.Rect2D) void {
         self.gc.vkd.vkCmdSetScissor(
             self.cmdbuf,
             first_scissor,
@@ -66,22 +52,14 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn setLineWidth(
-        self: CommandBuffer,
-        line_width: f32,
-    ) void {
+    pub fn setLineWidth(self: CommandBuffer, line_width: f32) void {
         self.gc.vkd.vkCmdSetLineWidth(
             self.cmdbuf,
             line_width,
         );
     }
 
-    pub fn setDepthBias(
-        self: CommandBuffer,
-        depth_bias_constant_factor: f32,
-        depth_bias_clamp: f32,
-        depth_bias_slope_factor: f32,
-    ) void {
+    pub fn setDepthBias(self: CommandBuffer, depth_bias_constant_factor: f32, depth_bias_clamp: f32, depth_bias_slope_factor: f32) void {
         self.gc.vkd.vkCmdSetDepthBias(
             self.cmdbuf,
             depth_bias_constant_factor,
@@ -90,21 +68,14 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn setBlendConstants(
-        self: CommandBuffer,
-        blend_constants: [4]f32,
-    ) void {
+    pub fn setBlendConstants(self: CommandBuffer, blend_constants: [4]f32) void {
         self.gc.vkd.vkCmdSetBlendConstants(
             self.cmdbuf,
             blend_constants,
         );
     }
 
-    pub fn setDepthBounds(
-        self: CommandBuffer,
-        min_depth_bounds: f32,
-        max_depth_bounds: f32,
-    ) void {
+    pub fn setDepthBounds(self: CommandBuffer, min_depth_bounds: f32, max_depth_bounds: f32) void {
         self.gc.vkd.vkCmdSetDepthBounds(
             self.cmdbuf,
             min_depth_bounds,
@@ -112,11 +83,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn setStencilCompareMask(
-        self: CommandBuffer,
-        face_mask: vk.StencilFaceFlags,
-        compare_mask: u32,
-    ) void {
+    pub fn setStencilCompareMask(self: CommandBuffer, face_mask: vk.StencilFaceFlags, compare_mask: u32) void {
         self.gc.vkd.vkCmdSetStencilCompareMask(
             self.cmdbuf,
             face_mask.toInt(),
@@ -124,11 +91,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn setStencilWriteMask(
-        self: CommandBuffer,
-        face_mask: vk.StencilFaceFlags,
-        write_mask: u32,
-    ) void {
+    pub fn setStencilWriteMask(self: CommandBuffer, face_mask: vk.StencilFaceFlags, write_mask: u32) void {
         self.gc.vkd.vkCmdSetStencilWriteMask(
             self.cmdbuf,
             face_mask.toInt(),
@@ -136,11 +99,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn setStencilReference(
-        self: CommandBuffer,
-        face_mask: vk.StencilFaceFlags,
-        reference: u32,
-    ) void {
+    pub fn setStencilReference(self: CommandBuffer, face_mask: vk.StencilFaceFlags, reference: u32) void {
         self.gc.vkd.vkCmdSetStencilReference(
             self.cmdbuf,
             face_mask.toInt(),
@@ -170,12 +129,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn bindIndexBuffer(
-        self: CommandBuffer,
-        buffer: vk.Buffer,
-        offset: vk.DeviceSize,
-        index_type: vk.IndexType,
-    ) void {
+    pub fn bindIndexBuffer(self: CommandBuffer, buffer: vk.Buffer, offset: vk.DeviceSize, index_type: vk.IndexType) void {
         self.gc.vkd.vkCmdBindIndexBuffer(
             self.cmdbuf,
             buffer,
@@ -304,12 +258,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn dispatch(
-        self: CommandBuffer,
-        group_count_x: u32,
-        group_count_y: u32,
-        group_count_z: u32,
-    ) void {
+    pub fn dispatch(self: CommandBuffer, group_count_x: u32, group_count_y: u32, group_count_z: u32) void {
         self.gc.vkd.vkCmdDispatch(
             self.cmdbuf,
             group_count_x,
@@ -318,11 +267,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn dispatchIndirect(
-        self: CommandBuffer,
-        buffer: vk.Buffer,
-        offset: vk.DeviceSize,
-    ) void {
+    pub fn dispatchIndirect(self: CommandBuffer, buffer: vk.Buffer, offset: vk.DeviceSize) void {
         self.gc.vkd.vkCmdDispatchIndirect(
             self.cmdbuf,
             buffer,
@@ -330,9 +275,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn subpassShadingHUAWEI(
-        self: CommandBuffer,
-    ) void {
+    pub fn subpassShadingHUAWEI(self: CommandBuffer) void {
         self.gc.vkd.vkCmdSubpassShadingHUAWEI(
             self.cmdbuf,
         );
@@ -536,11 +479,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn setEvent(
-        self: CommandBuffer,
-        event: vk.Event,
-        stage_mask: vk.PipelineStageFlags,
-    ) void {
+    pub fn setEvent(self: CommandBuffer, event: vk.Event, stage_mask: vk.PipelineStageFlags) void {
         self.gc.vkd.vkCmdSetEvent(
             self.cmdbuf,
             event,
@@ -548,11 +487,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn resetEvent(
-        self: CommandBuffer,
-        event: vk.Event,
-        stage_mask: vk.PipelineStageFlags,
-    ) void {
+    pub fn resetEvent(self: CommandBuffer, event: vk.Event, stage_mask: vk.PipelineStageFlags) void {
         self.gc.vkd.vkCmdResetEvent(
             self.cmdbuf,
             event,
@@ -614,12 +549,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn beginQuery(
-        self: CommandBuffer,
-        query_pool: vk.QueryPool,
-        query: u32,
-        flags: vk.QueryControlFlags,
-    ) void {
+    pub fn beginQuery(self: CommandBuffer, query_pool: vk.QueryPool, query: u32, flags: vk.QueryControlFlags) void {
         self.gc.vkd.vkCmdBeginQuery(
             self.cmdbuf,
             query_pool,
@@ -628,11 +558,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn endQuery(
-        self: CommandBuffer,
-        query_pool: vk.QueryPool,
-        query: u32,
-    ) void {
+    pub fn endQuery(self: CommandBuffer, query_pool: vk.QueryPool, query: u32) void {
         self.gc.vkd.vkCmdEndQuery(
             self.cmdbuf,
             query_pool,
@@ -640,30 +566,20 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn beginConditionalRenderingEXT(
-        self: CommandBuffer,
-        p_conditional_rendering_begin: *const vk.ConditionalRenderingBeginInfoEXT,
-    ) void {
+    pub fn beginConditionalRenderingEXT(self: CommandBuffer, p_conditional_rendering_begin: *const vk.ConditionalRenderingBeginInfoEXT) void {
         self.gc.vkd.vkCmdBeginConditionalRenderingEXT(
             self.cmdbuf,
             p_conditional_rendering_begin,
         );
     }
 
-    pub fn endConditionalRenderingEXT(
-        self: CommandBuffer,
-    ) void {
+    pub fn endConditionalRenderingEXT(self: CommandBuffer) void {
         self.gc.vkd.vkCmdEndConditionalRenderingEXT(
             self.cmdbuf,
         );
     }
 
-    pub fn resetQueryPool(
-        self: CommandBuffer,
-        query_pool: vk.QueryPool,
-        first_query: u32,
-        query_count: u32,
-    ) void {
+    pub fn resetQueryPool(self: CommandBuffer, query_pool: vk.QueryPool, first_query: u32, query_count: u32) void {
         self.gc.vkd.vkCmdResetQueryPool(
             self.cmdbuf,
             query_pool,
@@ -672,12 +588,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn writeTimestamp(
-        self: CommandBuffer,
-        pipeline_stage: vk.PipelineStageFlags,
-        query_pool: vk.QueryPool,
-        query: u32,
-    ) void {
+    pub fn writeTimestamp(self: CommandBuffer, pipeline_stage: vk.PipelineStageFlags, query_pool: vk.QueryPool, query: u32) void {
         self.gc.vkd.vkCmdWriteTimestamp(
             self.cmdbuf,
             pipeline_stage.toInt(),
@@ -726,11 +637,7 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn beginRenderPass(
-        self: CommandBuffer,
-        p_render_pass_begin: *const vk.RenderPassBeginInfo,
-        contents: vk.SubpassContents,
-    ) void {
+    pub fn beginRenderPass(self: CommandBuffer, p_render_pass_begin: *const vk.RenderPassBeginInfo, contents: vk.SubpassContents) void {
         self.gc.vkd.vkCmdBeginRenderPass(
             self.cmdbuf,
             p_render_pass_begin,
@@ -738,29 +645,20 @@ pub const CommandBuffer = struct {
         );
     }
 
-    pub fn nextSubpass(
-        self: CommandBuffer,
-        contents: vk.SubpassContents,
-    ) void {
+    pub fn nextSubpass(self: CommandBuffer, contents: vk.SubpassContents) void {
         self.gc.vkd.vkCmdNextSubpass(
             self.cmdbuf,
             contents,
         );
     }
 
-    pub fn endRenderPass(
-        self: CommandBuffer,
-    ) void {
+    pub fn endRenderPass(self: CommandBuffer) void {
         self.gc.vkd.vkCmdEndRenderPass(
             self.cmdbuf,
         );
     }
 
-    pub fn executeCommands(
-        self: CommandBuffer,
-        command_buffer_count: u32,
-        p_command_buffers: [*]const vk.CommandBuffer,
-    ) void {
+    pub fn executeCommands(self: CommandBuffer, command_buffer_count: u32, p_command_buffers: [*]const vk.CommandBuffer) void {
         self.gc.vkd.vkCmdExecuteCommands(
             self.cmdbuf,
             command_buffer_count,

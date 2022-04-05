@@ -20,10 +20,10 @@ const VkObject = union(enum) {
 };
 
 pub const DeletionQueue = struct {
-    gc: *GraphicsContext,
+    gc: *const GraphicsContext,
     queue: std.ArrayList(VkObject),
 
-    pub fn init(allocator: std.mem.Allocator, gc: *GraphicsContext) DeletionQueue {
+    pub fn init(allocator: std.mem.Allocator, gc: *const GraphicsContext) DeletionQueue {
         return .{
             .gc = gc,
             .queue = std.ArrayList(VkObject).init(allocator),

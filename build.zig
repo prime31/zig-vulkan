@@ -35,11 +35,13 @@ const spirv_reflect_pkg = std.build.Pkg{
 };
 
 const stb_pkg = stb_build.getPackage("");
+const lz4_pkg = lz4_build.getPackage("");
 const imgui_pkg = imgui_build.getPackage("");
 const imgui_vk_pkg = imgui_build.getVkPackage("", vulkan_pkg);
 
 // builders
 const stb_build = @import("libs/stb/build.zig");
+const lz4_build = @import("libs/lz4/build.zig");
 const imgui_build = @import("libs/imgui/build.zig");
 
 const vk_sdk_root = "/Users/mikedesaro/VulkanSDK/1.3.204.1/macOS";
@@ -133,6 +135,10 @@ fn linkExeDeps(exe: *std.build.LibExeObjStep, b: *Builder, target: std.zig.Cross
     // stb
     stb_build.linkArtifact(exe, "");
     exe.addPackage(stb_pkg);
+
+    // lz4
+    lz4_build.linkArtifact(exe, "");
+    exe.addPackage(lz4_pkg);
 }
 
 fn createAssetBaker(b: *Builder, target: std.zig.CrossTarget) void {

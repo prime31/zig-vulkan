@@ -1,9 +1,5 @@
 const std = @import("std");
-
-pub const CompressionMode = enum {
-    none,
-    lz4,
-};
+const lz4 = @import("lz4");
 
 pub const AssetFile = struct {
     kind: [4]u8,
@@ -35,6 +31,15 @@ pub fn Asset(comptime T: type) type {
 }
 
 pub fn save(filename: []const u8, asset: *AssetFile) !void {
+    // compress buffer and copy it into the file struct
+    const compress_staging = lz4.LZ4_compressBound(@intCast(c_int, asset.blob.len));
+    var final_blob = try std.heap.c_allocator.alloc(u8, @intCast(usize, compress_staging));
+    defer std.heap.c_allocator.free(final_blob);
+
+    const compressed_size = lz4.LZ4_compress_default(asset.blob.ptr, final_blob.ptr, @intCast(c_int, asset.blob.len), compress_staging);
+    final_blob.len = @intCast(usize, compressed_size);
+
+    // open file and write data
     var handle = try std.fs.cwd().createFile(filename, .{});
     defer handle.close();
 
@@ -43,9 +48,15 @@ pub fn save(filename: []const u8, asset: *AssetFile) !void {
 
     _ = try writer.writeInt(u64, asset.json.len, .Little);
     _ = try writer.writeInt(u64, asset.blob.len, .Little);
+    _ = try writer.writeInt(u64, final_blob.len, .Little);
 
     _ = try writer.write(asset.json);
-    _ = try writer.write(asset.blob);
+    _ = try writer.write(final_blob);
+
+    // reset final_blob so it frees cleanly
+    final_blob.len = @intCast(usize, compress_staging);
+
+    std.debug.print("---- compression ratio: {d:0.3}\n", .{ @intToFloat(f32, compressed_size) / @intToFloat(f32, asset.blob.len) });
 }
 
 /// T should be the info struct that corresponds to the format of the file loaded. The returned Asset(T)
@@ -59,13 +70,16 @@ pub fn load(comptime T: type, filename: []const u8) !Asset(T) {
     _ = try reader.read(&kind);
 
     const json_len = try reader.readInt(u64, .Little);
-    const blob_len = try reader.readInt(u64, .Little);
+    const blob_decompressed_len = try reader.readInt(u64, .Little);
+    const blob_compressed_len = try reader.readInt(u64, .Little);
 
     var json = try std.heap.c_allocator.alloc(u8, json_len);
-    var blob = try std.heap.c_allocator.alloc(u8, blob_len);
+    var blob_compressed = try std.heap.c_allocator.alloc(u8, blob_compressed_len);
+    defer std.heap.c_allocator.free(blob_compressed);
+    var blob_decompressed = try std.heap.c_allocator.alloc(u8, blob_decompressed_len);
 
     _ = try reader.read(json);
-    _ = try reader.read(blob);
+    _ = try reader.read(blob_compressed);
 
     var stream = std.json.TokenStream.init(json);
     const parse_options: std.json.ParseOptions = .{ .allocator = std.heap.c_allocator };
@@ -73,7 +87,11 @@ pub fn load(comptime T: type, filename: []const u8) !Asset(T) {
 
     std.heap.c_allocator.free(json);
 
-    return Asset(T).init(info, blob, parse_options);
+    // decompress blob
+    const res = lz4.LZ4_decompress_safe(blob_compressed.ptr, blob_decompressed.ptr, @intCast(c_int, blob_compressed_len), @intCast(c_int, blob_decompressed_len));
+    if (res < 0) return error.DecompressionFailed;
+
+    return Asset(T).init(info, blob_decompressed, parse_options);
 }
 
 test "AssetFile save/load" {
