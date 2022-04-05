@@ -28,6 +28,9 @@ pub fn link(_: *Builder, exe: *std.build.LibExeObjStep, target: std.zig.CrossTar
     const base_path = prefix_path ++ "libs/imgui/src/";
     exe.addIncludeDir(base_path ++ "imgui");
 
+    // glfw include for cross compile
+    exe.addIncludeDir("/usr/local/include");
+
     const cpp_args = [_][]const u8{"-Wno-return-type-c-linkage", "-DIMGUI_IMPL_API=extern \"C\"", "-Wall", "-DIMGUI_DISABLE_OBSOLETE_FUNCTIONS=1", "-DIMGUI_IMPL_VULKAN_NO_PROTOTYPES=1"};
     exe.addCSourceFile(base_path ++ "imgui/imgui.cpp", &cpp_args);
     exe.addCSourceFile(base_path ++ "imgui/imgui_demo.cpp", &cpp_args);
