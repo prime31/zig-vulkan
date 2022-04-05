@@ -526,7 +526,7 @@ pub const Engine = struct {
 
         const closure = struct {
             pub fn load(function_name: [*:0]const u8, user_data: *anyopaque) callconv(.C) vk.PfnVoidFunction {
-                return glfw.getInstanceProcAddress(user_data, function_name);
+                return glfw.getInstanceProcAddress(@intToEnum(vk.Instance, @ptrToInt(user_data)), function_name);
             }
         }.load;
         _ = igvk.ImGui_ImplVulkan_LoadFunctions(closure, self.gc.instance);

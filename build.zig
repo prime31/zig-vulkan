@@ -1,10 +1,18 @@
 const std = @import("std");
 
-const glfw = @import("libs/mach-glfw/build.zig");
 const vkgen = @import("libs/vulkan-zig/generator/index.zig");
 
 const Step = std.build.Step;
 const Builder = std.build.Builder;
+
+// builders
+const glfw_build = @import("libs/glfw/build.zig");
+const stb_build = @import("libs/stb/build.zig");
+const lz4_build = @import("libs/lz4/build.zig");
+const vma_build = @import("libs/vma/build.zig");
+const tinyobj_build = @import("libs/tinyobjloader/build.zig");
+const imgui_build = @import("libs/imgui/build.zig");
+const spirv_build = @import("libs/spirv_reflect/build.zig");
 
 // packages
 const vulkan_pkg = std.build.Pkg{
@@ -12,39 +20,14 @@ const vulkan_pkg = std.build.Pkg{
     .path = .{ .path = "src/vk.zig" },
 };
 
-const glfw_pkg = std.build.Pkg{
-    .name = "glfw",
-    .path = .{ .path = "libs/mach-glfw/src/main.zig" },
-};
-
-const tinyobjloader_pkg = std.build.Pkg{
-    .name = "tiny",
-    .path = .{ .path = "libs/tinyobjloader/tinyobjloader.zig" },
-};
-
-const vma_pkg = std.build.Pkg{
-    .name = "vma",
-    .path = .{ .path = "libs/vma/vma.zig" },
-    .dependencies = &[_]std.build.Pkg{vulkan_pkg},
-};
-
-const spirv_reflect_pkg = std.build.Pkg{
-    .name = "spirv",
-    .path = .{ .path = "libs/spirv_reflect/spirv_reflect.zig" },
-    .dependencies = &[_]std.build.Pkg{},
-};
-
+const glfw_pkg = glfw_build.getPackage("", vulkan_pkg);
 const stb_pkg = stb_build.getPackage("");
 const lz4_pkg = lz4_build.getPackage("");
+const vma_pkg = vma_build.getPackage("", vulkan_pkg);
+const tinyobjloader_pkg = tinyobj_build.getPackage("");
 const imgui_pkg = imgui_build.getPackage("");
 const imgui_vk_pkg = imgui_build.getVkPackage("", vulkan_pkg);
-
-// builders
-const stb_build = @import("libs/stb/build.zig");
-const lz4_build = @import("libs/lz4/build.zig");
-const imgui_build = @import("libs/imgui/build.zig");
-
-const vk_sdk_root = "/Users/mikedesaro/VulkanSDK/1.3.204.1/macOS";
+const spirv_reflect_pkg = spirv_build.getPackage("");
 
 pub fn build(b: *Builder) void {
     const target = b.standardTargetOptions(.{});
@@ -85,6 +68,9 @@ pub fn build(b: *Builder) void {
     const exe_step = b.step("generate_vulkan_bindings", b.fmt("Generates the vk.zig file", .{}));
     exe_step.dependOn(&generate_exe.step);
 
+    const vk_sdk_root = std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ std.os.getenv("HOME"), "VulkanSDK/1.3.204.1/macOS" }) catch unreachable;
+    defer b.allocator.free(vk_sdk_root);
+
     const gen = vkgen.VkGenerateStep.initFromSdk(b, vk_sdk_root, "vk.zig");
     exe_step.dependOn(&gen.step);
 
@@ -113,31 +99,33 @@ fn linkExeDeps(exe: *std.build.LibExeObjStep, b: *Builder, target: std.zig.Cross
     // vulkan
     exe.addPackage(vulkan_pkg);
 
-    // mach-glfw
-    glfw.link(b, exe, .{ .opengl = false });
+    // glfw
+    glfw_build.link(b, exe, .{}, "");
     exe.addPackage(glfw_pkg);
 
     // Dear ImGui
-    imgui_build.linkArtifact(b, exe, target, "");
+    imgui_build.link(b, exe, target, "");
     exe.addPackage(imgui_pkg);
     exe.addPackage(imgui_vk_pkg);
 
     // spirv-reflect
-    linkSpirvReflect(exe);
+    spirv_build.link(exe, "");
     exe.addPackage(spirv_reflect_pkg);
 
     // vulkan-mem
-    linkVulkanMemoryAllocator(exe, vk_sdk_root);
+    vma_build.link(exe, "");
+    exe.addPackage(vma_pkg);
 
     // tinyobjloader
-    linkTinyObjLoader(exe);
+    tinyobj_build.link(exe, "");
+    exe.addPackage(tinyobjloader_pkg);
 
     // stb
-    stb_build.linkArtifact(exe, "");
+    stb_build.link(exe, "");
     exe.addPackage(stb_pkg);
 
     // lz4
-    lz4_build.linkArtifact(exe, "");
+    lz4_build.link(exe, "");
     exe.addPackage(lz4_pkg);
 }
 
@@ -192,23 +180,6 @@ fn addShaderCompilationStep(b: *Builder, always_compile_shaders: bool) std.build
             }) catch unreachable,
         } };
     }
-}
-
-fn linkVulkanMemoryAllocator(step: *std.build.LibExeObjStep, comptime sdk_root: []const u8) void {
-    step.linkLibCpp();
-    step.addIncludePath(sdk_root ++ "/include");
-    step.addIncludePath("libs/vma");
-    step.addCSourceFile("libs/vma/vk_mem_alloc.cpp", &.{ "-Wno-nullability-completeness", "-std=c++14" });
-}
-
-fn linkTinyObjLoader(step: *std.build.LibExeObjStep) void {
-    step.addIncludePath("libs/tinyobjloader");
-    step.addCSourceFile("libs/tinyobjloader/obj_loader.cc", &.{});
-}
-
-fn linkSpirvReflect(step: *std.build.LibExeObjStep) void {
-    step.addIncludePath("libs/spirv_reflect");
-    step.addCSourceFile("libs/spirv_reflect/spirv_reflect.c", &.{});
 }
 
 fn getAllExamples(b: *Builder, root_directory: []const u8) [][2][]const u8 {

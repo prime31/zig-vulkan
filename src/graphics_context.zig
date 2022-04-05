@@ -179,7 +179,7 @@ pub const Queue = struct {
 
 fn createSurfaceGlfw(instance: vk.Instance, window: glfw.Window) !vk.SurfaceKHR {
     var surface: vk.SurfaceKHR = undefined;
-    if ((try glfw.createWindowSurface(instance, window, null, &surface)) != @enumToInt(vk.Result.success)) {
+    if ((try glfw.createWindowSurface(instance, window, null, &surface)) != vk.Result.success) {
         return error.SurfaceInitFailed;
     }
 

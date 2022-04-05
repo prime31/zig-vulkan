@@ -5,8 +5,6 @@ pub usingnamespace @import("vkinit.zig");
 
 // vulkan object abstractions/wrappers
 pub usingnamespace @import("vk_objs/command_buffer.zig");
-pub usingnamespace @import("vk_objs/frame_buffer_attachment.zig");
-pub usingnamespace @import("vk_objs/offscreen_pass.zig");
 
 // engines per chapter
 pub usingnamespace @import("chapters/engine.zig");
