@@ -11,6 +11,7 @@ const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 const Material = vkutil.Material;
 const ShaderPass = vkutil.ShaderPass;
 const Mesh = @import("mesh.zig").Mesh;
+const MeshObject = @import("mesh.zig").MeshObject;
 const RenderBounds = @import("mesh.zig").RenderBounds;
 const Vertex = @import("mesh.zig").Vertex;
 const Mat4 = @import("chapters/mat4.zig").Mat4;
@@ -23,6 +24,8 @@ pub const MeshPassType = enum(u8) {
 };
 
 pub const RenderScene = struct {
+    const Self = @This();
+
     renderables: ArrayList(RenderObject),
     meshes: ArrayList(DrawMesh),
     materials: ArrayList(Material),
@@ -36,7 +39,7 @@ pub const RenderScene = struct {
     merged_index_buffer: vma.AllocatedBuffer(u32),
     object_data_buffer: vma.AllocatedBuffer(vkutil.GpuObjectData),
 
-    pub fn init(gpa: std.mem.Allocator) RenderScene {
+    pub fn init(gpa: std.mem.Allocator) Self {
         return .{
             .renderables = ArrayList(RenderObject).init(gpa),
             .meshes = ArrayList(DrawMesh).init(gpa),
@@ -50,7 +53,7 @@ pub const RenderScene = struct {
         };
     }
 
-    pub fn deinit(self: RenderScene) void {
+    pub fn deinit(self: Self) void {
         self.renderables.deinit();
         self.meshes.deinit();
         self.materials.deinit();
@@ -61,6 +64,44 @@ pub const RenderScene = struct {
         self.merged_index_buffer.deinit();
         self.object_data_buffer.deinit();
     }
+
+    pub fn registerObject(self: Self, object: MeshObject) Handle(RenderObject) {
+        return .{};
+    }
+
+    pub fn registerObjectBatch(self: Self, first: *MeshObject, count: u32) void {}
+
+    pub fn updateTransform(self: Self, object_id: Handle(RenderObject), local_to_world: Mat4) void {}
+
+    pub fn fillObjectData(self: Self, data: *GpuObjectData) void {}
+
+    pub fn fillIndirectArray(self: Self, data: *GpuIndirectObject, pass: *MeshPass) void {}
+
+    pub fn fillInstancesArray(self: Self, data: *GpuInstance, pas: MeshPass) void {}
+
+    pub fn writeObject(target: *GpuObjectData, object_id: Handle(RenderObject)) void {}
+
+    pub fn clearDirtyObjects(self: Self) void {}
+
+    pub fn buildBatches(self: Self) void {}
+
+    pub fn mergeMeshes(self: Self, engine: anytype) void {}
+
+    pub fn refreshPass(self: Self, pass: *MeshPass) void {}
+
+    pub fn buildIndirectBatches(self: Self, pass: *MeshPass, out_batches: ArrayList(IndirectBatch), in_batches: ArrayList(RenderBatch)) void {}
+
+    pub fn getObject(self: Self, object_id: Handle(RenderObject)) *RenderObject {}
+
+    pub fn getMesh(self: Self, object_id: Handle(DrawMesh)) *DrawMesh {}
+
+    pub fn getMeshPass(self: Self, name: MeshPassType) *MeshPass {}
+
+    pub fn getMaterial(self: Self, object_id: Handle(Material)) *Material {}
+
+    pub fn getMaterialHandle(self: Self, m: Material) Handle(Material) {}
+
+    pub fn getMeshHandle(self: Self, m: *Mesh) Handle(Mesh) {}
 };
 
 pub fn Handle(comptime T: type) type {
@@ -70,7 +111,21 @@ pub fn Handle(comptime T: type) type {
     };
 }
 
-const GPUIndirectObject = struct {
+pub const MeshObject = struct {
+    mesh: *Mesh,
+    material: Material,
+    custom_sort_key: u32,
+    transform_matrix: Mat4,
+    bounds: RenderBounds,
+    draw_forward_pass: u1,
+    draw_shadow_pass: u1,
+};
+
+pub const GpuObjectData = struct {
+    model: Mat4,
+};
+
+const GpuIndirectObject = struct {
     command: vk.DrawIndexedIndirectCommand,
     object_id: u32,
     batch_id: u32,
@@ -147,8 +202,8 @@ const MeshPass = struct {
     compacted_instance_buffer: vma.AllocatedBuffer(u32),
     pass_objects_buffer: vma.AllocatedBuffer(GpuInstance),
 
-    draw_indirect_buffer: vma.AllocatedBuffer(GPUIndirectObject),
-    clear_indirect_buffer: vma.AllocatedBuffer(GPUIndirectObject),
+    draw_indirect_buffer: vma.AllocatedBuffer(GpuIndirectObject),
+    clear_indirect_buffer: vma.AllocatedBuffer(GpuIndirectObject),
 
     mesh_pass_type: MeshPassType,
     needs_indirect_flush: bool = true,

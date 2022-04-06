@@ -18,7 +18,10 @@ const RenderBounds = @import("../mesh.zig").RenderBounds;
 const Vertex = @import("../mesh.zig").Vertex;
 const Allocator = std.mem.Allocator;
 
+const MeshObject = @import("render_scene.zig").MeshObject;
+const GpuObjectData = @import("render_scene.zig").GpuObjectData;
 const FlyCamera = @import("FlyCamera.zig");
+
 const Mat4 = @import("mat4.zig").Mat4;
 const Vec3 = @import("vec3.zig").Vec3;
 const Vec4 = @import("vec4.zig").Vec4;
@@ -47,16 +50,6 @@ pub const Texture = struct {
     }
 };
 
-const MeshObject = struct {
-    mesh: *Mesh,
-    material: vkutil.Material,
-    custom_sort_key: u32,
-    transform_matrix: Mat4,
-    bounds: RenderBounds,
-    draw_forward_pass: u1,
-    draw_shadow_pass: u1,
-};
-
 const DirectionalLight = struct {
     light_pos: Vec3,
     light_dir: Vec3,
@@ -75,10 +68,6 @@ const GpuSceneData = struct {
     ambient_color: Vec4 = Vec4.new(1, 0, 0, 1),
     sun_dir: Vec4 = Vec4.new(1, 0, 0, 1),
     sun_color: Vec4 = Vec4.new(1, 0, 0, 1),
-};
-
-const GpuObjectData = struct {
-    model: Mat4,
 };
 
 const MeshDrawCommands = struct {
