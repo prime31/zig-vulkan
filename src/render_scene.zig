@@ -11,7 +11,6 @@ const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 const Material = vkutil.Material;
 const ShaderPass = vkutil.ShaderPass;
 const Mesh = @import("mesh.zig").Mesh;
-const MeshObject = @import("mesh.zig").MeshObject;
 const RenderBounds = @import("mesh.zig").RenderBounds;
 const Vertex = @import("mesh.zig").Vertex;
 const Mat4 = @import("chapters/mat4.zig").Mat4;

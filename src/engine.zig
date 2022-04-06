@@ -6,25 +6,25 @@ const resources = @import("resources");
 const glfw = @import("glfw");
 const ig = @import("imgui");
 const igvk = @import("imgui_vk");
-const vkinit = @import("../vkinit.zig");
-const vkutil = @import("../vk_util/vk_util.zig");
+const vkinit = @import("vkinit.zig");
+const vkutil = @import("vk_util/vk_util.zig");
 
-const GraphicsContext = @import("../graphics_context.zig").GraphicsContext;
-const RenderScene = @import("../render_scene.zig").RenderScene;
-const Swapchain = @import("../swapchain.zig").Swapchain;
-const PipelineBuilder = @import("../pipeline_builder.zig").PipelineBuilder;
-const Mesh = @import("../mesh.zig").Mesh;
-const RenderBounds = @import("../mesh.zig").RenderBounds;
-const Vertex = @import("../mesh.zig").Vertex;
+const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
+const RenderScene = @import("render_scene.zig").RenderScene;
+const Swapchain = @import("swapchain.zig").Swapchain;
+const PipelineBuilder = @import("pipeline_builder.zig").PipelineBuilder;
+const Mesh = @import("mesh.zig").Mesh;
+const RenderBounds = @import("mesh.zig").RenderBounds;
+const Vertex = @import("mesh.zig").Vertex;
 const Allocator = std.mem.Allocator;
 
 const MeshObject = @import("render_scene.zig").MeshObject;
 const GpuObjectData = @import("render_scene.zig").GpuObjectData;
-const FlyCamera = @import("FlyCamera.zig");
+const FlyCamera = @import("chapters/FlyCamera.zig");
 
-const Mat4 = @import("mat4.zig").Mat4;
-const Vec3 = @import("vec3.zig").Vec3;
-const Vec4 = @import("vec4.zig").Vec4;
+const Mat4 = @import("chapters/mat4.zig").Mat4;
+const Vec3 = @import("chapters/vec3.zig").Vec3;
+const Vec4 = @import("chapters/vec4.zig").Vec4;
 
 const FRAME_OVERLAP: usize = 2;
 
@@ -406,7 +406,7 @@ pub const Engine = struct {
 
             igvk.newFrame();
             ig.igNewFrame();
-            @import("autogui.zig").inspect(FlyCamera, &self.camera);
+            @import("chapters/autogui.zig").inspect(FlyCamera, &self.camera);
 
             // wait for the last frame to complete before filling our CommandBuffer
             const state = self.swapchain.waitForFrame() catch |err| switch (err) {

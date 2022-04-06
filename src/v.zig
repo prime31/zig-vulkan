@@ -7,4 +7,4 @@ pub usingnamespace @import("vkinit.zig");
 pub usingnamespace @import("vk_objs/command_buffer.zig");
 
 // engines per chapter
-pub usingnamespace @import("chapters/engine.zig");
+pub usingnamespace @import("engine.zig");
