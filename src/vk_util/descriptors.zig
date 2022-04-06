@@ -27,19 +27,19 @@ pub const DescriptorAllocator = struct {
     free_pools: std.ArrayList(vk.DescriptorPool),
     current_pool: vk.DescriptorPool = .null_handle,
 
-    pub fn init(gc: *const GraphicsContext, allocator: std.mem.Allocator) Self {
+    pub fn init(gc: *const GraphicsContext) Self {
         return .{
             .gc = gc,
-            .used_pools = std.ArrayList(vk.DescriptorPool).init(allocator),
-            .free_pools = std.ArrayList(vk.DescriptorPool).init(allocator),
+            .used_pools = std.ArrayList(vk.DescriptorPool).init(gc.gpa),
+            .free_pools = std.ArrayList(vk.DescriptorPool).init(gc.gpa),
         };
     }
 
     pub fn deinit(self: Self) void {
-        for (self.used_pools) |p| self.gc.destroy(p);
+        for (self.used_pools.items) |p| self.gc.destroy(p);
         self.used_pools.deinit();
 
-        for (self.free_pools) |p| self.gc.destroy(p);
+        for (self.free_pools.items) |p| self.gc.destroy(p);
         self.free_pools.deinit();
     }
 
@@ -114,10 +114,10 @@ pub const DescriptorLayoutCache = struct {
         }
     };
 
-    pub fn init(gc: *const GraphicsContext, allocator: std.mem.Allocator) Self {
+    pub fn init(gc: *const GraphicsContext) Self {
         return .{
             .gc = gc,
-            .layout_cache = std.AutoHashMap(DescriptorLayoutInfo, vk.DescriptorSetLayout).init(allocator),
+            .layout_cache = std.AutoHashMap(DescriptorLayoutInfo, vk.DescriptorSetLayout).init(gc.gpa),
         };
     }
 
@@ -168,12 +168,12 @@ pub const DescriptorLayoutCache = struct {
 pub const DescriptorBuilder = struct {
     const Self = @This();
 
-    alloc: *DescriptorAllocator,
+    alloc: DescriptorAllocator,
     cache: *DescriptorLayoutCache,
     writes: std.ArrayList(vk.WriteDescriptorSet),
     bindings: std.ArrayList(vk.DescriptorSetLayoutBinding),
 
-    pub fn init(alloc: *DescriptorAllocator, cache: *DescriptorLayoutCache) Self {
+    pub fn init(alloc: DescriptorAllocator, cache: *DescriptorLayoutCache) Self {
         return .{
             .alloc = alloc,
             .cache = cache,

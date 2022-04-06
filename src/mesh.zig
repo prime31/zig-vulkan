@@ -45,12 +45,16 @@ pub const Vertex = extern struct {
     uv: [2]f32,
 };
 
+pub const RenderBounds = struct {
+    
+};
+
 pub const Mesh = struct {
     vertices: std.ArrayList(Vertex),
     indices: []u32,
     index_count: u32 = 0,
-    vert_buffer: vma.AllocatedBuffer = undefined,
-    index_buffer: vma.AllocatedBuffer = undefined,
+    vert_buffer: vma.AllocatedBufferUntyped = undefined,
+    index_buffer: vma.AllocatedBufferUntyped = undefined,
 
     pub fn init(allocator: std.mem.Allocator) Mesh {
         var indices = allocator.alloc(u32, 3) catch unreachable;

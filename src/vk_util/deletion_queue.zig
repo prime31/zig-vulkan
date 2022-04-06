@@ -15,7 +15,7 @@ const VkObject = union(enum) {
     pipeline: vk.Pipeline,
     pipeline_layout: vk.PipelineLayout,
     render_pass: vk.RenderPass,
-    allocated_buffer: vma.AllocatedBuffer,
+    allocated_buffer: vma.AllocatedBufferUntyped,
     allocated_image: vma.AllocatedImage,
 };
 
@@ -30,7 +30,8 @@ pub const DeletionQueue = struct {
         };
     }
 
-    pub fn deinit(self: DeletionQueue) void {
+    pub fn deinit(self: *DeletionQueue) void {
+        self.flush();
         self.queue.deinit();
     }
 
@@ -42,7 +43,7 @@ pub const DeletionQueue = struct {
             vk.Pipeline => .{ .pipeline = obj },
             vk.PipelineLayout => .{ .pipeline_layout = obj },
             vk.RenderPass => .{ .render_pass = obj },
-            vma.AllocatedBuffer => .{ .allocated_buffer = obj },
+            vma.AllocatedBufferUntyped => .{ .allocated_buffer = obj },
             vma.AllocatedImage => .{ .allocated_image = obj },
             else => @panic("Attempted to delete an object that isnt supported by the DeletionQueue: " ++ @typeName(@TypeOf(obj))),
         };

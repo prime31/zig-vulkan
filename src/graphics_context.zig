@@ -32,11 +32,14 @@ pub const GraphicsContext = struct {
     graphics_queue: Queue,
     present_queue: Queue,
     allocator: vma.Allocator,
+    gpa: std.mem.Allocator,
     upload_context: UploadContext,
     debug_message: if (enableValidationLayers) vk.DebugUtilsMessengerEXT else void,
 
-    pub fn init(allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window) !GraphicsContext {
+    pub fn init(gpa: Allocator, app_name: [*:0]const u8, window: glfw.Window) !GraphicsContext {
         var self: GraphicsContext = undefined;
+        self.gpa = gpa;
+
         const vk_proc = @ptrCast(fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, glfw.getInstanceProcAddress);
         self.vkb = try BaseDispatch.load(vk_proc);
 
@@ -51,13 +54,13 @@ pub const GraphicsContext = struct {
         };
 
         // validation
-        if (enableValidationLayers and !try checkValidationLayerSupport(self.vkb, allocator))
+        if (enableValidationLayers and !try checkValidationLayerSupport(self.vkb, gpa))
             std.debug.panic("Validation layers enabled but validationLayerSupport returned false", .{});
 
         var instance_exts = blk: {
             if (enableValidationLayers) {
                 var exts = try std.ArrayList([*:0]const u8).initCapacity(
-                    allocator,
+                    gpa,
                     glfw_exts.len + required_instance_extensions.len,
                 );
 
@@ -69,7 +72,7 @@ pub const GraphicsContext = struct {
 
             break :blk glfw_exts;
         };
-        defer if (enableValidationLayers) allocator.free(instance_exts);
+        defer if (enableValidationLayers) gpa.free(instance_exts);
 
         self.instance = try self.vkb.createInstance(&.{
             .flags = .{},
@@ -86,7 +89,7 @@ pub const GraphicsContext = struct {
         self.surface = try createSurfaceGlfw(self.instance, window);
         errdefer self.vki.destroySurfaceKHR(self.instance, self.surface, null);
 
-        const candidate = try pickPhysicalDevice(self.vki, self.instance, allocator, self.surface);
+        const candidate = try pickPhysicalDevice(self.vki, self.instance, gpa, self.surface);
         self.pdev = candidate.pdev;
         self.props = candidate.props;
         self.dev = try initializeCandidate(self.vki, candidate);

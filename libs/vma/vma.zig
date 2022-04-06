@@ -22,21 +22,35 @@ pub const AllocatedBufferUntyped = struct {
     }
 };
 
+pub fn AllocatedBuffer(comptime T: type) type {
+    _ = T;
+    return struct {
+        buffer: vk.Buffer,
+        allocation: VmaAllocation,
+        size: vk.DeviceSize = 0,
+
+        pub fn deinit(self: AllocatedBufferUntyped, allocator: Allocator) void {
+            vmaDestroyBuffer(allocator.allocator, self.buffer, self.allocation);
+        }
+
+        pub fn getInfo(self: AllocatedBufferUntyped, offset: vk.DeviceSize) vk.DescriptorBufferInfo {
+            return .{
+                .buffer = self.buffer,
+                .offset = offset,
+                .range = self.size,
+            };
+        }
+    };
+}
+
 pub const AllocatedImage = struct {
     image: vk.Image,
     allocation: VmaAllocation,
+    default_view: vk.ImageView = undefined,
+    mip_levels: u8 = 1,
 
     pub fn deinit(self: AllocatedImage, allocator: Allocator) void {
         vmaDestroyImage(allocator.allocator, self.image, self.allocation);
-    }
-};
-
-pub const AllocatedBuffer = struct {
-    buffer: vk.Buffer,
-    allocation: VmaAllocation,
-
-    pub fn deinit(self: AllocatedBuffer, allocator: Allocator) void {
-        vmaDestroyBuffer(allocator.allocator, self.buffer, self.allocation);
     }
 };
 
@@ -62,10 +76,17 @@ pub const Allocator = struct {
             .usage = usage,
         });
 
+        const alloc_flags: AllocationCreateFlags = blk: {
+            // for `auto*` `memory_usage` flags must include one of `host_access_sequential_write/host_access_random` flags. We prefer sequential here.
+            if (memory_usage == .auto or memory_usage == .auto_prefer_device or memory_usage == .auto_prefer_host)
+                break :blk .{ .host_access_sequential_write = true };
+            break :blk .{};
+        };
+
         const alloc_info = std.mem.zeroInit(VmaAllocationCreateInfo, .{
-            .flags = .{},
+            .flags = alloc_flags,
             .usage = memory_usage,
-            .requiredFlags = required_flags,
+            .requiredFlags = required_flags, // TODO: why did we used to hardcode .{ .host_visible_bit = true, .host_coherent_bit = true },
         });
 
         var buffer: AllocatedBufferUntyped = undefined;
@@ -93,29 +114,12 @@ pub const Allocator = struct {
         };
     }
 
-    pub fn createBuffer(self: Allocator, buffer_create_info: *const vk.BufferCreateInfo, alloc_info: *const VmaAllocationCreateInfo, allocation_info: ?*VmaAllocationInfo) !AllocatedBuffer {
-        var buffer: AllocatedBuffer = undefined;
-
-        const a_info = if (allocation_info) |ai| ai else null;
-        const res = vmaCreateBuffer(
-            self.allocator,
-            buffer_create_info,
-            alloc_info,
-            &buffer.buffer,
-            &buffer.allocation,
-            a_info,
-        );
-        if (res == vk.Result.success) return buffer;
-        return switch (res) {
-            .error_out_of_host_memory => error.out_of_host_memory,
-            .error_out_of_device_memory => error.out_of_device_memory,
-            .error_too_many_objects => error.too_many_objects,
-            .error_invalid_external_handle => error.invalid_external_handle,
-            .error_invalid_opaque_capture_address => error.invalid_opaque_capture_address,
-            .error_memory_map_failed => error.memory_map_failed,
-            .error_fragmented_pool => error.fragmented_pool,
-            .error_out_of_pool_memory => error.out_of_pool_memory,
-            else => error.undocumented_error,
+    pub fn createBuffer(self: Allocator, comptime T: type, alloc_size: vk.DeviceSize, usage: vk.BufferUsageFlags, memory_usage: VmaMemoryUsage, required_flags: vk.MemoryPropertyFlags) !AllocatedBuffer(T) {
+        const buffer = try self.createUntypedBuffer(alloc_size, usage, memory_usage, required_flags);
+        return AllocatedBuffer(T) {
+            .buffer = buffer.buffer,
+            .allocation = buffer.allocation,
+            .size = buffer.size,
         };
     }
 

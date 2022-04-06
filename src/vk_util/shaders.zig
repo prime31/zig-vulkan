@@ -249,25 +249,27 @@ const ReflectedBinding = struct {
 };
 
 pub const ShaderCache = struct {
+    gc: *const GraphicsContext,
     module_cache: std.StringHashMap(ShaderModule),
 
-    pub fn init(gpa: std.mem.Allocator) ShaderCache {
+    pub fn init(gpa: std.mem.Allocator, gc: *const GraphicsContext) ShaderCache {
         return .{
+            .gc = gc,
             .module_cache = std.StringHashMap(ShaderModule).init(gpa),
         };
     }
 
-    pub fn deinit(self: ShaderCache) void {
+    pub fn deinit(self: *ShaderCache) void {
         var iter = self.module_cache.valueIterator();
-        while (iter.next()) |sm| sm.deinit();
+        while (iter.next()) |sm| sm.deinit(self.gc);
         self.module_cache.deinit();
     }
 
-    pub fn getShader(self: ShaderCache, path: []const u8) *ShaderModule {
-        if (!self.module_cache.contains(path)) {
-            try self.module_cache.put(path, ShaderModule.init());
+    pub fn getShader(self: ShaderCache, comptime res_path: []const u8) *ShaderModule {
+        if (!self.module_cache.contains(res_path)) {
+            try self.module_cache.put(res_path, ShaderModule.init(self.gc, res_path));
         }
-        return self.module_cache.getPtr(path);
+        return self.module_cache.getPtr(res_path);
     }
 };
 
