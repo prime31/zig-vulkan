@@ -3,6 +3,8 @@ const vk = @import("vulkan");
 const vma = @import("vma");
 const tiny = @import("tiny");
 
+const Vec3 = @import("chapters/vec3.zig").Vec3;
+
 const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 
 pub const Vertex = extern struct {
@@ -47,7 +49,10 @@ pub const Vertex = extern struct {
 
 
 pub const RenderBounds = struct {
-    
+    origin: Vec3,
+    radius: f32,
+    extents: Vec3,
+    valid: bool,
 };
 
 pub const Mesh = struct {

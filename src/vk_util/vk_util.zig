@@ -1,4 +1,5 @@
 const Mat4 = @import("../chapters/mat4.zig").Mat4;
+const Vec4 = @import("../chapters/vec4.zig").Vec4;
 
 pub const PushBuffer = @import("push_buffer.zig").PushBuffer;
 pub const DeletionQueue = @import("deletion_queue.zig").DeletionQueue;
@@ -8,6 +9,13 @@ pub usingnamespace @import("material_system.zig");
 
 pub const GpuObjectData = struct {
     model: Mat4,
-    origin_rad: Mat4,
-    extents: Mat4,
+    origin_rad: Vec4,
+    extents: Vec4,
+};
+
+pub const MeshPassType = enum(u8) {
+    none,
+    forward,
+    transparency,
+    directional_shadow,
 };

@@ -252,10 +252,10 @@ pub const ShaderCache = struct {
     gc: *const GraphicsContext,
     module_cache: std.StringHashMap(ShaderModule),
 
-    pub fn init(gpa: std.mem.Allocator, gc: *const GraphicsContext) ShaderCache {
+    pub fn init(gc: *const GraphicsContext) ShaderCache {
         return .{
             .gc = gc,
-            .module_cache = std.StringHashMap(ShaderModule).init(gpa),
+            .module_cache = std.StringHashMap(ShaderModule).init(gc.gpa),
         };
     }
 

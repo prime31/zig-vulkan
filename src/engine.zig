@@ -80,6 +80,24 @@ const MeshDrawCommands = struct {
     batch: std.ArrayList(RenderBatch),
 };
 
+const OldMaterial = struct {
+    texture_set: ?vk.DescriptorSet = null,
+    pipeline: vk.Pipeline,
+    pipeline_layout: vk.PipelineLayout,
+
+    pub fn init(pipeline: vk.Pipeline, pipeline_layout: vk.PipelineLayout) OldMaterial {
+        return .{
+            .pipeline = pipeline,
+            .pipeline_layout = pipeline_layout,
+        };
+    }
+
+    pub fn deinit(self: OldMaterial, gc: *const GraphicsContext) void {
+        gc.destroy(self.pipeline);
+        gc.destroy(self.pipeline_layout);
+    }
+};
+
 const FrameData = struct {
     deletion_queue: vkutil.DeletionQueue,
     cmd_pool: vk.CommandPool,
@@ -181,27 +199,9 @@ const FrameData = struct {
     }
 };
 
-const Material = struct {
-    texture_set: ?vk.DescriptorSet = null,
-    pipeline: vk.Pipeline,
-    pipeline_layout: vk.PipelineLayout,
-
-    pub fn init(pipeline: vk.Pipeline, pipeline_layout: vk.PipelineLayout) Material {
-        return .{
-            .pipeline = pipeline,
-            .pipeline_layout = pipeline_layout,
-        };
-    }
-
-    pub fn deinit(self: Material, gc: *const GraphicsContext) void {
-        gc.destroy(self.pipeline);
-        gc.destroy(self.pipeline_layout);
-    }
-};
-
-const RenderObject = struct {
+const OldRenderObject = struct {
     mesh: *Mesh,
-    material: *Material,
+    material: *OldMaterial,
     transform_matrix: Mat4,
 };
 
@@ -273,8 +273,8 @@ pub const Engine = struct {
     last_frame_time: f64 = 0.0,
 
     shader_cache: vkutil.ShaderCache,
-    renderables: std.ArrayList(RenderObject),
-    materials: std.StringHashMap(Material),
+    renderables: std.ArrayList(OldRenderObject),
+    materials: std.StringHashMap(OldMaterial),
     meshes: std.StringHashMap(Mesh),
     textures: std.StringHashMap(Texture),
 
@@ -323,9 +323,10 @@ pub const Engine = struct {
             .framebuffers = framebuffers,
             .frames = frames,
             .depth_image = depth_image,
-            .shader_cache = vkutil.ShaderCache.init(gpa, gc),
-            .renderables = std.ArrayList(RenderObject).init(gpa),
-            .materials = std.StringHashMap(Material).init(gpa),
+            .render_scene = try RenderScene.init(gpa),
+            .shader_cache = vkutil.ShaderCache.init(gc),
+            .renderables = std.ArrayList(OldRenderObject).init(gpa),
+            .materials = std.StringHashMap(OldMaterial).init(gpa),
             .meshes = std.StringHashMap(Mesh).init(gpa),
             .textures = std.StringHashMap(Texture).init(gpa),
             .camera = FlyCamera.init(window),
@@ -355,6 +356,7 @@ pub const Engine = struct {
 
         self.depth_image.deinit(self.gc);
 
+        self.render_scene.deinit();
         self.shader_cache.deinit();
 
         var iter = self.meshes.valueIterator();
@@ -548,7 +550,7 @@ pub const Engine = struct {
 
         const pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
         const pipeline = try createPipeline(self.gc, self.allocator, self.render_pass, pipeline_layout, resources.default_lit_frag);
-        const material = Material{
+        const material = OldMaterial{
             .pipeline = pipeline,
             .pipeline_layout = pipeline_layout,
         };
@@ -556,7 +558,7 @@ pub const Engine = struct {
 
         const pipeline_layout2 = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
         const pipeline2 = try createPipeline(self.gc, self.allocator, self.render_pass, pipeline_layout2, resources.default_lit_frag);
-        const material2 = Material{
+        const material2 = OldMaterial{
             .pipeline = pipeline2,
             .pipeline_layout = pipeline_layout2,
         };
@@ -571,7 +573,7 @@ pub const Engine = struct {
 
         const textured_pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &textured_pip_layout_info, null);
         const textured_pipeline = try createPipeline(self.gc, self.allocator, self.render_pass, textured_pipeline_layout, resources.textured_lit_frag);
-        const textured_material = Material{
+        const textured_material = OldMaterial{
             .pipeline = textured_pipeline,
             .pipeline_layout = textured_pipeline_layout,
         };
@@ -605,14 +607,14 @@ pub const Engine = struct {
         self.gc.vkd.updateDescriptorSets(self.gc.dev, 1, @ptrCast([*]const vk.WriteDescriptorSet, &texture1), 0, undefined);
 
         // create some objects
-        var monkey = RenderObject{
+        var monkey = OldRenderObject{
             .mesh = self.meshes.getPtr("monkey").?,
             .material = self.materials.getPtr("defaultmesh").?,
             .transform_matrix = Mat4.createTranslation(Vec3.new(0, 2, 0)),
         };
         try self.renderables.append(monkey);
 
-        var empire = RenderObject{
+        var empire = OldRenderObject{
             .mesh = self.meshes.getPtr("lost_empire").?,
             .material = self.materials.getPtr("texturedmesh").?,
             .transform_matrix = Mat4.createTranslation(Vec3.new(0, 5, 0)),
@@ -628,7 +630,7 @@ pub const Engine = struct {
 
                 const mesh_material = if (@mod(x, 2) == 0) self.materials.getPtr("texturedmesh").? else self.materials.getPtr("redmesh").?;
                 const mesh = if (@mod(x, 2) == 0 and @mod(x, 6) == 0) self.meshes.getPtr("cube_thing").? else self.meshes.getPtr("triangle").?;
-                var object = RenderObject{
+                var object = OldRenderObject{
                     .mesh = mesh,
                     .material = mesh_material,
                     .transform_matrix = Mat4.mul(matrix, scale_matrix),
@@ -638,7 +640,7 @@ pub const Engine = struct {
                 matrix = Mat4.createTranslation(.{ .x = x, .y = 0.8, .z = y });
                 scale_matrix = Mat4.createScale(.{ .x = 0.2, .y = 0.2, .z = 0.2 });
 
-                object = RenderObject{
+                object = OldRenderObject{
                     .mesh = mesh,
                     .material = mesh_material,
                     .transform_matrix = Mat4.mul(matrix, scale_matrix),
@@ -646,7 +648,7 @@ pub const Engine = struct {
                 try self.renderables.append(object);
 
                 matrix = Mat4.createTranslation(.{ .x = x, .y = -0.8, .z = y });
-                object = RenderObject{
+                object = OldRenderObject{
                     .mesh = mesh,
                     .material = mesh_material,
                     .transform_matrix = Mat4.mul(matrix, scale_matrix),
@@ -752,7 +754,7 @@ pub const Engine = struct {
         self.gc.allocator.unmapMemory(frame.object_buffer.allocation);
 
         var last_mesh: *Mesh = @intToPtr(*Mesh, @ptrToInt(&self));
-        var last_material: *Material = @intToPtr(*Material, @ptrToInt(&self));
+        var last_material: *OldMaterial = @intToPtr(*OldMaterial, @ptrToInt(&self));
 
         for (self.renderables.items) |*object, i| {
             // only bind the pipeline if it doesnt match with the already bound one
