@@ -2,13 +2,12 @@ const std = @import("std");
 
 // include all files with tests
 comptime {
-    _ = @import("deletion_queue.zig");
-
     _ = @import("utils/cvars.zig");
 
+    _ = @import("vk_util/deletion_queue.zig");
     _ = @import("vk_util/descriptors.zig");
-    _ = @import("vk_util/shaders.zig");
     _ = @import("vk_util/push_buffer.zig");
+    _ = @import("vk_util/shaders.zig");
 
     _ = @import("assetlib/asset_loader.zig");
     _ = @import("assetlib/texture_asset.zig");

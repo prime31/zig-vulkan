@@ -75,7 +75,6 @@ pub fn build(b: *Builder) void {
     exe_tests.setBuildMode(mode);
 
     linkExeDeps(exe_tests, b, target);
-    exe_tests.addPackage(vma_pkg);
     exe_tests.addPackage(.{
         .name = "vengine",
         .path = .{ .path = "src/v.zig" },
