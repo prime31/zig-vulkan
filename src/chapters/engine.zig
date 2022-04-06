@@ -15,6 +15,8 @@ const PipelineBuilder = @import("../pipeline_builder.zig").PipelineBuilder;
 const Mesh = @import("../mesh.zig").Mesh;
 const Vertex = @import("../mesh.zig").Vertex;
 const Allocator = std.mem.Allocator;
+
+const FlyCamera = @import("FlyCamera.zig");
 const Mat4 = @import("mat4.zig").Mat4;
 const Vec3 = @import("vec3.zig").Vec3;
 const Vec4 = @import("vec4.zig").Vec4;
@@ -40,87 +42,6 @@ pub const Texture = struct {
     pub fn deinit(self: Texture, gc: *const GraphicsContext) void {
         gc.destroy(self.view);
         self.image.deinit(gc.allocator);
-    }
-};
-
-const FlyCamera = struct {
-    window: glfw.Window,
-    speed: f32 = 3.5,
-    pos: Vec3 = Vec3.new(2, 0.5, 20),
-    front: Vec3 = Vec3.new(0, 0, -1),
-    up: Vec3 = Vec3.new(0, 1, 0),
-    pitch: f32 = 0,
-    yaw: f32 = -90,
-    last_mouse_x: f32 = 400,
-    last_mouse_y: f32 = 300,
-
-    pub fn init(window: glfw.Window) FlyCamera {
-        return .{
-            .window = window,
-        };
-    }
-
-    pub fn update(self: *FlyCamera, dt: f64) void {
-        var cursor_pos = self.window.getCursorPos() catch unreachable;
-        var x_offset = @floatCast(f32, cursor_pos.xpos) - self.last_mouse_x;
-        var y_offset = self.last_mouse_y - @floatCast(f32, cursor_pos.ypos); // reversed since y-coordinates range from bottom to top
-        self.last_mouse_x = @floatCast(f32, cursor_pos.xpos);
-        self.last_mouse_y = @floatCast(f32, cursor_pos.ypos);
-
-        var sensitivity: f32 = 0.2;
-        x_offset *= sensitivity * 1.5; // bit more sensitivity for x
-        y_offset *= sensitivity;
-
-        self.yaw += x_offset;
-        self.pitch += y_offset;
-        self.pitch = std.math.clamp(self.pitch, -90, 90);
-
-        var direction = Vec3.new(0, 0, 0);
-        direction.x = std.math.cos(toRadians(self.yaw)) * std.math.cos(toRadians(self.pitch));
-        direction.y = std.math.sin(toRadians(self.pitch));
-        direction.z = std.math.sin(toRadians(self.yaw)) * std.math.cos(toRadians(self.pitch));
-        self.front = direction.normalize();
-
-        // wasd
-        var spd = self.speed * @floatCast(f32, dt);
-
-        if (self.window.getKey(.w) == .press) {
-            self.pos = self.pos.add(self.front.scale(spd));
-        } else if (self.window.getKey(.s) == .press) {
-            self.pos = self.pos.sub(self.front.scale(spd));
-        }
-        if (self.window.getKey(.a) == .press) {
-            self.pos = self.pos.sub(Vec3.normalize(self.front.cross(self.up)).scale(spd));
-        } else if (self.window.getKey(.d) == .press) {
-            self.pos = self.pos.add(Vec3.normalize(self.front.cross(self.up)).scale(spd));
-        }
-        if (self.window.getKey(.e) == .press) {
-            self.pos.y += spd;
-        } else if (self.window.getKey(.q) == .press) {
-            self.pos.y -= spd;
-        }
-    }
-
-    pub fn getViewMatrix(self: FlyCamera) Mat4 {
-        return Mat4.createLookAt(self.pos, self.pos.add(self.front), self.up);
-    }
-
-    pub fn getProjMatrix(_: FlyCamera, extent: vk.Extent2D) Mat4 {
-        var proj = Mat4.createPerspective(toRadians(70.0), @intToFloat(f32, extent.width) / @intToFloat(f32, extent.height), 0.1, 5000);
-        proj.fields[1][1] *= -1;
-        return proj;
-    }
-
-    pub fn getReversedProjMatrix(_: FlyCamera, extent: vk.Extent2D) Mat4 {
-        var proj = Mat4.createPerspective(toRadians(70.0), @intToFloat(f32, extent.width) / @intToFloat(f32, extent.height), 5000, 0.1, 5000);
-        proj.fields[1][1] *= -1;
-        return proj;
-    }
-
-    pub fn getRotationMatrix(_: FlyCamera, extent: vk.Extent2D) Mat4 {
-        var proj = Mat4.createPerspective(toRadians(70.0), @intToFloat(f32, extent.width) / @intToFloat(f32, extent.height), 0.1, 5000);
-        proj.fields[1][1] *= -1;
-        return proj;
     }
 };
 
@@ -252,58 +173,6 @@ const RenderObject = struct {
     transform_matrix: Mat4,
 };
 
-const UploadContext = struct {
-    upload_fence: vk.Fence,
-    cmd_pool: vk.CommandPool,
-    cmd_buf: vk.CommandBuffer,
-
-    pub fn init(gc: *const GraphicsContext) !UploadContext {
-        const fence = try gc.vkd.createFence(gc.dev, &.{ .flags = .{} }, null);
-
-        const cmd_pool = try gc.vkd.createCommandPool(gc.dev, &.{
-            .flags = .{},
-            .queue_family_index = gc.graphics_queue.family,
-        }, null);
-
-        var cmd_buffer: vk.CommandBuffer = undefined;
-        try gc.vkd.allocateCommandBuffers(gc.dev, &.{
-            .command_pool = cmd_pool,
-            .level = .primary,
-            .command_buffer_count = 1,
-        }, @ptrCast([*]vk.CommandBuffer, &cmd_buffer));
-
-        return UploadContext{
-            .upload_fence = fence,
-            .cmd_pool = cmd_pool,
-            .cmd_buf = cmd_buffer,
-        };
-    }
-
-    pub fn deinit(self: UploadContext, gc: *const GraphicsContext) void {
-        gc.destroy(self.cmd_pool);
-        gc.destroy(self.upload_fence);
-    }
-
-    pub fn immediateSubmitBegin(self: UploadContext, gc: *const GraphicsContext) !void {
-        try gc.vkd.beginCommandBuffer(self.cmd_buf, &.{
-            .flags = .{ .one_time_submit_bit = true },
-            .p_inheritance_info = null,
-        });
-    }
-
-    pub fn immediateSubmitEnd(self: UploadContext, gc: *const GraphicsContext) !void {
-        try gc.vkd.endCommandBuffer(self.cmd_buf);
-
-        // submit command buffer to the queue and execute it
-        const submit = vkinit.submitInfo(&self.cmd_buf);
-        try gc.vkd.queueSubmit(gc.graphics_queue.handle, 1, @ptrCast([*]const vk.SubmitInfo, &submit), self.upload_fence);
-
-        _ = try gc.vkd.waitForFences(gc.dev, 1, @ptrCast([*]const vk.Fence, &self.upload_fence), vk.TRUE, std.math.maxInt(u64));
-        try gc.vkd.resetCommandPool(gc.dev, self.cmd_pool, .{});
-
-        try gc.vkd.resetFences(gc.dev, 1, @ptrCast([*]const vk.Fence, &self.upload_fence));
-    }
-};
 
 var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
 const gpa = general_purpose_allocator.allocator();
@@ -336,7 +205,6 @@ pub const Engine = struct {
     imgui_pool: vk.DescriptorPool = undefined,
     scene_params: GpuSceneData,
     scene_param_buffer: vma.AllocatedBuffer,
-    upload_context: UploadContext,
     blocky_sampler: vk.Sampler = undefined,
 
     pub fn init(app_name: [*:0]const u8) !Self {
@@ -386,7 +254,6 @@ pub const Engine = struct {
             .descriptor_pool = descriptors.pool,
             .scene_params = .{},
             .scene_param_buffer = descriptors.scene_param_buffer,
-            .upload_context = try UploadContext.init(gc),
         };
     }
 
@@ -396,8 +263,6 @@ pub const Engine = struct {
         igvk.shutdown();
         ig.igDestroyContext(null);
         self.gc.destroy(self.imgui_pool);
-
-        self.upload_context.deinit(self.gc);
 
         self.gc.destroy(self.blocky_sampler);
 
@@ -548,16 +413,16 @@ pub const Engine = struct {
         _ = igvk.ImGui_ImplVulkan_Init(&info, self.render_pass);
 
         // execute a gpu command to upload imgui font textures
-        try self.upload_context.immediateSubmitBegin(self.gc);
-        _ = igvk.ImGui_ImplVulkan_CreateFontsTexture(self.upload_context.cmd_buf);
-        try self.upload_context.immediateSubmitEnd(self.gc);
+        const cmd_buf = try self.gc.beginOneTimeCommandBuffer();
+        _ = igvk.ImGui_ImplVulkan_CreateFontsTexture(cmd_buf);
+        try self.gc.endOneTimeCommandBuffer();
 
         // clear font textures from cpu data
         igvk.ImGui_ImplVulkan_DestroyFontUploadObjects();
     }
 
     fn loadImages(self: *Self) !void {
-        const lost_empire_img = try loadTextureFromFile(self.gc, self.allocator, "src/chapters/lost_empire-RGBA.png", self.upload_context);
+        const lost_empire_img = try loadTextureFromFile(self.gc, self.allocator, "src/chapters/lost_empire-RGBA.png");
         const image_info = vkinit.imageViewCreateInfo(.r8g8b8a8_srgb, lost_empire_img.image, .{ .color_bit = true });
         const lost_empire_tex = Texture{
             .image = lost_empire_img,
@@ -577,11 +442,11 @@ pub const Engine = struct {
         var cube = try Mesh.initFromObj(gpa, "src/chapters/cube.obj");
         var lost_empire = try Mesh.initFromObj(gpa, "src/chapters/lost_empire.obj");
 
-        try uploadMesh(self.gc, &tri_mesh, self.upload_context);
-        try uploadMesh(self.gc, &monkey_mesh, self.upload_context);
-        try uploadMesh(self.gc, &cube_thing_mesh, self.upload_context);
-        try uploadMesh(self.gc, &cube, self.upload_context);
-        try uploadMesh(self.gc, &lost_empire, self.upload_context);
+        try uploadMesh(self.gc, &tri_mesh);
+        try uploadMesh(self.gc, &monkey_mesh);
+        try uploadMesh(self.gc, &cube_thing_mesh);
+        try uploadMesh(self.gc, &cube);
+        try uploadMesh(self.gc, &lost_empire);
 
         try self.meshes.put("triangle", tri_mesh);
         try self.meshes.put("monkey", monkey_mesh);
@@ -1118,7 +983,7 @@ fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorS
     };
 }
 
-fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh, upload_context: UploadContext) !void {
+fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
     // vert buffer
     {
         const buffer_size = mesh.vertices.items.len * @sizeOf(Vertex);
@@ -1135,14 +1000,14 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh, upload_context: UploadCon
         mesh.vert_buffer = try createBuffer(gc, buffer_size, .{ .vertex_buffer_bit = true, .transfer_dst_bit = true }, .gpu_only);
 
         // execute the copy command on the GPU
-        try upload_context.immediateSubmitBegin(gc);
+        const cmd_buf = try gc.beginOneTimeCommandBuffer();
         const copy_region = vk.BufferCopy{
             .src_offset = 0,
             .dst_offset = 0,
             .size = buffer_size,
         };
-        gc.vkd.cmdCopyBuffer(upload_context.cmd_buf, staging_buffer.buffer, mesh.vert_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &copy_region));
-        try upload_context.immediateSubmitEnd(gc);
+        gc.vkd.cmdCopyBuffer(cmd_buf, staging_buffer.buffer, mesh.vert_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &copy_region));
+        try gc.endOneTimeCommandBuffer();
     }
 
     // index buffer
@@ -1161,18 +1026,18 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh, upload_context: UploadCon
         mesh.index_buffer = try createBuffer(gc, buffer_size, .{ .index_buffer_bit = true, .transfer_dst_bit = true }, .gpu_only);
 
         // execute the copy command on the GPU
-        try upload_context.immediateSubmitBegin(gc);
+        const cmd_buf = try gc.beginOneTimeCommandBuffer();
         const copy_region = vk.BufferCopy{
             .src_offset = 0,
             .dst_offset = 0,
             .size = buffer_size,
         };
-        gc.vkd.cmdCopyBuffer(upload_context.cmd_buf, staging_buffer.buffer, mesh.index_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &copy_region));
-        try upload_context.immediateSubmitEnd(gc);
+        gc.vkd.cmdCopyBuffer(cmd_buf, staging_buffer.buffer, mesh.index_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &copy_region));
+        try gc.endOneTimeCommandBuffer();
     }
 }
 
-fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: []const u8, upload_context: UploadContext) !vma.AllocatedImage {
+fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: []const u8) !vma.AllocatedImage {
     const img = try stb.loadFromFile(allocator, file);
     defer img.deinit();
 
@@ -1194,8 +1059,8 @@ fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: [
     });
     const new_img = try gc.allocator.createImage(&dimg_info, &malloc_info, null);
 
-    try upload_context.immediateSubmitBegin(gc);
     {
+        const cmd_buf = try gc.beginOneTimeCommandBuffer();
         // barrier the image into the transfer-receive layout
         const range = vk.ImageSubresourceRange{
             .aspect_mask = .{ .color_bit = true },
@@ -1212,7 +1077,7 @@ fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: [
             .subresource_range = range,
         });
 
-        gc.vkd.cmdPipelineBarrier(upload_context.cmd_buf, .{ .top_of_pipe_bit = true }, .{ .transfer_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &img_barrier_to_transfer));
+        gc.vkd.cmdPipelineBarrier(cmd_buf, .{ .top_of_pipe_bit = true }, .{ .transfer_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &img_barrier_to_transfer));
 
         const copy_region = vk.BufferImageCopy{
             .buffer_offset = 0,
@@ -1227,7 +1092,7 @@ fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: [
             .image_offset = std.mem.zeroes(vk.Offset3D),
             .image_extent = img_extent,
         };
-        gc.vkd.cmdCopyBufferToImage(upload_context.cmd_buf, staging_buffer.buffer, new_img.image, .transfer_dst_optimal, 1, @ptrCast([*]const vk.BufferImageCopy, &copy_region));
+        gc.vkd.cmdCopyBufferToImage(cmd_buf, staging_buffer.buffer, new_img.image, .transfer_dst_optimal, 1, @ptrCast([*]const vk.BufferImageCopy, &copy_region));
 
         // barrier the image into the shader readable layout
         const img_barrier_to_readable = std.mem.zeroInit(vk.ImageMemoryBarrier, .{
@@ -1238,9 +1103,9 @@ fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: [
             .image = new_img.image,
             .subresource_range = range,
         });
-        gc.vkd.cmdPipelineBarrier(upload_context.cmd_buf, .{ .transfer_bit = true }, .{ .fragment_shader_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &img_barrier_to_readable));
+        gc.vkd.cmdPipelineBarrier(cmd_buf, .{ .transfer_bit = true }, .{ .fragment_shader_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &img_barrier_to_readable));
+        try gc.endOneTimeCommandBuffer();
     }
-    try upload_context.immediateSubmitEnd(gc);
 
     staging_buffer.deinit(gc.allocator);
     return new_img;

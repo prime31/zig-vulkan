@@ -1,6 +1,7 @@
 const std = @import("std");
 const vk = @import("vulkan");
 const vma = @import("vma");
+const vkinit = @import("vkinit.zig");
 const glfw = @import("glfw");
 const dispatch = @import("vulkan_dispatch.zig");
 
@@ -31,6 +32,7 @@ pub const GraphicsContext = struct {
     graphics_queue: Queue,
     present_queue: Queue,
     allocator: vma.Allocator,
+    upload_context: UploadContext,
     debug_message: if (enableValidationLayers) vk.DebugUtilsMessengerEXT else void,
 
     pub fn init(allocator: Allocator, app_name: [*:0]const u8, window: glfw.Window) !GraphicsContext {
@@ -108,6 +110,9 @@ pub const GraphicsContext = struct {
         });
         self.allocator = try vma.Allocator.init(&allocator_info);
 
+        // initialize the upload context for immediate transfers
+        self.upload_context = try UploadContext.init(&self);
+
         if (enableValidationLayers) {
             self.debug_message = try self.vki.createDebugUtilsMessengerEXT(self.instance, &.{
                 .flags = .{},
@@ -130,8 +135,9 @@ pub const GraphicsContext = struct {
         return self;
     }
 
-    pub fn deinit(self: GraphicsContext) void {
+    pub fn deinit(self: *GraphicsContext) void {
         self.allocator.deinit();
+        self.upload_context.deinit(self);
         self.vkd.destroyDevice(self.dev, null);
         self.vki.destroySurfaceKHR(self.instance, self.surface, null);
         if (enableValidationLayers) self.vki.destroyDebugUtilsMessengerEXT(self.instance, self.debug_message, null);
@@ -160,6 +166,14 @@ pub const GraphicsContext = struct {
         }, null);
     }
 
+    pub fn beginOneTimeCommandBuffer(self: *const GraphicsContext) !vk.CommandBuffer {
+        return try self.upload_context.beginOneTimeCommandBuffer(self);
+    }
+
+    pub fn endOneTimeCommandBuffer(self: *const GraphicsContext) !void {
+        try self.upload_context.endOneTimeCommandBuffer(self);
+    }
+
     pub fn destroy(self: GraphicsContext, resource: anytype) void {
         dispatch.destroy(self.vkd, self.dev, resource);
     }
@@ -174,6 +188,60 @@ pub const Queue = struct {
             .handle = vkd.getDeviceQueue(dev, family, 0),
             .family = family,
         };
+    }
+};
+
+const UploadContext = struct {
+    upload_fence: vk.Fence,
+    cmd_pool: vk.CommandPool,
+    cmd_buf: vk.CommandBuffer,
+
+    pub fn init(gc: *const GraphicsContext) !UploadContext {
+        const fence = try gc.vkd.createFence(gc.dev, &.{ .flags = .{} }, null);
+
+        const cmd_pool = try gc.vkd.createCommandPool(gc.dev, &.{
+            .flags = .{},
+            .queue_family_index = gc.graphics_queue.family,
+        }, null);
+
+        var cmd_buffer: vk.CommandBuffer = undefined;
+        try gc.vkd.allocateCommandBuffers(gc.dev, &.{
+            .command_pool = cmd_pool,
+            .level = .primary,
+            .command_buffer_count = 1,
+        }, @ptrCast([*]vk.CommandBuffer, &cmd_buffer));
+
+        return UploadContext{
+            .upload_fence = fence,
+            .cmd_pool = cmd_pool,
+            .cmd_buf = cmd_buffer,
+        };
+    }
+
+    pub fn deinit(self: UploadContext, gc: *const GraphicsContext) void {
+        gc.destroy(self.cmd_pool);
+        gc.destroy(self.upload_fence);
+    }
+
+    pub fn beginOneTimeCommandBuffer(self: UploadContext, gc: *const GraphicsContext) !vk.CommandBuffer {
+        try gc.vkd.beginCommandBuffer(self.cmd_buf, &.{
+            .flags = .{ .one_time_submit_bit = true },
+            .p_inheritance_info = null,
+        });
+        return self.cmd_buf;
+    }
+
+    pub fn endOneTimeCommandBuffer(self: UploadContext, gc: *const GraphicsContext) !void {
+        try gc.vkd.endCommandBuffer(self.cmd_buf);
+
+        // submit command buffer to the queue and execute it
+        const submit = vkinit.submitInfo(&self.cmd_buf);
+        try gc.vkd.queueSubmit(gc.graphics_queue.handle, 1, @ptrCast([*]const vk.SubmitInfo, &submit), self.upload_fence);
+
+        _ = try gc.vkd.waitForFences(gc.dev, 1, @ptrCast([*]const vk.Fence, &self.upload_fence), vk.TRUE, std.math.maxInt(u64));
+        try gc.vkd.resetCommandPool(gc.dev, self.cmd_pool, .{});
+
+        try gc.vkd.resetFences(gc.dev, 1, @ptrCast([*]const vk.Fence, &self.upload_fence));
     }
 };
 
