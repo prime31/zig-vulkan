@@ -49,7 +49,7 @@ pub fn AllocatedBuffer(comptime T: type) type {
 pub const AllocatedImage = struct {
     image: vk.Image,
     allocation: VmaAllocation,
-    default_view: vk.ImageView = undefined,
+    default_view: vk.ImageView = .null_handle,
     mip_levels: u8 = 1,
 
     pub fn deinit(self: AllocatedImage, allocator: Allocator) void {

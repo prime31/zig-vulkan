@@ -48,7 +48,9 @@ pub const Texture = struct {
     }
 
     pub fn deinit(self: Texture, gc: *const GraphicsContext) void {
-        gc.destroy(self.view);
+        // only destroy the view if it isnt the default view from the AllocatedImage
+        if (self.view != self.image.default_view)
+            gc.destroy(self.view);
         self.image.deinit(gc.allocator);
     }
 };
@@ -221,9 +223,10 @@ pub const Engine = struct {
     framebuffers: []vk.Framebuffer,
     frames: []FrameData,
     deletion_queue: vkutil.DeletionQueue,
-    render_pass: vk.RenderPass = undefined,
-    shadow_pass: vk.RenderPass = undefined,
-    copy_pass: vk.RenderPass = undefined,
+    old_render_pass: vk.RenderPass,
+    render_pass: vk.RenderPass,
+    shadow_pass: vk.RenderPass,
+    copy_pass: vk.RenderPass,
 
     // framebuffers
     render_format: vk.Format = .r32g32b32a32_sfloat,
@@ -238,9 +241,9 @@ pub const Engine = struct {
     shadow_sampler: vk.Sampler = undefined,
     shadow_image: vma.AllocatedImage = undefined,
     shadow_extent: vk.Extent2D = .{ .width = 1024 * 4, .height = 1024 * 4 },
-    depth_pyramid_width: i32 = 0,
-    depth_pyramid_height: i32 = 0,
-    depth_pyramid_levels: i32 = 0,
+    depth_pyramid_width: u32 = 0,
+    depth_pyramid_height: u32 = 0,
+    depth_pyramid_levels: u32 = 0,
     depth_format: vk.Format = .d32_sfloat,
 
     descriptor_allocator: vkutil.DescriptorAllocator = undefined,
@@ -305,17 +308,19 @@ pub const Engine = struct {
 
         // swapchain and RenderPasses
         var swapchain = try Swapchain.init(gc, gpa, extent, FRAME_OVERLAP);
-        const render_pass = try createForwardRenderPass(gc, .d32_sfloat, swapchain);
+        const old_render_pass = try createOldForwardRenderPass(gc, .d32_sfloat, swapchain);
+        const render_pass = try createForwardRenderPass(gc, .d32_sfloat);
         const copy_pass = try createCopyRenderPass(gc, swapchain);
         const shadow_pass = try createShadowRenderPass(gc, .d32_sfloat);
 
+        deletion_queue.append(old_render_pass);
         deletion_queue.append(render_pass);
         deletion_queue.append(copy_pass);
         deletion_queue.append(shadow_pass);
 
-        // depth image, framebuffers and 
+        // depth image and Swapchain framebuffers
         const depth_image = try createDepthImage(gc, .d32_sfloat, swapchain);
-        const framebuffers = try createFramebuffers(gc, gpa, render_pass, swapchain, depth_image.view);
+        const framebuffers = try createSwapchainFramebuffers(gc, gpa, old_render_pass, swapchain, depth_image.view);
 
         // descriptors
         const descriptors = createDescriptors(gc);
@@ -330,6 +335,7 @@ pub const Engine = struct {
             .window = window,
             .gc = gc,
             .swapchain = swapchain,
+            .old_render_pass = old_render_pass,
             .render_pass = render_pass,
             .copy_pass = copy_pass,
             .shadow_pass = shadow_pass,
@@ -343,6 +349,11 @@ pub const Engine = struct {
             .materials = std.StringHashMap(OldMaterial).init(gpa),
             .meshes = std.StringHashMap(Mesh).init(gpa),
             .textures = std.StringHashMap(Texture).init(gpa),
+
+            .upload_barriers = std.ArrayList(vk.BufferMemoryBarrier).init(gpa),
+            .cull_ready_barriers = std.ArrayList(vk.BufferMemoryBarrier).init(gpa),
+            .post_cull_barriers = std.ArrayList(vk.BufferMemoryBarrier).init(gpa),
+
             .camera = FlyCamera.init(window),
             .global_set_layout = descriptors.layout,
             .object_set_layout = descriptors.object_set_layout,
@@ -370,6 +381,10 @@ pub const Engine = struct {
 
         self.depth_image.deinit(self.gc);
 
+        for (self.depth_pyramid_mips[0..self.depth_pyramid_levels]) |mip|
+            self.gc.destroy(mip);
+        self.depth_pyramid.deinit(self.gc);
+
         self.render_scene.deinit();
         self.shader_cache.deinit();
 
@@ -380,6 +395,10 @@ pub const Engine = struct {
         var tex_iter = self.textures.valueIterator();
         while (tex_iter.next()) |tex| tex.deinit(self.gc);
         self.textures.deinit();
+
+        self.upload_barriers.deinit();
+        self.cull_ready_barriers.deinit();
+        self.post_cull_barriers.deinit();
 
         for (self.frames) |*frame| frame.deinit(self.gc);
         self.allocator.free(self.frames);
@@ -405,6 +424,9 @@ pub const Engine = struct {
     }
 
     pub fn loadContent(self: *Self) !void {
+        try self.createFramebuffers();
+        try self.createDepthSetup();
+
         try self.initImgui();
         try self.loadImages();
         try self.loadMeshes();
@@ -448,12 +470,173 @@ pub const Engine = struct {
 
                 self.depth_image.deinit(self.gc);
                 self.depth_image = try createDepthImage(self.gc, self.depth_format, self.swapchain);
-                self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain, self.depth_image.view);
+                self.framebuffers = try createSwapchainFramebuffers(self.gc, self.allocator, self.old_render_pass, self.swapchain, self.depth_image.view);
             }
 
             self.frame_num += 1;
             try glfw.pollEvents();
         }
+    }
+
+    fn createFramebuffers(self: *Self) !void {
+        // render image size will match the window
+        {
+            const render_extent = vk.Extent3D{
+                .width = self.swapchain.extent.width,
+                .height = self.swapchain.extent.height,
+                .depth = 1,
+            };
+            const ri_info = vkinit.imageCreateInfo(.r32g32b32a32_sfloat, render_extent, .{ .color_attachment_bit = true, .transfer_src_bit = true, .sampled_bit = true });
+            const alloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
+                .flags = .{},
+                .usage = .gpu_only,
+                .requiredFlags = .{ .device_local_bit = true },
+            });
+            self.raw_render_image = try self.gc.allocator.createImage(&ri_info, &alloc_info, null);
+            
+            const iview_info = vkinit.imageViewCreateInfo(.r32g32b32a32_sfloat, self.raw_render_image.image, .{ .color_bit = true });
+            self.raw_render_image.default_view = try self.gc.vkd.createImageView(self.gc.dev, &iview_info, null);
+            self.deletion_queue.append(self.raw_render_image);
+        }
+
+        // TODO: move depth image creation here
+        {}
+
+        // shadow image
+        {
+            const extent = vk.Extent3D{
+                .width = self.shadow_extent.width,
+                .height = self.shadow_extent.height,
+                .depth = 1,
+            };
+            const img_info = vkinit.imageCreateInfo(.d32_sfloat, extent, .{ .sampled_bit = true, .depth_stencil_attachment_bit = true });
+            const alloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
+                .flags = .{},
+                .usage = .gpu_only,
+                .requiredFlags = .{ .device_local_bit = true },
+            });
+            self.shadow_image = try self.gc.allocator.createImage(&img_info, &alloc_info, null);
+
+            const iview_info = vkinit.imageViewCreateInfo(.d32_sfloat, self.shadow_image.image, .{ .depth_bit = true });
+            self.shadow_image.default_view = try self.gc.vkd.createImageView(self.gc.dev, &iview_info, null);
+            self.deletion_queue.append(self.shadow_image);
+        }
+
+        var attachments = [2]vk.ImageView{ self.raw_render_image.default_view, self.depth_image.view };
+        self.forward_framebuffer = try self.gc.vkd.createFramebuffer(self.gc.dev, &.{
+            .flags = .{},
+            .render_pass = self.render_pass,
+            .attachment_count = 2,
+            .p_attachments = &attachments,
+            .width = self.swapchain.extent.width,
+            .height = self.swapchain.extent.height,
+            .layers = 1,
+        }, null);
+
+        self.shadow_framebuffer = try self.gc.vkd.createFramebuffer(self.gc.dev, &.{
+            .flags = .{},
+            .render_pass = self.shadow_pass,
+            .attachment_count = 1,
+            .p_attachments = @ptrCast([*]const vk.ImageView, &self.shadow_image.default_view),
+            .width = self.shadow_extent.width,
+            .height = self.shadow_extent.height,
+            .layers = 1,
+        }, null);
+
+        self.deletion_queue.append(self.forward_framebuffer);
+        self.deletion_queue.append(self.shadow_framebuffer);
+    }
+
+    fn previousPow2(v: u32) u32 {
+        var r: u32 = 1;
+        while (r * 2 < v)
+            r *= 2;
+        return r;
+    }
+
+    fn getImageMipLevels(width: u32, height: u32) u32 {
+        var w = width;
+        var h = height;
+
+        var result: u32 = 1;
+        while (w > 1 or h > 1) {
+            result += 1;
+            w /= 2;
+            h /= 2;
+        }
+        return result;
+    }
+
+    fn createDepthSetup(self: *Self) !void {
+        // Note: previousPow2 makes sure all reductions are at most by 2x2 which makes sure they are conservative
+        self.depth_pyramid_width = previousPow2(self.swapchain.extent.width);
+        self.depth_pyramid_height = previousPow2(self.swapchain.extent.height);
+        self.depth_pyramid_levels = getImageMipLevels(self.depth_pyramid_width, self.depth_pyramid_height);
+
+        const extent = vk.Extent3D{
+            .width = self.depth_pyramid_width,
+            .height = self.depth_pyramid_height,
+            .depth = 1,
+        };
+        var img_info = vkinit.imageCreateInfo(.r32_sfloat, extent, .{ .sampled_bit = true, .storage_bit = true, .transfer_src_bit = true });
+        img_info.mip_levels = self.depth_pyramid_levels;
+
+        const alloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
+            .flags = .{},
+            .usage = .gpu_only,
+            .requiredFlags = .{ .device_local_bit = true },
+        });
+        var img = try self.gc.allocator.createImage(&img_info, &alloc_info, null);
+
+        var iview_info = vkinit.imageViewCreateInfo(.r32_sfloat, img.image, .{ .color_bit = true });
+        iview_info.subresource_range.level_count = self.depth_pyramid_levels;
+
+        img.default_view = try self.gc.vkd.createImageView(self.gc.dev, &iview_info, null);
+        self.depth_pyramid = Texture{ .image = img, .view = img.default_view };
+
+        self.deletion_queue.append(img.default_view);
+
+
+        var i: usize = 0;
+        while (i < self.depth_pyramid_levels) : (i += 1) {
+            var level_info = vkinit.imageViewCreateInfo(.r32_sfloat, self.depth_pyramid.image.image, .{ .color_bit = true });
+            level_info.subresource_range.level_count = 1;
+            level_info.subresource_range.base_mip_level = 1;
+
+            self.depth_pyramid_mips[i] = try self.gc.vkd.createImageView(self.gc.dev, &level_info, null);
+        }
+
+        const reduction_mode: vk.SamplerReductionMode = .min;
+        const create_info = std.mem.zeroInit(vk.SamplerCreateInfo, .{
+            .mag_filter = .linear,
+            .min_filter = .linear,
+            .mipmap_mode = .nearest,
+            .address_mode_u = .clamp_to_edge,
+            .address_mode_v = .clamp_to_edge,
+            .address_mode_w = .clamp_to_edge,
+            .min_lod = 0,
+            .max_lod = 16,
+        });
+
+        if (reduction_mode != .min) {
+            const create_info_reduction = vk.SamplerReductionModeCreateInfoEXT{ .reduction_mode = vk.SamplerReductionMode.weighted_average };
+            create_info.p_next = &create_info_reduction;
+        }
+
+        self.depth_sampler = try self.gc.vkd.createSampler(self.gc.dev, &create_info, null);
+        self.deletion_queue.append(self.depth_sampler);
+
+        var sampler_info = vkinit.samplerCreateInfo(.linear, .repeat);
+        sampler_info.mipmap_mode = .linear;
+        self.smooth_sampler = try self.gc.vkd.createSampler(self.gc.dev, &sampler_info, null);
+        self.deletion_queue.append(self.smooth_sampler);
+
+        var shadow_sampler_info = vkinit.samplerCreateInfo(.linear, .clamp_to_border);
+        shadow_sampler_info.border_color = .float_opaque_white;
+        shadow_sampler_info.compare_enable = vk.TRUE;
+        shadow_sampler_info.compare_op = .less;
+        self.shadow_sampler = try self.gc.vkd.createSampler(self.gc.dev, &shadow_sampler_info, null);
+        self.deletion_queue.append(self.shadow_sampler);
     }
 
     fn initImgui(self: *Self) !void {
@@ -509,7 +692,7 @@ pub const Engine = struct {
             .allocator = null,
             .checkVkResultFn = null,
         });
-        _ = igvk.ImGui_ImplVulkan_Init(&info, self.render_pass);
+        _ = igvk.ImGui_ImplVulkan_Init(&info, self.old_render_pass);
 
         // execute a gpu command to upload imgui font textures
         const cmd_buf = try self.gc.beginOneTimeCommandBuffer();
@@ -526,6 +709,7 @@ pub const Engine = struct {
             .image = lost_empire_img,
             .view = lost_empire_img.default_view,
         };
+        self.deletion_queue.append(lost_empire_img.default_view);
         try self.textures.put("empire_diffuse", lost_empire_tex);
     }
 
@@ -563,7 +747,7 @@ pub const Engine = struct {
         pip_layout_info.p_set_layouts = &set_layouts;
 
         const pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
-        const pipeline = try createPipeline(self.gc, self.allocator, self.render_pass, pipeline_layout, resources.default_lit_frag);
+        const pipeline = try createPipeline(self.gc, self.allocator, self.old_render_pass, pipeline_layout, resources.default_lit_frag);
         const material = OldMaterial{
             .pipeline = pipeline,
             .pipeline_layout = pipeline_layout,
@@ -571,7 +755,7 @@ pub const Engine = struct {
         try self.materials.put("defaultmesh", material);
 
         const pipeline_layout2 = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
-        const pipeline2 = try createPipeline(self.gc, self.allocator, self.render_pass, pipeline_layout2, resources.default_lit_frag);
+        const pipeline2 = try createPipeline(self.gc, self.allocator, self.old_render_pass, pipeline_layout2, resources.default_lit_frag);
         const material2 = OldMaterial{
             .pipeline = pipeline2,
             .pipeline_layout = pipeline_layout2,
@@ -586,7 +770,7 @@ pub const Engine = struct {
         textured_pip_layout_info.p_set_layouts = &textured_set_layouts;
 
         const textured_pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &textured_pip_layout_info, null);
-        const textured_pipeline = try createPipeline(self.gc, self.allocator, self.render_pass, textured_pipeline_layout, resources.textured_lit_frag);
+        const textured_pipeline = try createPipeline(self.gc, self.allocator, self.old_render_pass, textured_pipeline_layout, resources.textured_lit_frag);
         const textured_material = OldMaterial{
             .pipeline = textured_pipeline,
             .pipeline_layout = textured_pipeline_layout,
@@ -715,7 +899,7 @@ pub const Engine = struct {
         self.gc.vkd.cmdSetScissor(cmdbuf, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
 
         self.gc.vkd.cmdBeginRenderPass(cmdbuf, &.{
-            .render_pass = self.render_pass,
+            .render_pass = self.old_render_pass,
             .framebuffer = framebuffer,
             .render_area = render_area,
             .clear_value_count = clear_values.len,
@@ -809,10 +993,98 @@ pub const Engine = struct {
     }
 };
 
-fn createForwardRenderPass(gc: *const GraphicsContext, depth_format: vk.Format, swapchain: Swapchain) !vk.RenderPass {
+fn createOldForwardRenderPass(gc: *const GraphicsContext, depth_format: vk.Format, swapchain: Swapchain) !vk.RenderPass {
     const color_attachment = vk.AttachmentDescription{
         .flags = .{},
-        .format = swapchain.surface_format.format, // TODO: use render_format (.r32g32b32a32_sfloat)
+        .format = swapchain.surface_format.format,
+        .samples = .{ .@"1_bit" = true },
+        .load_op = .clear,
+        .store_op = .store,
+        .stencil_load_op = .dont_care,
+        .stencil_store_op = .dont_care,
+        .initial_layout = .@"undefined",
+        .final_layout = .present_src_khr,
+    };
+
+    const color_attachment_ref = vk.AttachmentReference{
+        .attachment = 0,
+        .layout = .color_attachment_optimal,
+    };
+
+    const depth_attachment = vk.AttachmentDescription{
+        .flags = .{},
+        .format = depth_format,
+        .samples = .{ .@"1_bit" = true },
+        .load_op = .clear,
+        .store_op = .store,
+        .stencil_load_op = .clear,
+        .stencil_store_op = .dont_care,
+        .initial_layout = .@"undefined",
+        .final_layout = .depth_stencil_attachment_optimal,
+    };
+
+    const depth_attachment_ref = vk.AttachmentReference{
+        .attachment = 1,
+        .layout = .depth_stencil_attachment_optimal,
+    };
+
+    const subpass = vk.SubpassDescription{
+        .flags = .{},
+        .pipeline_bind_point = .graphics,
+        .input_attachment_count = 0,
+        .p_input_attachments = undefined,
+        .color_attachment_count = 1,
+        .p_color_attachments = @ptrCast([*]const vk.AttachmentReference, &color_attachment_ref),
+        .p_resolve_attachments = null,
+        .p_depth_stencil_attachment = &depth_attachment_ref,
+        .preserve_attachment_count = 0,
+        .p_preserve_attachments = undefined,
+    };
+
+    const dependency = vk.SubpassDependency{
+        .src_subpass = vk.SUBPASS_EXTERNAL,
+        .dst_subpass = 0,
+        .src_stage_mask = .{ .color_attachment_output_bit = true },
+        .src_access_mask = .{},
+        .dst_stage_mask = .{ .color_attachment_output_bit = true },
+        .dst_access_mask = .{ .color_attachment_write_bit = true },
+        .dependency_flags = .{},
+    };
+
+    const depth_dependency = vk.SubpassDependency{
+        .src_subpass = vk.SUBPASS_EXTERNAL,
+        .dst_subpass = 0,
+        .src_stage_mask = .{
+            .early_fragment_tests_bit = true,
+            .late_fragment_tests_bit = true,
+        },
+        .src_access_mask = .{},
+        .dst_stage_mask = .{
+            .early_fragment_tests_bit = true,
+            .late_fragment_tests_bit = true,
+        },
+        .dst_access_mask = .{ .depth_stencil_attachment_write_bit = true },
+        .dependency_flags = .{},
+    };
+
+    var attachments: [2]vk.AttachmentDescription = [_]vk.AttachmentDescription{ color_attachment, depth_attachment };
+    var dependencies: [2]vk.SubpassDependency = [_]vk.SubpassDependency{ dependency, depth_dependency };
+
+    return try gc.vkd.createRenderPass(gc.dev, &.{
+        .flags = .{},
+        .attachment_count = attachments.len,
+        .p_attachments = &attachments,
+        .subpass_count = 1,
+        .p_subpasses = @ptrCast([*]const vk.SubpassDescription, &subpass),
+        .dependency_count = dependencies.len,
+        .p_dependencies = &dependencies,
+    }, null);
+}
+
+fn createForwardRenderPass(gc: *const GraphicsContext, depth_format: vk.Format) !vk.RenderPass {
+    const color_attachment = vk.AttachmentDescription{
+        .flags = .{},
+        .format = .r32g32b32a32_sfloat,
         .samples = .{ .@"1_bit" = true },
         .load_op = .clear,
         .store_op = .store,
@@ -950,7 +1222,7 @@ fn createCopyRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Re
 }
 
 fn createShadowRenderPass(gc: *const GraphicsContext, depth_format: vk.Format) !vk.RenderPass {
-     const depth_attachment = vk.AttachmentDescription{
+    const depth_attachment = vk.AttachmentDescription{
         .flags = .{},
         .format = depth_format,
         .samples = .{ .@"1_bit" = true },
@@ -1012,7 +1284,7 @@ fn createDepthImage(gc: *const GraphicsContext, depth_format: vk.Format, swapcha
     return depth_image;
 }
 
-fn createFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, swapchain: Swapchain, depth_image_view: vk.ImageView) ![]vk.Framebuffer {
+fn createSwapchainFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, swapchain: Swapchain, depth_image_view: vk.ImageView) ![]vk.Framebuffer {
     const framebuffers = try allocator.alloc(vk.Framebuffer, swapchain.swap_images.len);
     for (framebuffers) |*fb, i| {
         var attachments = [2]vk.ImageView{ swapchain.swap_images[i].view, depth_image_view };

@@ -15,6 +15,8 @@ const VkObject = union(enum) {
     pipeline: vk.Pipeline,
     pipeline_layout: vk.PipelineLayout,
     render_pass: vk.RenderPass,
+    image_view: vk.ImageView,
+    sampler: vk.Sampler,
     allocated_buffer: vma.AllocatedBufferUntyped,
     allocated_image: vma.AllocatedImage,
 };
@@ -43,6 +45,8 @@ pub const DeletionQueue = struct {
             vk.Pipeline => .{ .pipeline = obj },
             vk.PipelineLayout => .{ .pipeline_layout = obj },
             vk.RenderPass => .{ .render_pass = obj },
+            vk.ImageView => .{ .image_view = obj },
+            vk.Sampler => .{ .sampler = obj },
             vma.AllocatedBufferUntyped => .{ .allocated_buffer = obj },
             vma.AllocatedImage => .{ .allocated_image = obj },
             else => @panic("Attempted to delete an object that isnt supported by the DeletionQueue: " ++ @typeName(@TypeOf(obj))),
@@ -50,7 +54,7 @@ pub const DeletionQueue = struct {
         self.queue.append(vk_obj) catch unreachable;
     }
 
-    /// special handling for cmd_buffer since it requires
+    /// special handling for cmd_buffer since it requires its CommandPool
     pub fn appendCommandBuffer(self: *DeletionQueue, cmd_buffer: vk.CommandBuffer, pool: vk.CommandPool) void {
         self.queue.append(.{ .cmd_buffer = .{
             .buffer = cmd_buffer,
@@ -68,8 +72,13 @@ pub const DeletionQueue = struct {
                 .pipeline => |pip| self.gc.destroy(pip),
                 .pipeline_layout => |pip_layout| self.gc.destroy(pip_layout),
                 .render_pass => |rp| self.gc.destroy(rp),
+                .image_view => |iv| self.gc.destroy(iv),
+                .sampler => |s| self.gc.destroy(s),
                 .allocated_buffer => |buf| buf.deinit(self.gc.allocator),
-                .allocated_image => |img| img.deinit(self.gc.allocator),
+                .allocated_image => |img| {
+                    self.gc.destroy(img.default_view);
+                    img.deinit(self.gc.allocator);
+                }
             }
         }
 
