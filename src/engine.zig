@@ -19,7 +19,7 @@ const Vertex = @import("mesh.zig").Vertex;
 const Allocator = std.mem.Allocator;
 
 const MeshObject = @import("render_scene.zig").MeshObject;
-const GpuObjectData = @import("render_scene.zig").GpuObjectData;
+const GpuObjectData = vkutil.GpuObjectData;
 const FlyCamera = @import("chapters/FlyCamera.zig");
 
 const Mat4 = @import("chapters/mat4.zig").Mat4;
@@ -323,7 +323,7 @@ pub const Engine = struct {
             .framebuffers = framebuffers,
             .frames = frames,
             .depth_image = depth_image,
-            .render_scene = try RenderScene.init(gpa),
+            .render_scene = RenderScene.init(gc),
             .shader_cache = vkutil.ShaderCache.init(gc),
             .renderables = std.ArrayList(OldRenderObject).init(gpa),
             .materials = std.StringHashMap(OldMaterial).init(gpa),

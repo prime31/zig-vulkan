@@ -25,15 +25,18 @@ pub const AllocatedBufferUntyped = struct {
 pub fn AllocatedBuffer(comptime T: type) type {
     _ = T;
     return struct {
-        buffer: vk.Buffer,
-        allocation: VmaAllocation,
+        const Self = @This();
+
+        buffer: vk.Buffer = .null_handle,
+        allocation: VmaAllocation = undefined,
         size: vk.DeviceSize = 0,
 
-        pub fn deinit(self: AllocatedBufferUntyped, allocator: Allocator) void {
+        pub fn deinit(self: Self, allocator: Allocator) void {
+            if (self.buffer == .null_handle) return;
             vmaDestroyBuffer(allocator.allocator, self.buffer, self.allocation);
         }
 
-        pub fn getInfo(self: AllocatedBufferUntyped, offset: vk.DeviceSize) vk.DescriptorBufferInfo {
+        pub fn getInfo(self: Self, offset: vk.DeviceSize) vk.DescriptorBufferInfo {
             return .{
                 .buffer = self.buffer,
                 .offset = offset,

@@ -22,6 +22,7 @@ const Vec4 = @import("chapters/vec4.zig").Vec4;
 pub const RenderScene = struct {
     const Self = @This();
 
+    gc: *const GraphicsContext,
     renderables: ArrayList(RenderObject),
     meshes: ArrayList(DrawMesh),
     materials: ArrayList(Material),
@@ -31,28 +32,26 @@ pub const RenderScene = struct {
     shadow_pass: MeshPass,
     material_convert: AutoHashMap(*Material, Handle(Material)),
     mesh_convert: AutoHashMap(*Mesh, Handle(DrawMesh)),
-    merged_vertex_buffer: vma.AllocatedBuffer(Vertex),
-    merged_index_buffer: vma.AllocatedBuffer(u32),
-    object_data_buffer: vma.AllocatedBuffer(vkutil.GpuObjectData),
+    merged_vert_buffer: vma.AllocatedBuffer(Vertex) = .{},
+    merged_index_buffer: vma.AllocatedBuffer(u32) = .{},
+    object_data_buffer: vma.AllocatedBuffer(vkutil.GpuObjectData) = .{},
 
-    pub fn init(gpa: std.mem.Allocator) Self {
+    pub fn init(gc: *const GraphicsContext) Self {
         return .{
-            .renderables = ArrayList(RenderObject).init(gpa),
-            .meshes = ArrayList(DrawMesh).init(gpa),
-            .materials = ArrayList(Material).init(gpa),
-            .dirty_objects = ArrayList(RenderObject).init(gpa),
-            .forward_pass = MeshPass.init(gpa, .forward),
-            .transparent_forward_pass = MeshPass.init(gpa, .transparent),
-            .shadow_pass = MeshPass.init(gpa, .directional_shadow),
-            .material_convert = AutoHashMap(*Material, Handle(Material)).init(gpa),
-            .mesh_convert = AutoHashMap(*Mesh, Handle(DrawMesh)).init(gpa),
-            .merged_vertex_buffer = vma.AllocatedBuffer(Vertex).init(gpa),
-            .merged_index_buffer = vma.AllocatedBuffer(u32).init(gpa),
-            .object_data_buffer = vma.AllocatedBuffer(vkutil.GpuObjectData).init(gpa),
+            .gc = gc,
+            .renderables = ArrayList(RenderObject).init(gc.gpa),
+            .meshes = ArrayList(DrawMesh).init(gc.gpa),
+            .materials = ArrayList(Material).init(gc.gpa),
+            .dirty_objects = ArrayList(RenderObject).init(gc.gpa),
+            .forward_pass = MeshPass.init(gc.gpa, .forward),
+            .transparent_forward_pass = MeshPass.init(gc.gpa, .transparency),
+            .shadow_pass = MeshPass.init(gc.gpa, .directional_shadow),
+            .material_convert = AutoHashMap(*Material, Handle(Material)).init(gc.gpa),
+            .mesh_convert = AutoHashMap(*Mesh, Handle(DrawMesh)).init(gc.gpa),
         };
     }
 
-    pub fn deinit(self: Self) void {
+    pub fn deinit(self: *Self) void {
         self.renderables.deinit();
         self.meshes.deinit();
         self.materials.deinit();
@@ -62,9 +61,10 @@ pub const RenderScene = struct {
         self.shadow_pass.deinit();
         self.material_convert.deinit();
         self.mesh_convert.deinit();
-        self.merged_vertex_buffer.deinit();
-        self.merged_index_buffer.deinit();
-        self.object_data_buffer.deinit();
+
+        self.merged_vert_buffer.deinit(self.gc.allocator);
+        self.merged_index_buffer.deinit(self.gc.allocator);
+        self.object_data_buffer.deinit(self.gc.allocator);
     }
 
     pub fn registerObject(self: Self, object: MeshObject) !Handle(RenderObject) {
@@ -190,11 +190,233 @@ pub const RenderScene = struct {
         self.refreshPass(&self.shadow_pass);
     }
 
-    pub fn mergeMeshes(self: Self, engine: anytype) void {}
+    pub fn mergeMeshes(self: Self) !void {
+        var total_verts: usize = 0;
+        var total_indices: usize = 0;
 
-    pub fn refreshPass(self: Self, pass: *MeshPass) void {}
+        for (self.meshes.items) |*m| {
+            m.first_index = @intCast(u32, total_indices);
+            m.first_vert = @intCast(u32, total_verts);
+        }
 
-    pub fn buildIndirectBatches(self: Self, pass: *MeshPass, out_batches: ArrayList(IndirectBatch), in_batches: ArrayList(RenderBatch)) void {}
+        self.merged_vert_buffer = try self.gc.allocator.createBuffer(Vertex, total_verts * @sizeOf(Vertex), .{ .transfer_dst_bit = true, .vertex_buffer_bit = true }, .gpu_only, .{});
+        self.merged_index_buffer = try self.gc.allocator.createBuffer(u32, total_indices * @sizeOf(u32), .{ .transfer_dst_bit = true, .index_buffer_bit = true }, .gpu_only, .{});
+
+        const cmd_buf = try self.gc.beginOneTimeCommandBuffer();
+        for (self.meshes.items) |m| {
+            const vertex_copy = vk.BufferCopy{
+                .dst_offset = m.first_vert * @sizeOf(Vertex),
+                .size = m.vert_count * @sizeOf(Vertex),
+                .src_offset = 0,
+            };
+            self.gc.vkd.cmdCopyBuffer(cmd_buf, m.original.vert_buffer.buffer, self.merged_vert_buffer, 1, @ptrCast([*]const vk.BufferCopy, &vertex_copy));
+
+            const index_copy = vk.BufferCopy{
+                .dst_offset = m.first_index * @sizeOf(u32),
+                .size = m.total_indices * @sizeOf(u32),
+                .src_offset = 0,
+            };
+            self.gc.vkd.cmdCopyBuffer(cmd_buf, m.original.index_buffer.buffer, self.merged_index_buffer, 1, @ptrCast([*]const vk.BufferCopy, &index_copy));
+        }
+        try self.gc.endOneTimeCommandBuffer();
+    }
+
+    pub fn refreshPass(self: Self, pass: *MeshPass) void {
+        pass.needs_indirect_flush = true;
+        pass.needs_instance_flush = true;
+
+        var new_objects = std.ArrayList(u32).init(self.gc.gpa);
+        if (pass.objects_to_delete.items.len > 0) {
+            // create the render batches so that then we can do the deletion on the flat-array directly
+            var deletion_batches = std.ArrayList(RenderBatch).init(self.gc.gpa);
+
+            for (pass.objects_to_delete) |pass_obj, i| {
+                try pass.reusable_objects.append(pass_obj);
+
+                var obj = pass.objects.items[pass_obj.handle];
+                var new_command = RenderBatch{
+                    .object = obj,
+                    .sort_key = 0,
+                };
+
+                const pip_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.shader_pass.pipeline));
+                const set_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.material_set));
+                const mathash = pip_hash ^ set_hash;
+                const meshmat = @intCast(u64, mathash) ^ @intCast(u64, obj.mesh_id.handle);
+
+                // pack mesh id and material into 64 bits
+                new_command.sort_key = @intCast(u64, meshmat) | (@intCast(u64, obj.custom_key) << 32);
+
+                pass.objects.items[i.handle].custom_key = 0;
+                pass.objects.items[i.handle].material.shader_pass = null;
+                pass.objects.items[i.handle].mesh_id.handle = -1;
+                pass.objects.items[i.handle].original.handle = -1;
+
+                try deletion_batches.append(new_command);
+            }
+
+            pass.objects_to_delete.clearRetainingCapacity();
+            std.sort.sort(RenderBatch, deletion_batches.items, {}, sortRenderBatches);
+
+            {
+                // removal. get all the elements from flat_batches that are not in deletion_batches
+                var new_batches = ArrayList(RenderBatch).initCapacity(self.gc.gpa, pass.flat_batches.items.len);
+
+                for (pass.flat_batches.items) |fb_batch| {
+                    if (std.mem.indexOfScalar(RenderBatch, deletion_batches, fb_batch) == null)
+                        try new_batches.append(fb_batch);
+                }
+                pass.flat_batches.deinit();
+                pass.flat_batches = new_batches;
+            }
+
+            {
+                // fill object list
+                try new_objects.ensureUnusedCapacity(pass.unbatched_objects.items.len);
+                for (pass.unbatched_objects.items) |o| {
+                    const mt = self.getMaterial(self.getObject(o).material);
+                    var new_obj = PassObject{
+                        .material = .{
+                            .material_set = mt.pass_sets[pass.pass_type],
+                            .shader_pass = mt.original.pass_shaders[pass.pass_type],
+                        },
+                        .mesh_id = self.getObject(o).mesh_id,
+                        .original = o,
+                        .custom_key = self.getObject(o).custom_sort_key,
+                    };
+
+                    // reuse handle
+                    var handle: u32 = 0;
+                    if (pass.reusable_objects.items.len > 0) {
+                        handle = pass.reusable_objects.items[pass.reusable_objects.items.len - 1].handle;
+                        _ = pass.reusable_objects.pop();
+                        pass.objects.items[handle] = new_obj;
+                    } else {
+                        try pass.objects.append(new_obj);
+                    }
+
+                    try new_objects.append(handle);
+                    self.getObject(o).pass_indices[pass.pass_type] = @intCast(i32, handle);
+                }
+            }
+
+            var new_batches = std.ArrayList(RenderBatch).init(self.gc.gpa);
+            {
+                // fill draw list
+                for (new_objects) |i| {
+                    const obj = pass.objects[i];
+                    const pip_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.shader_pass.pipeline));
+                    const set_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.material_set));
+                    const mathash = @intCast(u32, pip_hash ^ set_hash);
+                    const meshmat = @intCast(u64, mathash) ^ @intCast(u64, obj.mesh_id.handle);
+
+                    // pack mesh id and material into 64 bits
+                    try new_batches.append(.{
+                        .object = pass.objects[i],
+                        .sort_key = @intCast(u64, meshmat) | (@intCast(u64, obj.custom_key) << 32),
+                    });
+                }
+            }
+
+            {
+                // draw sort
+                std.sort.sort(RenderBatch, new_batches.items, {}, sortRenderBatches);
+            }
+
+            {
+                // draw merged batches. merge the new batches into the main batch array
+                if (new_batches.items.len > 0) {
+                    try pass.flat_batches.ensureUnusedCapacity(pass.flat_batches.items.len + new_batches.items.len);
+
+                    for (new_batches.items) |b|
+                        pass.flat_batches.appendAssumeCapacity(b);
+
+                    std.sort.sort(RenderBatch, pass.flat_batches.items, {}, sortRenderBatches);
+                }
+            }
+
+            {
+                // draw merge
+                pass.batches.clearRetainingCapacity();
+                try buildIndirectBatches(pass, pass.batches, pass.flat_batches);
+
+                // flatten batches into multibatch
+                pass.multibatches.clearRetainingCapacity();
+                var new_batch = Multibatch{
+                    .first = 0,
+                    .count = 1,
+                };
+
+                for (pass.batches.items[1..]) |*batch, i| {
+                    var join_batch = *pass.batches.items[new_batch.first];
+
+                    const compatible_batch = self.getMesh(join_batch.mesh_id).is_merged;
+                    var same_mat = blk: {
+                        if (compatible_batch and join_batch.material.material_set == batch.material.material_set and
+                            join_batch.material.shader_pass == batch.material.shader_pass) {
+                            break :blk true;
+                        }
+                        break :blk false;
+                    };
+
+                    if (!same_mat or !compatible_batch) {
+                        try pass.multibatches.append(new_batch);
+                        new_batch.count = 1;
+                        new_batch.first = i;
+                    } else {
+                        new_batch.count += 1;
+                    }
+                }
+                try pass.multibatches.append(new_batch);
+
+                // no multi batch
+                for (pass.batches.items) |_, i|
+                    try pass.multibatches.append(.{ .count = 1, .first = i });
+            }
+        }
+    }
+
+    fn sortRenderBatches(_: void, a: RenderBatch, b: RenderBatch) bool {
+        if (a.sort_key < b.sort_key) return true;
+        if (a.sort_key == b.sort_key) return a.object.handle < b.object.handle;
+        return false;
+    }
+
+    pub fn buildIndirectBatches(pass: *MeshPass, out_batches: ArrayList(IndirectBatch), in_objects: ArrayList(RenderBatch)) !void {
+        if (in_objects.items.len == 0) return;
+
+        const new_batch = IndirectBatch{
+            .mesh_id = pass.get(in_objects[0].object).mesh_id,
+            .material = pass.get(in_objects[0].object).material,
+            .first = 0,
+            .count = 0,
+        };
+        try out_batches.append(new_batch);
+
+        const back = &pass.batches.items[pass.batches.items - 1];
+        const last_mat = new_batch.material;
+        for (in_objects.items) |obj, i| {
+            const same_mesh = obj.mesh_id.handle == back.mesh_id.handle;
+            const same_material = obj.material == last_mat;
+
+            if (!same_mesh or !same_material) {
+                new_batch.material = obj.material;
+                if (new_batch.material == back.material)
+                    same_material = true;
+            }
+
+            if (same_mesh and same_material) {
+                back.count += 1;
+            } else {
+                new_batch.first = i;
+                new_batch.count = 1;
+                new_batch.mesh_id = obj.mesh_id;
+
+                try out_batches.append(new_batch);
+                back = &out_batches.items[out_batches.items.len - 1];
+            }
+        }
+    }
 
     pub fn getObject(self: Self, object_id: Handle(RenderObject)) *RenderObject {
         return &self.renderables.items[object_id.handle];

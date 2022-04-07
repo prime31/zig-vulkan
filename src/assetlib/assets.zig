@@ -5,7 +5,7 @@ pub usingnamespace @import("texture_asset.zig");
 pub usingnamespace @import("mesh_asset.zig");
 
 pub const TransparencyMode = enum(u8) {
-	@"opaque",
-	transparent,
-	masked,
+    @"opaque",
+    transparent,
+    masked,
 };

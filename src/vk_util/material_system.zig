@@ -7,7 +7,6 @@ const MeshPassType = vkutil.MeshPassType;
 const ShaderEffect = @import("shaders.zig").ShaderEffect;
 const PipelineBuilder = @import("../pipeline_builder.zig").PipelineBuilder;
 
-
 pub const VertexAttributeTemplate = enum {
     default_vertex,
     default_vertex_pos_only,
@@ -89,20 +88,38 @@ pub const MaterialData = struct {
     textures: std.ArrayList(SampledTexture),
     parameters: *ShaderParameters,
     base_template: []const u8,
+
+    pub fn hash(self: MaterialData) u64 {
+        const result = std.hash.Wyhash.hash(0, self.base_template);
+        const tex_hash = std.hash.Wyhash.hash(0, std.mem.sliceAsBytes(self.textures.items));
+        return result ^ tex_hash;
+    }
+
+    pub fn eql(self: MaterialData, other: MaterialData) bool {
+        if (!std.mem.eql(u8, self.base_template, other.base_template) or self.textures.items.len != other.textures.items.len) {
+            return false;
+        }
+
+        return std.mem.eql(u8, std.mem.sliceAsBytes(self.textures.items), std.mem.sliceAsBytes(other.textures.items));
+    }
 };
 
-pub const Material = struct {
-    original: EffectTemplate,
-    pass_sets: PerPassData(vk.DescriptorSet) = .{},
-    textures: std.ArrayList(SampledTexture),
-    params: *ShaderParameters
-};
+pub const Material = struct { original: EffectTemplate, pass_sets: PerPassData(vk.DescriptorSet) = .{}, textures: std.ArrayList(SampledTexture), params: *ShaderParameters };
 
 pub const MaterialSystem = struct {
     forward_builder: PipelineBuilder,
     shadow_builder: PipelineBuilder,
     template_cache: std.StringHashMap(EffectTemplate),
     materials: std.StringHashMap(Material),
-    material_cache: std.AutoHashMap(MaterialData, Material),
+    material_cache: std.HashMap(MaterialData, Material, MaterialDataHashContext, 80),
 };
 
+const MaterialDataHashContext = struct {
+    pub fn hash(_: @This(), key: MaterialData) u64 {
+        return key.hash();
+    }
+
+    pub fn eql(_: @This(), a: MaterialData, b: MaterialData) bool {
+        return a.eql(b);
+    }
+};
