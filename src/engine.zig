@@ -221,12 +221,12 @@ pub const Engine = struct {
     framebuffers: []vk.Framebuffer,
     frames: []FrameData,
     deletion_queue: vkutil.DeletionQueue,
-    forward_render_pass: vk.RenderPass = undefined,
+    render_pass: vk.RenderPass = undefined,
     shadow_pass: vk.RenderPass = undefined,
     copy_pass: vk.RenderPass = undefined,
 
     // framebuffers
-    render_format: vk.Format = undefined,
+    render_format: vk.Format = .r32g32b32a32_sfloat,
     raw_render_image: vma.AllocatedImage = undefined,
     smooth_sampler: vk.Sampler = undefined,
     forward_framebuffer: vk.Framebuffer = undefined,
@@ -305,17 +305,19 @@ pub const Engine = struct {
 
         // swapchain and RenderPasses
         var swapchain = try Swapchain.init(gc, gpa, extent, FRAME_OVERLAP);
-        const forward_render_pass = try createForwardRenderPass(gc, .d32_sfloat, swapchain);
+        const render_pass = try createForwardRenderPass(gc, .d32_sfloat, swapchain);
         const copy_pass = try createCopyRenderPass(gc, swapchain);
         const shadow_pass = try createShadowRenderPass(gc, .d32_sfloat);
 
-        deletion_queue.append(forward_render_pass);
+        std.debug.print("swapchain.surface_format.format: {}\n", .{ swapchain.surface_format.format });
+
+        deletion_queue.append(render_pass);
         deletion_queue.append(copy_pass);
         deletion_queue.append(shadow_pass);
 
         // depth image, framebuffers and 
         const depth_image = try createDepthImage(gc, .d32_sfloat, swapchain);
-        const framebuffers = try createFramebuffers(gc, gpa, forward_render_pass, swapchain, depth_image.view);
+        const framebuffers = try createFramebuffers(gc, gpa, render_pass, swapchain, depth_image.view);
 
         // descriptors
         const descriptors = createDescriptors(gc);
@@ -330,7 +332,7 @@ pub const Engine = struct {
             .window = window,
             .gc = gc,
             .swapchain = swapchain,
-            .forward_render_pass = forward_render_pass,
+            .render_pass = render_pass,
             .copy_pass = copy_pass,
             .shadow_pass = shadow_pass,
             .deletion_queue = deletion_queue,
@@ -448,7 +450,7 @@ pub const Engine = struct {
 
                 self.depth_image.deinit(self.gc);
                 self.depth_image = try createDepthImage(self.gc, self.depth_format, self.swapchain);
-                self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.forward_render_pass, self.swapchain, self.depth_image.view);
+                self.framebuffers = try createFramebuffers(self.gc, self.allocator, self.render_pass, self.swapchain, self.depth_image.view);
             }
 
             self.frame_num += 1;
@@ -509,7 +511,7 @@ pub const Engine = struct {
             .allocator = null,
             .checkVkResultFn = null,
         });
-        _ = igvk.ImGui_ImplVulkan_Init(&info, self.forward_render_pass);
+        _ = igvk.ImGui_ImplVulkan_Init(&info, self.render_pass);
 
         // execute a gpu command to upload imgui font textures
         const cmd_buf = try self.gc.beginOneTimeCommandBuffer();
@@ -563,7 +565,7 @@ pub const Engine = struct {
         pip_layout_info.p_set_layouts = &set_layouts;
 
         const pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
-        const pipeline = try createPipeline(self.gc, self.allocator, self.forward_render_pass, pipeline_layout, resources.default_lit_frag);
+        const pipeline = try createPipeline(self.gc, self.allocator, self.render_pass, pipeline_layout, resources.default_lit_frag);
         const material = OldMaterial{
             .pipeline = pipeline,
             .pipeline_layout = pipeline_layout,
@@ -571,7 +573,7 @@ pub const Engine = struct {
         try self.materials.put("defaultmesh", material);
 
         const pipeline_layout2 = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
-        const pipeline2 = try createPipeline(self.gc, self.allocator, self.forward_render_pass, pipeline_layout2, resources.default_lit_frag);
+        const pipeline2 = try createPipeline(self.gc, self.allocator, self.render_pass, pipeline_layout2, resources.default_lit_frag);
         const material2 = OldMaterial{
             .pipeline = pipeline2,
             .pipeline_layout = pipeline_layout2,
@@ -586,7 +588,7 @@ pub const Engine = struct {
         textured_pip_layout_info.p_set_layouts = &textured_set_layouts;
 
         const textured_pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &textured_pip_layout_info, null);
-        const textured_pipeline = try createPipeline(self.gc, self.allocator, self.forward_render_pass, textured_pipeline_layout, resources.textured_lit_frag);
+        const textured_pipeline = try createPipeline(self.gc, self.allocator, self.render_pass, textured_pipeline_layout, resources.textured_lit_frag);
         const textured_material = OldMaterial{
             .pipeline = textured_pipeline,
             .pipeline_layout = textured_pipeline_layout,
@@ -715,7 +717,7 @@ pub const Engine = struct {
         self.gc.vkd.cmdSetScissor(cmdbuf, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
 
         self.gc.vkd.cmdBeginRenderPass(cmdbuf, &.{
-            .render_pass = self.forward_render_pass,
+            .render_pass = self.render_pass,
             .framebuffer = framebuffer,
             .render_area = render_area,
             .clear_value_count = clear_values.len,
@@ -812,7 +814,7 @@ pub const Engine = struct {
 fn createForwardRenderPass(gc: *const GraphicsContext, depth_format: vk.Format, swapchain: Swapchain) !vk.RenderPass {
     const color_attachment = vk.AttachmentDescription{
         .flags = .{},
-        .format = swapchain.surface_format.format,
+        .format = swapchain.surface_format.format, // TODO: use render_format (.r32g32b32a32_sfloat)
         .samples = .{ .@"1_bit" = true },
         .load_op = .clear,
         .store_op = .store,
@@ -1014,9 +1016,8 @@ fn createDepthImage(gc: *const GraphicsContext, depth_format: vk.Format, swapcha
 
 fn createFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, swapchain: Swapchain, depth_image_view: vk.ImageView) ![]vk.Framebuffer {
     const framebuffers = try allocator.alloc(vk.Framebuffer, swapchain.swap_images.len);
-    var attachments = [2]vk.ImageView{ swapchain.swap_images[i].view, depth_image_view };
-
-    for (framebuffers) |*fb| {
+    for (framebuffers) |*fb, i| {
+        var attachments = [2]vk.ImageView{ swapchain.swap_images[i].view, depth_image_view };
         fb.* = try gc.vkd.createFramebuffer(gc.dev, &.{
             .flags = .{},
             .render_pass = render_pass,
@@ -1026,7 +1027,6 @@ fn createFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_p
             .height = swapchain.extent.height,
             .layers = 1,
         }, null);
-        i += 1;
     }
 
     return framebuffers;
