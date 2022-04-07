@@ -19,7 +19,6 @@ const Vertex = @import("mesh.zig").Vertex;
 const Allocator = std.mem.Allocator;
 
 const MeshObject = @import("render_scene.zig").MeshObject;
-const GpuObjectData = vkutil.GpuObjectData;
 const FlyCamera = @import("chapters/FlyCamera.zig");
 
 const Mat4 = @import("chapters/mat4.zig").Mat4;
@@ -35,6 +34,10 @@ fn toRadians(deg: anytype) @TypeOf(deg) {
 fn toDegrees(rad: anytype) @TypeOf(rad) {
     return 180.0 * rad / std.math.pi;
 }
+
+const GpuObjectData = struct {
+    model: Mat4,
+};
 
 pub const Texture = struct {
     image: vma.AllocatedImage,
