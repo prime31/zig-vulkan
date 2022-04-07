@@ -789,10 +789,10 @@ pub const Engine = struct {
         const alloc_info = std.mem.zeroInit(vk.DescriptorSetAllocateInfo, .{
             .descriptor_pool = self.descriptor_pool,
             .descriptor_set_count = 1,
-            .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &self.single_tex_layout),
+            .p_set_layouts = vkutil.ptrToMany(&self.single_tex_layout),
         });
         var texture_set: vk.DescriptorSet = undefined;
-        try self.gc.vkd.allocateDescriptorSets(self.gc.dev, &alloc_info, @ptrCast([*]vk.DescriptorSet, &texture_set));
+        try self.gc.vkd.allocateDescriptorSets(self.gc.dev, &alloc_info, vkutil.ptrToMany(&texture_set));
         textured_mat.texture_set = texture_set;
 
         // write to the descriptor set so that it points to our empire_diffuse texture

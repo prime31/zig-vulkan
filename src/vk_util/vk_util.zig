@@ -19,3 +19,25 @@ pub const MeshPassType = enum(u8) {
     transparency,
     directional_shadow,
 };
+
+/// given a pointer returns a C-style pointer to many retaining constness
+pub fn ptrToMany(value: anytype) PointerToMany(@TypeOf(value)) {
+    return @ptrCast(PointerToMany(@TypeOf(value)), value);
+}
+
+fn PointerToMany(comptime T: type) type {
+    const info = @typeInfo(T).Pointer;
+    const InnerType = @Type(.{
+        .Pointer = .{
+            .size = .Many,
+            .is_const = info.is_const,
+            .is_volatile = info.is_volatile,
+            .alignment = info.alignment,
+            .address_space = info.address_space,
+            .child = info.child,
+            .is_allowzero = info.is_allowzero,
+            .sentinel = null,
+        },
+    });
+    return InnerType;
+}
