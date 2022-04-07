@@ -309,8 +309,6 @@ pub const Engine = struct {
         const copy_pass = try createCopyRenderPass(gc, swapchain);
         const shadow_pass = try createShadowRenderPass(gc, .d32_sfloat);
 
-        std.debug.print("swapchain.surface_format.format: {}\n", .{ swapchain.surface_format.format });
-
         deletion_queue.append(render_pass);
         deletion_queue.append(copy_pass);
         deletion_queue.append(shadow_pass);

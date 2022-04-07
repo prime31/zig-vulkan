@@ -89,7 +89,7 @@ pub const Allocator = struct {
         const alloc_info = std.mem.zeroInit(VmaAllocationCreateInfo, .{
             .flags = alloc_flags,
             .usage = memory_usage,
-            .requiredFlags = required_flags, // TODO: why did we used to hardcode .{ .host_visible_bit = true, .host_coherent_bit = true },
+            .requiredFlags = required_flags.merge(.{ .host_coherent_bit = true }), // TODO: why does x64 required this?
         });
 
         var buffer: AllocatedBufferUntyped = undefined;
