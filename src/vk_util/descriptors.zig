@@ -129,7 +129,7 @@ pub const DescriptorLayoutCache = struct {
         self.layout_cache.deinit();
     }
 
-    pub fn createDescriptorSetLayout(self: *Self, info: *vk.DescriptorSetLayoutCreateInfo) !vk.DescriptorSetLayout {
+    pub fn createDescriptorSetLayout(self: *Self, info: *const vk.DescriptorSetLayoutCreateInfo) !vk.DescriptorSetLayout {
         var layout_info = DescriptorLayoutInfo.init();
         var is_sorted = true;
         var last_binding: u32 = 0;

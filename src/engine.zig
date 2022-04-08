@@ -107,7 +107,7 @@ const FrameData = struct {
     deletion_queue: vkutil.DeletionQueue,
     cmd_pool: vk.CommandPool,
     cmd_buffer: vk.CommandBuffer,
-    push_buffer: vkutil.PushBuffer,
+    dynamic_data: vkutil.PushBuffer,
     dynamic_descriptor_allocator: vkutil.DescriptorAllocator,
 
     camera_buffer: vma.AllocatedBufferUntyped,
@@ -182,7 +182,7 @@ const FrameData = struct {
             .deletion_queue = vkutil.DeletionQueue.init(gpa, gc),
             .cmd_pool = cmd_pool,
             .cmd_buffer = cmd_buffer,
-            .push_buffer = try vkutil.PushBuffer.init(gc, dynamic_data_buffer),
+            .dynamic_data = try vkutil.PushBuffer.init(gc, dynamic_data_buffer),
             .dynamic_descriptor_allocator = vkutil.DescriptorAllocator.init(gc),
 
             .camera_buffer = camera_buffer,
@@ -196,7 +196,7 @@ const FrameData = struct {
         self.deletion_queue.deinit();
         gc.vkd.freeCommandBuffers(gc.dev, self.cmd_pool, 1, @ptrCast([*]vk.CommandBuffer, &self.cmd_buffer));
         gc.destroy(self.cmd_pool);
-        self.push_buffer.deinit(gc.allocator);
+        self.dynamic_data.deinit(gc.allocator);
         self.dynamic_descriptor_allocator.deinit();
 
         self.camera_buffer.deinit(gc.allocator);
@@ -286,7 +286,7 @@ pub const Engine = struct {
 
     global_set_layout: vk.DescriptorSetLayout,
     object_set_layout: vk.DescriptorSetLayout,
-    single_tex_layout: vk.DescriptorSetLayout,
+    single_tex_layout: vk.DescriptorSetLayout = undefined,
     descriptor_pool: vk.DescriptorPool,
     imgui_pool: vk.DescriptorPool = undefined,
 
@@ -323,7 +323,7 @@ pub const Engine = struct {
         const framebuffers = try createSwapchainFramebuffers(gc, gpa, old_render_pass, swapchain, depth_image.view);
 
         // descriptors
-        const descriptors = createDescriptors(gc);
+        const descriptors = createOldDescriptors(gc);
 
         // create our FrameDatas
         const frames = try gpa.alloc(FrameData, swapchain.swap_images.len);
@@ -339,6 +339,7 @@ pub const Engine = struct {
             .render_pass = render_pass,
             .copy_pass = copy_pass,
             .shadow_pass = shadow_pass,
+
             .deletion_queue = deletion_queue,
             .framebuffers = framebuffers,
             .frames = frames,
@@ -357,7 +358,6 @@ pub const Engine = struct {
             .camera = FlyCamera.init(window),
             .global_set_layout = descriptors.layout,
             .object_set_layout = descriptors.object_set_layout,
-            .single_tex_layout = descriptors.single_tex_layout,
             .descriptor_pool = descriptors.pool,
             .scene_params = .{},
             .scene_param_buffer = descriptors.scene_param_buffer,
@@ -376,7 +376,6 @@ pub const Engine = struct {
         self.scene_param_buffer.deinit(self.gc.allocator);
         self.gc.destroy(self.object_set_layout);
         self.gc.destroy(self.global_set_layout);
-        self.gc.destroy(self.single_tex_layout);
         self.gc.destroy(self.descriptor_pool);
 
         self.depth_image.deinit(self.gc);
@@ -384,6 +383,9 @@ pub const Engine = struct {
         for (self.depth_pyramid_mips[0..self.depth_pyramid_levels]) |mip|
             self.gc.destroy(mip);
         self.depth_pyramid.deinit(self.gc);
+
+        self.descriptor_allocator.deinit();
+        self.descriptor_layout_cache.deinit();
 
         self.render_scene.deinit();
         self.shader_cache.deinit();
@@ -426,6 +428,7 @@ pub const Engine = struct {
     pub fn loadContent(self: *Self) !void {
         try self.createFramebuffers();
         try self.createDepthSetup();
+        try self.createDescriptors();
 
         try self.initImgui();
         try self.loadImages();
@@ -637,6 +640,18 @@ pub const Engine = struct {
         shadow_sampler_info.compare_op = .less;
         self.shadow_sampler = try self.gc.vkd.createSampler(self.gc.dev, &shadow_sampler_info, null);
         self.deletion_queue.append(self.shadow_sampler);
+    }
+
+    fn createDescriptors(self: *Self) !void {
+        self.descriptor_allocator = vkutil.DescriptorAllocator.init(self.gc);
+        self.descriptor_layout_cache = vkutil.DescriptorLayoutCache.init(self.gc);
+
+        const texture_bind = vkinit.descriptorSetLayoutBinding(.combined_image_sampler, .{ .fragment_bit = true }, 0);
+        self.single_tex_layout = try self.descriptor_layout_cache.createDescriptorSetLayout(&.{
+            .flags = .{},
+            .binding_count = 1,
+            .p_bindings = vkutil.ptrToMany(&texture_bind),
+        });
     }
 
     fn initImgui(self: *Self) !void {
@@ -1354,7 +1369,7 @@ fn padUniformBufferSize(gc: *const GraphicsContext, size: usize) usize {
     return aligned_size;
 }
 
-fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorSetLayout, pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBufferUntyped, object_set_layout: vk.DescriptorSetLayout, single_tex_layout: vk.DescriptorSetLayout } {
+fn createOldDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorSetLayout, pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBufferUntyped, object_set_layout: vk.DescriptorSetLayout} {
     // binding for camera data at 0
     const cam_bind = vkinit.descriptorSetLayoutBinding(.uniform_buffer, .{ .vertex_bit = true }, 0);
 
@@ -1378,16 +1393,6 @@ fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorS
     };
     const object_set_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &set_info_object, null) catch unreachable;
 
-    // another set, one that holds a single texture
-    const tex_bind = vkinit.descriptorSetLayoutBinding(.combined_image_sampler, .{ .fragment_bit = true }, 0);
-
-    const tex_set_info = vk.DescriptorSetLayoutCreateInfo{
-        .flags = .{},
-        .binding_count = 1,
-        .p_bindings = @ptrCast([*]const vk.DescriptorSetLayoutBinding, &tex_bind),
-    };
-    const single_tex_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &tex_set_info, null) catch unreachable;
-
     const sizes = [_]vk.DescriptorPoolSize{
         .{ .@"type" = .uniform_buffer, .descriptor_count = 10 },
         .{ .@"type" = .uniform_buffer_dynamic, .descriptor_count = 10 },
@@ -1409,7 +1414,6 @@ fn createDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorS
         .pool = descriptor_pool,
         .scene_param_buffer = scene_param_buffer,
         .object_set_layout = object_set_layout,
-        .single_tex_layout = single_tex_layout,
     };
 }
 
