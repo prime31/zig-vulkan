@@ -31,7 +31,7 @@ pub const ShaderModule = struct {
 };
 
 pub const ShaderEffect = struct {
-    const ReflectionOverrides = struct {
+    pub const ReflectionOverrides = struct {
         name: []const u8,
         overriden_type: vk.DescriptorType,
     };
@@ -61,11 +61,20 @@ pub const ShaderEffect = struct {
     pub fn deinit(self: *ShaderEffect, gc: *const GraphicsContext) void {
         gc.destroy(self.built_layout);
         self.bindings.deinit();
-        for (self.stages.items) |s| s.deinit(gc);
+        // ShaderStage is owned by ShaderCache and will be deinitted there
         self.stages.deinit();
     }
 
-    pub fn reflectLayout(self: *ShaderEffect, gc: *const GraphicsContext, overrides: []ReflectionOverrides) !void {
+    pub fn addStage(self: *ShaderEffect, shader_module: *ShaderModule, stage: vk.ShaderStageFlags) !void {
+        try self.stages.append(.{ .shader_module = shader_module, .stage = stage });
+    }
+
+    pub fn fillStages(self: ShaderEffect, pipeline_stages: *std.BoundedArray(vk.PipelineShaderStageCreateInfo, 2)) !void {
+        for (self.stages) |s|
+            try pipeline_stages.append(s);
+    }
+
+    pub fn reflectLayout(self: *ShaderEffect, gc: *const GraphicsContext, overrides: []const ReflectionOverrides) !void {
         var gpa = self.stages.allocator;
 
         var set_layouts = std.ArrayList(DescriptorSetLayoutData).init(gpa);
@@ -265,11 +274,11 @@ pub const ShaderCache = struct {
         self.module_cache.deinit();
     }
 
-    pub fn getShader(self: ShaderCache, comptime res_path: []const u8) *ShaderModule {
+    pub fn getShader(self: *ShaderCache, comptime res_path: []const u8) *ShaderModule {
         if (!self.module_cache.contains(res_path)) {
-            try self.module_cache.put(res_path, ShaderModule.init(self.gc, res_path));
+            self.module_cache.put(res_path, ShaderModule.init(self.gc, res_path) catch unreachable) catch unreachable;
         }
-        return self.module_cache.getPtr(res_path);
+        return self.module_cache.getPtr(res_path).?;
     }
 };
 

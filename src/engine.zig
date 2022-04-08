@@ -12,7 +12,7 @@ const vkutil = @import("vk_util/vk_util.zig");
 const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 const RenderScene = @import("render_scene.zig").RenderScene;
 const Swapchain = @import("swapchain.zig").Swapchain;
-const PipelineBuilder = @import("pipeline_builder.zig").PipelineBuilder;
+const PipelineBuilder = vkutil.PipelineBuilder;
 const Mesh = @import("mesh.zig").Mesh;
 const RenderBounds = @import("mesh.zig").RenderBounds;
 const Vertex = @import("mesh.zig").Vertex;
@@ -386,6 +386,7 @@ pub const Engine = struct {
 
         self.descriptor_allocator.deinit();
         self.descriptor_layout_cache.deinit();
+        self.material_system.deinit();
 
         self.render_scene.deinit();
         self.shader_cache.deinit();
@@ -429,11 +430,12 @@ pub const Engine = struct {
         try self.createFramebuffers();
         try self.createDepthSetup();
         try self.createDescriptors();
+        try self.createPipelines();
 
         try self.initImgui();
         try self.loadImages();
         try self.loadMeshes();
-        try self.initPipelines();
+        try self.initOldPipelines();
         try self.initScene();
     }
 
@@ -496,7 +498,7 @@ pub const Engine = struct {
                 .requiredFlags = .{ .device_local_bit = true },
             });
             self.raw_render_image = try self.gc.allocator.createImage(&ri_info, &alloc_info, null);
-            
+
             const iview_info = vkinit.imageViewCreateInfo(.r32g32b32a32_sfloat, self.raw_render_image.image, .{ .color_bit = true });
             self.raw_render_image.default_view = try self.gc.vkd.createImageView(self.gc.dev, &iview_info, null);
             self.deletion_queue.append(self.raw_render_image);
@@ -599,7 +601,6 @@ pub const Engine = struct {
 
         self.deletion_queue.append(img.default_view);
 
-
         var i: usize = 0;
         while (i < self.depth_pyramid_levels) : (i += 1) {
             var level_info = vkinit.imageViewCreateInfo(.r32_sfloat, self.depth_pyramid.image.image, .{ .color_bit = true });
@@ -652,6 +653,10 @@ pub const Engine = struct {
             .binding_count = 1,
             .p_bindings = vkutil.ptrToMany(&texture_bind),
         });
+    }
+
+    fn createPipelines(self: *Self) !void {
+        self.material_system = try vkutil.MaterialSystem.init(self);
     }
 
     fn initImgui(self: *Self) !void {
@@ -752,7 +757,7 @@ pub const Engine = struct {
         try self.meshes.put("lost_empire", lost_empire);
     }
 
-    fn initPipelines(self: *Self) !void {
+    fn initOldPipelines(self: *Self) !void {
         // push-constant setup
         var pip_layout_info = vkinit.pipelineLayoutCreateInfo();
 
@@ -762,7 +767,7 @@ pub const Engine = struct {
         pip_layout_info.p_set_layouts = &set_layouts;
 
         const pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
-        const pipeline = try createPipeline(self.gc, self.allocator, self.old_render_pass, pipeline_layout, resources.default_lit_frag);
+        const pipeline = try createPipeline(self.gc, self.old_render_pass, pipeline_layout, resources.default_lit_old_frag);
         const material = OldMaterial{
             .pipeline = pipeline,
             .pipeline_layout = pipeline_layout,
@@ -770,7 +775,7 @@ pub const Engine = struct {
         try self.materials.put("defaultmesh", material);
 
         const pipeline_layout2 = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
-        const pipeline2 = try createPipeline(self.gc, self.allocator, self.old_render_pass, pipeline_layout2, resources.default_lit_frag);
+        const pipeline2 = try createPipeline(self.gc, self.old_render_pass, pipeline_layout2, resources.default_lit_old_frag);
         const material2 = OldMaterial{
             .pipeline = pipeline2,
             .pipeline_layout = pipeline_layout2,
@@ -785,7 +790,7 @@ pub const Engine = struct {
         textured_pip_layout_info.p_set_layouts = &textured_set_layouts;
 
         const textured_pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &textured_pip_layout_info, null);
-        const textured_pipeline = try createPipeline(self.gc, self.allocator, self.old_render_pass, textured_pipeline_layout, resources.textured_lit_frag);
+        const textured_pipeline = try createPipeline(self.gc, self.old_render_pass, textured_pipeline_layout, resources.textured_lit_frag);
         const textured_material = OldMaterial{
             .pipeline = textured_pipeline,
             .pipeline_layout = textured_pipeline_layout,
@@ -1335,26 +1340,17 @@ fn createShaderStageCreateInfo(shader_module: vk.ShaderModule, stage: vk.ShaderS
     };
 }
 
-fn createPipeline(
-    gc: *const GraphicsContext,
-    allocator: std.mem.Allocator,
-    render_pass: vk.RenderPass,
-    pipeline_layout: vk.PipelineLayout,
-    frag_shader_bytes: [:0]const u8,
-) !vk.Pipeline {
+fn createPipeline(gc: *const GraphicsContext, render_pass: vk.RenderPass, pipeline_layout: vk.PipelineLayout, frag_shader_bytes: [:0]const u8) !vk.Pipeline {
     const vert = try createShaderModule(gc, @ptrCast([*]const u32, resources.tri_mesh_descriptors_vert), resources.tri_mesh_descriptors_vert.len);
-    const frag = try createShaderModule(gc, @ptrCast([*]const u32, @alignCast(@alignOf(u32), frag_shader_bytes)), frag_shader_bytes.len);
+    const frag = try createShaderModule(gc, @ptrCast([*]const u32, @alignCast(@alignOf(u32), std.mem.bytesAsSlice(u32, frag_shader_bytes))), frag_shader_bytes.len);
 
     defer gc.destroy(vert);
     defer gc.destroy(frag);
 
-    var builder = PipelineBuilder.init(allocator, pipeline_layout);
+    var builder = PipelineBuilder.init();
+    builder.pipeline_layout = pipeline_layout;
     builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less_or_equal);
-
-    builder.vertex_input_info.vertex_attribute_description_count = Vertex.attribute_description.len;
-    builder.vertex_input_info.p_vertex_attribute_descriptions = &Vertex.attribute_description;
-    builder.vertex_input_info.vertex_binding_description_count = 1;
-    builder.vertex_input_info.p_vertex_binding_descriptions = @ptrCast([*]const vk.VertexInputBindingDescription, &Vertex.binding_description);
+    builder.vertex_description = Vertex.vertex_description;
 
     try builder.addShaderStage(createShaderStageCreateInfo(vert, .{ .vertex_bit = true }));
     try builder.addShaderStage(createShaderStageCreateInfo(frag, .{ .fragment_bit = true }));
@@ -1369,7 +1365,7 @@ fn padUniformBufferSize(gc: *const GraphicsContext, size: usize) usize {
     return aligned_size;
 }
 
-fn createOldDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorSetLayout, pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBufferUntyped, object_set_layout: vk.DescriptorSetLayout} {
+fn createOldDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorSetLayout, pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBufferUntyped, object_set_layout: vk.DescriptorSetLayout } {
     // binding for camera data at 0
     const cam_bind = vkinit.descriptorSetLayoutBinding(.uniform_buffer, .{ .vertex_bit = true }, 0);
 

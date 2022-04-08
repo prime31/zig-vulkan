@@ -1,57 +1,69 @@
 const std = @import("std");
 const vk = @import("vulkan");
-const vkinit = @import("vkinit.zig");
+const vkinit = @import("../vkinit.zig");
+const vkutil = @import("vk_util.zig");
 
-const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
+const GraphicsContext = @import("../graphics_context.zig").GraphicsContext;
+const VertexInputDescription = @import("../mesh.zig").VertexInputDescription;
 
 pub const PipelineBuilder = struct {
-    shader_stages: std.ArrayList(vk.PipelineShaderStageCreateInfo),
-    vertex_input_info: vk.PipelineVertexInputStateCreateInfo,
+    shader_stages: std.BoundedArray(vk.PipelineShaderStageCreateInfo, 2) = .{},
+    vertex_description: VertexInputDescription = .{},
+    vertex_input_info: vk.PipelineVertexInputStateCreateInfo = undefined,
     input_assembly: vk.PipelineInputAssemblyStateCreateInfo,
     rasterizer: vk.PipelineRasterizationStateCreateInfo,
     color_blend_attachment: vk.PipelineColorBlendAttachmentState,
     multisampling: vk.PipelineMultisampleStateCreateInfo,
-    pipeline_layout: vk.PipelineLayout,
+    pipeline_layout: vk.PipelineLayout = undefined,
     depth_stencil: ?vk.PipelineDepthStencilStateCreateInfo = null,
 
-    pub fn init(allocator: std.mem.Allocator, pipeline_layout: vk.PipelineLayout) PipelineBuilder {
+    pub fn init() PipelineBuilder {
         return .{
-            .shader_stages = std.ArrayList(vk.PipelineShaderStageCreateInfo).init(allocator),
-            .vertex_input_info = .{
-                .flags = .{},
-                .vertex_binding_description_count = 0,
-                .p_vertex_binding_descriptions = undefined,
-                .vertex_attribute_description_count = 0,
-                .p_vertex_attribute_descriptions = undefined,
-            },
             .input_assembly = vkinit.pipelineInputAssemblyCreateInfo(.triangle_list),
             .rasterizer = vkinit.pipelineRasterizationStateCreateInfo(.fill),
             .color_blend_attachment = vkinit.pipelineColorBlendAttachmentState(),
             .multisampling = vkinit.pipelineMultisampleStateCreateInfo(),
-            .pipeline_layout = pipeline_layout,
         };
     }
 
-    pub fn deinit(self: PipelineBuilder) void {
-        self.shader_stages.deinit();
+    pub fn clearVertexInput(self: *PipelineBuilder) void {
+        self.vertex_input_info.p_vertex_attribute_descriptions = null;
+        self.vertex_input_info.vertex_attribute_description_count = 0;
+
+        self.vertex_input_info.p_vertex_binding_descriptions = null;
+        self.vertex_input_info.vertex_binding_description_count = 0;
+    }
+
+    pub fn setShaders(self: *PipelineBuilder, effect: *vkutil.ShaderEffect) !void {
+        self.shader_stages.len = 0;
+        try effect.fillStages(&self.shader_stages);
+        self.pipeline_layout = effect.built_layout;
     }
 
     pub fn addShaderStage(self: *PipelineBuilder, stage: vk.PipelineShaderStageCreateInfo) !void {
         try self.shader_stages.append(stage);
     }
 
-    pub fn build(self: PipelineBuilder, gc: *const GraphicsContext, render_pass: vk.RenderPass) !vk.Pipeline {
-        defer self.shader_stages.deinit();
+    pub fn build(self: *PipelineBuilder, gc: *const GraphicsContext, render_pass: vk.RenderPass) !vk.Pipeline {
+        // connect the pipeline builder vertex input info to the one we get from Vertex
+        self.vertex_input_info = .{
+            .flags = self.vertex_description.flags,
+            .vertex_binding_description_count = @intCast(u32, self.vertex_description.bindings.len),
+            .p_vertex_binding_descriptions = self.vertex_description.bindings.ptr,
+            .vertex_attribute_description_count = @intCast(u32, self.vertex_description.attributes.len),
+            .p_vertex_attribute_descriptions = self.vertex_description.attributes.ptr,
+        };
 
+        // dynamic viewport, scissor and depth_bias
         const viewport_state = vk.PipelineViewportStateCreateInfo{
             .flags = .{},
             .viewport_count = 1,
-            .p_viewports =  null,
+            .p_viewports = null,
             .scissor_count = 1,
             .p_scissors = null,
         };
 
-        const dynstate = [_]vk.DynamicState{ .viewport, .scissor };
+        const dynstate = [_]vk.DynamicState{ .viewport, .scissor, .depth_bias };
         const pdsci = vk.PipelineDynamicStateCreateInfo{
             .flags = .{},
             .dynamic_state_count = dynstate.len,
@@ -70,8 +82,8 @@ pub const PipelineBuilder = struct {
 
         const gpci = vk.GraphicsPipelineCreateInfo{
             .flags = .{},
-            .stage_count = @intCast(u32, self.shader_stages.items.len),
-            .p_stages = @ptrCast([*]const vk.PipelineShaderStageCreateInfo, self.shader_stages.items.ptr),
+            .stage_count = @intCast(u32, self.shader_stages.len),
+            .p_stages = @ptrCast([*]const vk.PipelineShaderStageCreateInfo, &self.shader_stages.buffer),
             .p_vertex_input_state = &self.vertex_input_info,
             .p_input_assembly_state = &self.input_assembly,
             .p_tessellation_state = null,

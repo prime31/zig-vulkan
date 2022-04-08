@@ -7,37 +7,46 @@ const Vec3 = @import("chapters/vec3.zig").Vec3;
 
 const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 
-pub const Vertex = extern struct {
-    pub const binding_description = vk.VertexInputBindingDescription{
-        .binding = 0,
-        .stride = @sizeOf(Vertex),
-        .input_rate = .vertex,
-    };
+pub const VertexInputDescription = struct {
+    bindings: []const vk.VertexInputBindingDescription = &[_]vk.VertexInputBindingDescription{},
+    attributes: []const vk.VertexInputAttributeDescription = &[_]vk.VertexInputAttributeDescription{},
+    flags: vk.PipelineVertexInputStateCreateFlags = .{},
+};
 
-    pub const attribute_description = [_]vk.VertexInputAttributeDescription{
-        .{
-            .binding = 0,
-            .location = 0,
-            .format = .r32g32b32_sfloat,
-            .offset = @offsetOf(Vertex, "position"),
+pub const Vertex = extern struct {
+    pub const vertex_description: VertexInputDescription = .{
+        .bindings = &[_]vk.VertexInputBindingDescription{
+            .{
+                .binding = 0,
+                .stride = @sizeOf(Vertex),
+                .input_rate = .vertex,
+            },
         },
-        .{
-            .binding = 0,
-            .location = 1,
-            .format = .r32g32b32_sfloat,
-            .offset = @offsetOf(Vertex, "normal"),
-        },
-        .{
-            .binding = 0,
-            .location = 2,
-            .format = .r32g32b32_sfloat,
-            .offset = @offsetOf(Vertex, "color"),
-        },
-        .{
-            .binding = 0,
-            .location = 3,
-            .format = .r32g32_sfloat,
-            .offset = @offsetOf(Vertex, "uv"),
+        .attributes = &[_]vk.VertexInputAttributeDescription{
+            .{
+                .binding = 0,
+                .location = 0,
+                .format = .r32g32b32_sfloat,
+                .offset = @offsetOf(Vertex, "position"),
+            },
+            .{
+                .binding = 0,
+                .location = 1,
+                .format = .r32g32b32_sfloat,
+                .offset = @offsetOf(Vertex, "normal"),
+            },
+            .{
+                .binding = 0,
+                .location = 2,
+                .format = .r32g32b32_sfloat,
+                .offset = @offsetOf(Vertex, "color"),
+            },
+            .{
+                .binding = 0,
+                .location = 3,
+                .format = .r32g32_sfloat,
+                .offset = @offsetOf(Vertex, "uv"),
+            },
         },
     };
 
@@ -46,7 +55,6 @@ pub const Vertex = extern struct {
     color: [3]f32,
     uv: [2]f32,
 };
-
 
 pub const RenderBounds = struct {
     origin: Vec3,

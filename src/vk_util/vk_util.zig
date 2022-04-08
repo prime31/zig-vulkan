@@ -3,6 +3,7 @@ const Vec4 = @import("../chapters/vec4.zig").Vec4;
 
 pub const PushBuffer = @import("push_buffer.zig").PushBuffer;
 pub const DeletionQueue = @import("deletion_queue.zig").DeletionQueue;
+pub const PipelineBuilder = @import("pipeline_builder.zig").PipelineBuilder;
 pub usingnamespace @import("shaders.zig");
 pub usingnamespace @import("descriptors.zig");
 pub usingnamespace @import("material_system.zig");
