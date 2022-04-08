@@ -12,7 +12,7 @@ pub const PushBuffer = struct {
 
     pub fn init(gc: *const GraphicsContext, buffer: vma.AllocatedBufferUntyped) !PushBuffer {
         var pp_data: ?*anyopaque = undefined;
-        const res = vma.vmaMapMemory(gc.allocator.allocator, buffer.allocation, @ptrCast([*c]?*anyopaque, &pp_data));
+        const res = vma.vmaMapMemory(gc.vma.allocator, buffer.allocation, @ptrCast([*c]?*anyopaque, &pp_data));
         if (res == vk.Result.success) {
             return PushBuffer{
                 .source = buffer,
@@ -60,13 +60,13 @@ pub const PushBuffer = struct {
 };
 
 test "PushBuffer" {
-    const ctx = @import("../tests.zig").initTestContext();
+    var ctx = @import("../tests.zig").initTestContext();
     const gc = ctx.gc;
     defer ctx.deinit();
 
-    const buffer = try gc.allocator.createUntypedBuffer(128, .{ .uniform_buffer_bit = true }, vma.VmaMemoryUsage.cpu_to_gpu, .{});
+    const buffer = try gc.vma.createUntypedBuffer(128, .{ .uniform_buffer_bit = true }, vma.VmaMemoryUsage.cpu_to_gpu, .{});
     var pb = try PushBuffer.init(gc, buffer);
-    defer pb.deinit(gc.allocator);
+    defer pb.deinit(gc.vma);
 
     _ = pb.push(u32, 55);
     const data = @ptrCast([*]u32, @alignCast(@alignOf(u32), pb.mapped));

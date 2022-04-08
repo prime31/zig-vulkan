@@ -74,11 +74,11 @@ pub const DeletionQueue = struct {
                 .render_pass => |rp| self.gc.destroy(rp),
                 .image_view => |iv| self.gc.destroy(iv),
                 .sampler => |s| self.gc.destroy(s),
-                .allocated_buffer => |buf| buf.deinit(self.gc.allocator),
+                .allocated_buffer => |buf| buf.deinit(self.gc.vma),
                 .allocated_image => |img| {
                     self.gc.destroy(img.default_view);
-                    img.deinit(self.gc.allocator);
-                }
+                    img.deinit(self.gc.vma);
+                },
             }
         }
 
@@ -108,7 +108,7 @@ fn ReverseSliceIterator(comptime T: type) type {
 }
 
 test "deletion queue" {
-    const ctx = @import("../tests.zig").initTestContext();
+    var ctx = @import("../tests.zig").initTestContext();
     const gc = ctx.gc;
     defer ctx.deinit();
 
@@ -139,21 +139,8 @@ test "deletion queue" {
     const pipeline_layout = try gc.vkd.createPipelineLayout(gc.dev, &vkinit.pipelineLayoutCreateInfo(), null);
     q.append(pipeline_layout);
 
-    {
-        const buffer_info = std.mem.zeroInit(vk.BufferCreateInfo, .{
-            .flags = .{},
-            .size = 16,
-            .usage = .{ .uniform_buffer_bit = true },
-        });
-
-        const malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
-            .flags = .{},
-            .usage = .auto,
-            .requiredFlags = .{ .host_visible_bit = true, .host_coherent_bit = true },
-        });
-        const allocated_buffer = try gc.allocator.createBuffer(&buffer_info, &malloc_info, null);
-        q.append(allocated_buffer);
-    }
+    const allocated_buffer = try gc.vma.createUntypedBuffer(1000, .{ .storage_buffer_bit = true }, .cpu_to_gpu, .{});
+    q.append(allocated_buffer);
 
     q.flush();
 }

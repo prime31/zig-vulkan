@@ -283,13 +283,16 @@ pub const ShaderCache = struct {
 };
 
 test "shaders reflection" {
-    var gpa = std.testing.allocator;
-    const ctx = @import("../tests.zig").initTestContext();
+    var ctx = @import("../tests.zig").initTestContext();
     const gc = ctx.gc;
+    const gpa = gc.gpa;
     defer ctx.deinit();
 
     var shader_effect = ShaderEffect.init(gpa);
-    defer shader_effect.deinit(gc);
+    defer {
+        for (shader_effect.stages.items) |s| s.deinit(gc);
+        shader_effect.deinit(gc);
+    }
 
     var overrides: []ShaderEffect.ReflectionOverrides = &[_]ShaderEffect.ReflectionOverrides{};
 

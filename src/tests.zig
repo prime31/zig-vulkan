@@ -3,6 +3,7 @@ const std = @import("std");
 // include all files with tests
 comptime {
     _ = @import("utils/cvars.zig");
+    _ = @import("utils/scratch_allocator.zig");
 
     _ = @import("vk_util/deletion_queue.zig");
     _ = @import("vk_util/descriptors.zig");
@@ -21,9 +22,9 @@ const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 
 pub const TestContext = struct {
     window: glfw.Window,
-    gc: *const GraphicsContext,
+    gc: *GraphicsContext,
 
-    pub fn deinit(self: TestContext) void {
+    pub fn deinit(self: *TestContext) void {
         self.gc.deinit();
         std.testing.allocator.destroy(self.gc);
         self.window.destroy();

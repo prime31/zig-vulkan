@@ -31,7 +31,7 @@ pub const GraphicsContext = struct {
     dev: vk.Device,
     graphics_queue: Queue,
     present_queue: Queue,
-    allocator: vma.Allocator,
+    vma: vma.Allocator,
     gpa: std.mem.Allocator,
     upload_context: UploadContext,
     debug_message: if (enableValidationLayers) vk.DebugUtilsMessengerEXT else void,
@@ -111,7 +111,7 @@ pub const GraphicsContext = struct {
             .instance = self.instance,
             .vulkanApiVersion = vk.API_VERSION_1_2,
         });
-        self.allocator = try vma.Allocator.init(&allocator_info);
+        self.vma = try vma.Allocator.init(&allocator_info);
 
         // initialize the upload context for immediate transfers
         self.upload_context = try UploadContext.init(&self);
@@ -139,7 +139,7 @@ pub const GraphicsContext = struct {
     }
 
     pub fn deinit(self: *GraphicsContext) void {
-        self.allocator.deinit();
+        self.vma.deinit();
         self.upload_context.deinit(self);
         self.vkd.destroyDevice(self.dev, null);
         self.vki.destroySurfaceKHR(self.instance, self.surface, null);

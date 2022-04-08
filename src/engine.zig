@@ -51,7 +51,7 @@ pub const Texture = struct {
         // only destroy the view if it isnt the default view from the AllocatedImage
         if (self.view != self.image.default_view)
             gc.destroy(self.view);
-        self.image.deinit(gc.allocator);
+        self.image.deinit(gc.vma);
     }
 };
 
@@ -129,13 +129,13 @@ const FrameData = struct {
         }, @ptrCast([*]vk.CommandBuffer, &cmd_buffer));
 
         // 1 megabyte of dynamic data buffer
-        const dynamic_data_buffer = try gc.allocator.createUntypedBuffer(1000000, .{ .uniform_buffer_bit = true }, .cpu_only, .{});
+        const dynamic_data_buffer = try gc.vma.createUntypedBuffer(1000000, .{ .uniform_buffer_bit = true }, .cpu_only, .{});
 
         // descriptor set setup
-        var camera_buffer = try gc.allocator.createUntypedBuffer(@sizeOf(GpuCameraData), .{ .uniform_buffer_bit = true }, .cpu_to_gpu, .{});
+        var camera_buffer = try gc.vma.createUntypedBuffer(@sizeOf(GpuCameraData), .{ .uniform_buffer_bit = true }, .cpu_to_gpu, .{});
 
         const max_objects: usize = 10_000;
-        var object_buffer = try gc.allocator.createUntypedBuffer(@sizeOf(GpuObjectData) * max_objects, .{ .storage_buffer_bit = true }, .cpu_to_gpu, .{});
+        var object_buffer = try gc.vma.createUntypedBuffer(@sizeOf(GpuObjectData) * max_objects, .{ .storage_buffer_bit = true }, .cpu_to_gpu, .{});
 
         var global_descriptor: vk.DescriptorSet = undefined;
         try gc.vkd.allocateDescriptorSets(gc.dev, &.{
@@ -196,11 +196,11 @@ const FrameData = struct {
         self.deletion_queue.deinit();
         gc.vkd.freeCommandBuffers(gc.dev, self.cmd_pool, 1, @ptrCast([*]vk.CommandBuffer, &self.cmd_buffer));
         gc.destroy(self.cmd_pool);
-        self.dynamic_data.deinit(gc.allocator);
+        self.dynamic_data.deinit(gc.vma);
         self.dynamic_descriptor_allocator.deinit();
 
-        self.camera_buffer.deinit(gc.allocator);
-        self.object_buffer.deinit(gc.allocator);
+        self.camera_buffer.deinit(gc.vma);
+        self.object_buffer.deinit(gc.vma);
     }
 };
 
@@ -373,7 +373,7 @@ pub const Engine = struct {
 
         self.gc.destroy(self.blocky_sampler);
 
-        self.scene_param_buffer.deinit(self.gc.allocator);
+        self.scene_param_buffer.deinit(self.gc.vma);
         self.gc.destroy(self.object_set_layout);
         self.gc.destroy(self.global_set_layout);
         self.gc.destroy(self.descriptor_pool);
@@ -392,7 +392,7 @@ pub const Engine = struct {
         self.shader_cache.deinit();
 
         var iter = self.meshes.valueIterator();
-        while (iter.next()) |mesh| mesh.deinit(self.gc.allocator);
+        while (iter.next()) |mesh| mesh.deinit(self.gc.vma);
         self.meshes.deinit();
 
         var tex_iter = self.textures.valueIterator();
@@ -497,7 +497,7 @@ pub const Engine = struct {
                 .usage = .gpu_only,
                 .requiredFlags = .{ .device_local_bit = true },
             });
-            self.raw_render_image = try self.gc.allocator.createImage(&ri_info, &alloc_info, null);
+            self.raw_render_image = try self.gc.vma.createImage(&ri_info, &alloc_info, null);
 
             const iview_info = vkinit.imageViewCreateInfo(.r32g32b32a32_sfloat, self.raw_render_image.image, .{ .color_bit = true });
             self.raw_render_image.default_view = try self.gc.vkd.createImageView(self.gc.dev, &iview_info, null);
@@ -520,7 +520,7 @@ pub const Engine = struct {
                 .usage = .gpu_only,
                 .requiredFlags = .{ .device_local_bit = true },
             });
-            self.shadow_image = try self.gc.allocator.createImage(&img_info, &alloc_info, null);
+            self.shadow_image = try self.gc.vma.createImage(&img_info, &alloc_info, null);
 
             const iview_info = vkinit.imageViewCreateInfo(.d32_sfloat, self.shadow_image.image, .{ .depth_bit = true });
             self.shadow_image.default_view = try self.gc.vkd.createImageView(self.gc.dev, &iview_info, null);
@@ -591,7 +591,7 @@ pub const Engine = struct {
             .usage = .gpu_only,
             .requiredFlags = .{ .device_local_bit = true },
         });
-        var img = try self.gc.allocator.createImage(&img_info, &alloc_info, null);
+        var img = try self.gc.vma.createImage(&img_info, &alloc_info, null);
 
         var iview_info = vkinit.imageViewCreateInfo(.r32_sfloat, img.image, .{ .color_bit = true });
         iview_info.subresource_range.level_count = self.depth_pyramid_levels;
@@ -949,9 +949,9 @@ pub const Engine = struct {
         };
 
         // and copy it to the buffer
-        const cam_data_ptr = try self.gc.allocator.mapMemory(GpuCameraData, frame.camera_buffer.allocation);
+        const cam_data_ptr = try self.gc.vma.mapMemory(GpuCameraData, frame.camera_buffer.allocation);
         cam_data_ptr.* = cam_data;
-        self.gc.allocator.unmapMemory(frame.camera_buffer.allocation);
+        self.gc.vma.unmapMemory(frame.camera_buffer.allocation);
 
         // scene params
         const framed = self.frame_num / 12;
@@ -959,17 +959,17 @@ pub const Engine = struct {
 
         const frame_index = @floatToInt(usize, self.frame_num) % FRAME_OVERLAP;
         const data_offset = padUniformBufferSize(self.gc, @sizeOf(GpuSceneData)) * frame_index;
-        const scene_data_ptr = (try self.gc.allocator.mapMemoryAtOffset(GpuSceneData, self.scene_param_buffer.allocation, data_offset));
+        const scene_data_ptr = (try self.gc.vma.mapMemoryAtOffset(GpuSceneData, self.scene_param_buffer.allocation, data_offset));
         scene_data_ptr.* = self.scene_params;
-        self.gc.allocator.unmapMemory(self.scene_param_buffer.allocation);
+        self.gc.vma.unmapMemory(self.scene_param_buffer.allocation);
 
         // object SSBO
-        const object_data_ptr = try self.gc.allocator.mapMemory(GpuObjectData, frame.object_buffer.allocation);
+        const object_data_ptr = try self.gc.vma.mapMemory(GpuObjectData, frame.object_buffer.allocation);
         for (self.renderables.items) |*object, i| {
             var rot = Mat4.createAngleAxis(.{ .y = 1 }, toRadians(25.0) * self.frame_num * 0.04 + @intToFloat(f32, i));
             object_data_ptr[i].model = object.transform_matrix.mul(rot);
         }
-        self.gc.allocator.unmapMemory(frame.object_buffer.allocation);
+        self.gc.vma.unmapMemory(frame.object_buffer.allocation);
 
         var last_mesh: *Mesh = @intToPtr(*Mesh, @ptrToInt(&self));
         var last_material: *OldMaterial = @intToPtr(*OldMaterial, @ptrToInt(&self));
@@ -1296,7 +1296,7 @@ fn createDepthImage(gc: *const GraphicsContext, depth_format: vk.Format, swapcha
         .usage = .gpu_only,
         .requiredFlags = .{ .device_local_bit = true },
     });
-    var depth_image = Texture.init(try gc.allocator.createImage(&dimg_info, &malloc_info, null));
+    var depth_image = Texture.init(try gc.vma.createImage(&dimg_info, &malloc_info, null));
 
     const dview_info = vkinit.imageViewCreateInfo(depth_format, depth_image.image.image, .{ .depth_bit = true });
     depth_image.view = try gc.vkd.createImageView(gc.dev, &dview_info, null);
@@ -1403,7 +1403,7 @@ fn createOldDescriptors(gc: *const GraphicsContext) struct { layout: vk.Descript
     }, null) catch unreachable;
 
     const scene_param_buffer_size = FRAME_OVERLAP * padUniformBufferSize(gc, @sizeOf(GpuSceneData));
-    const scene_param_buffer = gc.allocator.createUntypedBuffer(scene_param_buffer_size, .{ .uniform_buffer_bit = true }, .cpu_to_gpu, .{}) catch unreachable;
+    const scene_param_buffer = gc.vma.createUntypedBuffer(scene_param_buffer_size, .{ .uniform_buffer_bit = true }, .cpu_to_gpu, .{}) catch unreachable;
 
     return .{
         .layout = global_set_layout,
@@ -1418,16 +1418,16 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
     {
         const buffer_size = mesh.vertices.items.len * @sizeOf(Vertex);
 
-        const staging_buffer = try gc.allocator.createUntypedBuffer(buffer_size, .{ .transfer_src_bit = true }, .cpu_only, .{});
-        defer staging_buffer.deinit(gc.allocator);
+        const staging_buffer = try gc.vma.createUntypedBuffer(buffer_size, .{ .transfer_src_bit = true }, .cpu_only, .{});
+        defer staging_buffer.deinit(gc.vma);
 
         // copy vertex data
-        const verts = try gc.allocator.mapMemory(Vertex, staging_buffer.allocation);
+        const verts = try gc.vma.mapMemory(Vertex, staging_buffer.allocation);
         std.mem.copy(Vertex, verts[0..mesh.vertices.items.len], mesh.vertices.items);
-        gc.allocator.unmapMemory(staging_buffer.allocation);
+        gc.vma.unmapMemory(staging_buffer.allocation);
 
         // create Mesh buffer
-        mesh.vert_buffer = try gc.allocator.createUntypedBuffer(buffer_size, .{ .vertex_buffer_bit = true, .transfer_dst_bit = true }, .gpu_only, .{});
+        mesh.vert_buffer = try gc.vma.createUntypedBuffer(buffer_size, .{ .vertex_buffer_bit = true, .transfer_dst_bit = true }, .gpu_only, .{});
 
         // execute the copy command on the GPU
         const cmd_buf = try gc.beginOneTimeCommandBuffer();
@@ -1444,16 +1444,16 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
     {
         const buffer_size = mesh.indices.len * @sizeOf(u32);
 
-        const staging_buffer = try gc.allocator.createUntypedBuffer(buffer_size, .{ .transfer_src_bit = true }, .cpu_only, .{});
-        defer staging_buffer.deinit(gc.allocator);
+        const staging_buffer = try gc.vma.createUntypedBuffer(buffer_size, .{ .transfer_src_bit = true }, .cpu_only, .{});
+        defer staging_buffer.deinit(gc.vma);
 
         // copy index data
-        const dst_indices = try gc.allocator.mapMemory(u32, staging_buffer.allocation);
+        const dst_indices = try gc.vma.mapMemory(u32, staging_buffer.allocation);
         std.mem.copy(u32, dst_indices[0..mesh.indices.len], mesh.indices);
-        gc.allocator.unmapMemory(staging_buffer.allocation);
+        gc.vma.unmapMemory(staging_buffer.allocation);
 
         // create Mesh buffer
-        mesh.index_buffer = try gc.allocator.createUntypedBuffer(buffer_size, .{ .index_buffer_bit = true, .transfer_dst_bit = true }, .gpu_only, .{});
+        mesh.index_buffer = try gc.vma.createUntypedBuffer(buffer_size, .{ .index_buffer_bit = true, .transfer_dst_bit = true }, .gpu_only, .{});
 
         // execute the copy command on the GPU
         const cmd_buf = try gc.beginOneTimeCommandBuffer();
@@ -1473,10 +1473,10 @@ fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: [
 
     // allocate temporary buffer for holding texture data to upload and copy image data to it
     const img_pixels = img.asSlice();
-    const staging_buffer = try gc.allocator.createUntypedBuffer(img_pixels.len, .{ .transfer_src_bit = true }, .cpu_only, .{});
-    const data = try gc.allocator.mapMemory(u8, staging_buffer.allocation);
+    const staging_buffer = try gc.vma.createUntypedBuffer(img_pixels.len, .{ .transfer_src_bit = true }, .cpu_only, .{});
+    const data = try gc.vma.mapMemory(u8, staging_buffer.allocation);
     std.mem.copy(u8, data[0..img_pixels.len], img_pixels);
-    gc.allocator.unmapMemory(staging_buffer.allocation);
+    gc.vma.unmapMemory(staging_buffer.allocation);
 
     const img_extent = vk.Extent3D{
         .width = @intCast(u32, img.w),
@@ -1488,7 +1488,7 @@ fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: [
         .usage = .gpu_only,
     });
 
-    var new_img = try gc.allocator.createImage(&dimg_info, &malloc_info, null);
+    var new_img = try gc.vma.createImage(&dimg_info, &malloc_info, null);
     {
         const cmd_buf = try gc.beginOneTimeCommandBuffer();
         // barrier the image into the transfer-receive layout
@@ -1540,6 +1540,6 @@ fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: [
     const image_info = vkinit.imageViewCreateInfo(.r8g8b8a8_srgb, new_img.image, .{ .color_bit = true });
     new_img.default_view = try gc.vkd.createImageView(gc.dev, &image_info, null);
 
-    staging_buffer.deinit(gc.allocator);
+    staging_buffer.deinit(gc.vma);
     return new_img;
 }

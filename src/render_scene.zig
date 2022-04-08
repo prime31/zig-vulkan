@@ -62,9 +62,9 @@ pub const RenderScene = struct {
         self.material_convert.deinit();
         self.mesh_convert.deinit();
 
-        self.merged_vert_buffer.deinit(self.gc.allocator);
-        self.merged_index_buffer.deinit(self.gc.allocator);
-        self.object_data_buffer.deinit(self.gc.allocator);
+        self.merged_vert_buffer.deinit(self.gc.vma);
+        self.merged_index_buffer.deinit(self.gc.vma);
+        self.object_data_buffer.deinit(self.gc.vma);
     }
 
     pub fn registerObject(self: Self, object: MeshObject) !Handle(RenderObject) {
@@ -199,8 +199,8 @@ pub const RenderScene = struct {
             m.first_vert = @intCast(u32, total_verts);
         }
 
-        self.merged_vert_buffer = try self.gc.allocator.createBuffer(Vertex, total_verts * @sizeOf(Vertex), .{ .transfer_dst_bit = true, .vertex_buffer_bit = true }, .gpu_only, .{});
-        self.merged_index_buffer = try self.gc.allocator.createBuffer(u32, total_indices * @sizeOf(u32), .{ .transfer_dst_bit = true, .index_buffer_bit = true }, .gpu_only, .{});
+        self.merged_vert_buffer = try self.gc.vma.createBuffer(Vertex, total_verts * @sizeOf(Vertex), .{ .transfer_dst_bit = true, .vertex_buffer_bit = true }, .gpu_only, .{});
+        self.merged_index_buffer = try self.gc.vma.createBuffer(u32, total_indices * @sizeOf(u32), .{ .transfer_dst_bit = true, .index_buffer_bit = true }, .gpu_only, .{});
 
         const cmd_buf = try self.gc.beginOneTimeCommandBuffer();
         for (self.meshes.items) |m| {
