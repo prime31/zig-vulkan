@@ -54,7 +54,7 @@ test "ScratchAllocator" {
     defer _ = general_purpose_allocator.deinit();
 
     var tmp_allocator = ScratchAllocator.init(gpa, 1);
-    var tmp = tmp_allocator.allocator();
+    const tmp = tmp_allocator.allocator();
     defer tmp_allocator.deinit();
 
     _ = tmp.alloc(i32, 10000000000) catch |err| {

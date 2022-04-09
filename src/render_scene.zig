@@ -558,12 +558,12 @@ const Multibatch = struct {
 };
 
 const MeshPass = struct {
-    multibatches: ArrayList(Multibatch),
-    batches: ArrayList(IndirectBatch),
-    unbatched_objects: ArrayList(RenderObject),
-    flat_batches: ArrayList(RenderBatch),
-    objects: ArrayList(PassObject),
-    reusable_objects: ArrayList(PassObject),
+    multibatches: ArrayList(Multibatch), // final draw-indirect segments
+    batches: ArrayList(IndirectBatch), // draw indirect batches
+    flat_batches: ArrayList(RenderBatch), // sorted list of objects in the pass
+    objects: ArrayList(PassObject), // unsorted object data
+    unbatched_objects: ArrayList(RenderObject), // objects pending addition
+    reusable_objects: ArrayList(PassObject), // indicides for the objects array that can be reused
     objects_to_delete: ArrayList(PassObject),
 
     compacted_instance_buffer: vma.AllocatedBuffer(u32) = undefined,
@@ -580,9 +580,9 @@ const MeshPass = struct {
         return .{
             .multibatches = ArrayList(Multibatch).init(gpa),
             .batches = ArrayList(IndirectBatch).init(gpa),
-            .unbatched_objects = ArrayList(RenderObject).init(gpa),
             .flat_batches = ArrayList(RenderBatch).init(gpa),
             .objects = ArrayList(PassObject).init(gpa),
+            .unbatched_objects = ArrayList(RenderObject).init(gpa),
             .reusable_objects = ArrayList(PassObject).init(gpa),
             .objects_to_delete = ArrayList(PassObject).init(gpa),
             .pass_type = pass_type,
@@ -592,9 +592,9 @@ const MeshPass = struct {
     pub fn deinit(self: MeshPass) void {
         self.multibatches.deinit();
         self.batches.deinit();
-        self.unbatched_objects.deinit();
         self.flat_batches.deinit();
         self.objects.deinit();
+        self.unbatched_objects.deinit();
         self.reusable_objects.deinit();
         self.objects_to_delete.deinit();
         // TODO: delete the allocated buffers

@@ -6,6 +6,7 @@ const glfw = @import("glfw");
 const dispatch = @import("vulkan_dispatch.zig");
 
 const Allocator = std.mem.Allocator;
+const ScratchAllocator = @import("utils/scratch_allocator.zig").ScratchAllocator;
 const BaseDispatch = dispatch.BaseDispatch;
 const InstanceDispatch = dispatch.InstanceDispatch;
 const DeviceDispatch = dispatch.DeviceDispatch;
@@ -15,6 +16,8 @@ const enableValidationLayers = dispatch.enableValidationLayers;
 const required_device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name} ++ if (@import("builtin").os.tag == .macos) [_][*:0]const u8{vk.extension_info.khr_portability_subset.name} else [_][*:0]const u8{};
 const required_instance_extensions = if (enableValidationLayers) [_][*:0]const u8{vk.extension_info.ext_debug_utils.name} else [_][*:0]const u8{};
 const validation_layers = [_][*:0]const u8{"VK_LAYER_KHRONOS_validation"};
+
+var scratch_allocator: ScratchAllocator = undefined;
 
 pub const GraphicsContext = struct {
     vkb: BaseDispatch,
@@ -33,12 +36,17 @@ pub const GraphicsContext = struct {
     present_queue: Queue,
     vma: vma.Allocator,
     gpa: std.mem.Allocator,
+    scratch: std.mem.Allocator,
     upload_context: UploadContext,
     debug_message: if (enableValidationLayers) vk.DebugUtilsMessengerEXT else void,
 
     pub fn init(gpa: Allocator, app_name: [*:0]const u8, window: glfw.Window) !GraphicsContext {
+        // prep allocators
         var self: GraphicsContext = undefined;
         self.gpa = gpa;
+
+        scratch_allocator = ScratchAllocator.init(gpa, 2);
+        self.scratch = scratch_allocator.allocator();
 
         const vk_proc = @ptrCast(fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, glfw.getInstanceProcAddress);
         self.vkb = try BaseDispatch.load(vk_proc);
@@ -139,6 +147,7 @@ pub const GraphicsContext = struct {
     }
 
     pub fn deinit(self: *GraphicsContext) void {
+        scratch_allocator.deinit();
         self.vma.deinit();
         self.upload_context.deinit(self);
         self.vkd.destroyDevice(self.dev, null);
