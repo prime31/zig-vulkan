@@ -242,7 +242,7 @@ pub const DescriptorBuilder = struct {
         // build layout first
         layout.* = try self.cache.createDescriptorSetLayout(&.{
             .flags = .{},
-            .binding_count = self.bindings.items.len,
+            .binding_count = @intCast(u32, self.bindings.items.len),
             .p_bindings = self.bindings.items.ptr,
         });
 

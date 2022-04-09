@@ -140,6 +140,38 @@ pub const MaterialSystem = struct {
         try builder.setShaders(&effect);
         return ShaderPass.init(effect, try builder.build(self.engine.gc, render_pass));
     }
+
+    fn buildMaterial(self: *MaterialSystem, name: []const u8, info: MaterialData) !Material {
+        if (self.getMaterial(info.base_template)) |mat| return mat;
+
+        var material = Material.init(self.engine.gc.gpa, self.template_cache.getPtr(info.base_template).?);
+        try material.textures.appendSlice(info.textures.items);
+        // not handled yet
+        material.pass_sets.set(.directional_shadow, .null_handle);
+
+        var db = vkutil.DescriptorBuilder.init(self.engine.descriptor_allocator, self.engine.descriptor_layout_cache);
+        for (info.textures) |tex, i| {
+            const image_buffer_info = vk.DescriptorImageInfo{
+                .sampler = tex.sampler,
+                .image_view = tex.view,
+                .layout = .shader_read_only_optimal,
+            };
+            db.bindImage(@intCast(u32, i), &image_buffer_info, .combined_image_sampler, .{ .fragment_bit = true });
+        }
+
+        _ = db.build(material.pass_sets.get(.forward));
+        _ = db.build(material.pass_sets.get(.transparency));
+
+        // add material to cache
+        self.material_cache.put(info, material);
+        self.materials.put(name, material);
+
+        return material;
+    }
+
+    pub fn getMaterial(self: MaterialSystem, name: []const u8) ?Material {
+        return self.materials.get(name);
+    }
 };
 
 pub const VertexAttributeTemplate = enum {
@@ -242,29 +274,55 @@ pub const EffectTemplate = struct {
 
 pub const MaterialData = struct {
     textures: std.ArrayList(SampledTexture),
-    parameters: *ShaderParameters,
+    parameters: *ShaderParameters = undefined,
     base_template: []const u8,
 
-    pub fn hash(self: MaterialData) u64 {
+    fn hash(self: MaterialData) u64 {
         const result = std.hash.Wyhash.hash(0, self.base_template);
         const tex_hash = std.hash.Wyhash.hash(0, std.mem.sliceAsBytes(self.textures.items));
         return result ^ tex_hash;
     }
 
-    pub fn eql(self: MaterialData, other: MaterialData) bool {
+    fn eql(self: MaterialData, other: MaterialData) bool {
         if (!std.mem.eql(u8, self.base_template, other.base_template) or self.textures.items.len != other.textures.items.len) {
             return false;
         }
 
         return std.mem.eql(u8, std.mem.sliceAsBytes(self.textures.items), std.mem.sliceAsBytes(other.textures.items));
     }
+
+    pub fn init(gpa: std.mem.Allocator, base_template: []const u8) MaterialData {
+        return .{
+            .textures = std.ArrayList(SampledTexture).init(gpa),
+            .base_template = base_template,
+        };
+    }
+
+    pub fn deinit(self: Material) void {
+        self.textures.deinit();
+    }
+
+    pub fn addTexture(self: *MaterialData, sampler: vk.Sampler, view: vk.ImageView) !void {
+        try self.textures.append(.{ .sampler = sampler, .view = view });
+    }
 };
 
 pub const Material = struct {
-    original: EffectTemplate,
+    base_template: *EffectTemplate,
     pass_sets: PerPassData(vk.DescriptorSet) = .{},
     textures: std.ArrayList(SampledTexture),
-    params: *ShaderParameters,
+    params: *ShaderParameters = undefined,
+
+    pub fn init(gpa: std.mem.Allocator, base_template: *EffectTemplate) Material {
+        return .{
+            .base_template = base_template,
+            .textures = std.ArrayList(SampledTexture).init(gpa),
+        };
+    }
+
+    pub fn deinit(self: Material) void {
+        self.textures.deinit();
+    }
 };
 
 const MaterialDataHashContext = struct {
