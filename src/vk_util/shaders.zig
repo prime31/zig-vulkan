@@ -14,13 +14,14 @@ pub const ShaderModule = struct {
 
     pub fn init(gc: *const GraphicsContext, comptime res_path: []const u8) !ShaderModule {
         const data = @field(resources, res_path);
+        const code = @alignCast(@alignOf(u32), std.mem.bytesAsSlice(u32, data));
 
         return ShaderModule{
-            .code = @alignCast(@alignOf(u32), std.mem.bytesAsSlice(u32, data)),
+            .code = code,
             .module = try gc.vkd.createShaderModule(gc.dev, &.{
                 .flags = .{},
                 .code_size = data.len,
-                .p_code = @ptrCast([*]const u32, data),
+                .p_code = code.ptr,
             }, null),
         };
     }
@@ -61,7 +62,7 @@ pub const ShaderEffect = struct {
     pub fn deinit(self: *ShaderEffect, gc: *const GraphicsContext) void {
         gc.destroy(self.built_layout);
         self.bindings.deinit();
-        // ShaderStage is owned by ShaderCache and will be deinitted there
+        // ShaderStage.shader_module is owned by ShaderCache and will be deinitted there
         self.stages.deinit();
     }
 
@@ -70,12 +71,12 @@ pub const ShaderEffect = struct {
     }
 
     pub fn fillStages(self: ShaderEffect, pipeline_stages: *std.BoundedArray(vk.PipelineShaderStageCreateInfo, 2)) !void {
-        for (self.stages) |s|
-            try pipeline_stages.append(s);
+        for (self.stages.items) |s|
+            try pipeline_stages.append(vkinit.pipelineShaderStageCreateInfo(s.shader_module.module, s.stage));
     }
 
     pub fn reflectLayout(self: *ShaderEffect, gc: *const GraphicsContext, overrides: []const ReflectionOverrides) !void {
-        var gpa = self.stages.allocator;
+        var gpa = gc.gpa;
 
         var set_layouts = std.ArrayList(DescriptorSetLayoutData).init(gpa);
         defer set_layouts.deinit();
@@ -86,7 +87,7 @@ pub const ShaderEffect = struct {
 
         for (self.stages.items) |*s| {
             var spvmodule: spv.SpvReflectShaderModule = undefined;
-            var res = spv.spvReflectCreateShaderModule(resources.tri_mesh_descriptors_vert.len, @ptrCast([*]const u32, resources.tri_mesh_descriptors_vert), &spvmodule);
+            var res = spv.spvReflectCreateShaderModule(s.shader_module.code.len * @sizeOf(u32), s.shader_module.code.ptr, &spvmodule);
             if (res != spv.SPV_REFLECT_RESULT_SUCCESS) return error.CreateFailed;
 
             var count: u32 = 0;
@@ -164,9 +165,7 @@ pub const ShaderEffect = struct {
 
         for (merged_layouts) |*ly, i| {
             ly.* = try DescriptorSetLayoutData.init(gpa, 0);
-
             ly.set_number = @intCast(u32, i);
-            ly.create_info = std.mem.zeroes(vk.DescriptorSetLayoutCreateInfo);
 
             var binds = std.AutoHashMap(usize, vk.DescriptorSetLayoutBinding).init(gpa);
             defer binds.deinit();
@@ -199,15 +198,16 @@ pub const ShaderEffect = struct {
 
             ly.create_info = std.mem.zeroInit(vk.DescriptorSetLayoutCreateInfo, .{
                 .binding_count = @intCast(u32, ly.bindings.items.len),
+                .p_bindings = ly.bindings.items.ptr,
                 .flags = .{},
             });
 
             if (ly.create_info.binding_count > 0) {
                 self.set_hashes[i] = std.hash.Wyhash.hash(0, std.mem.asBytes(&ly.create_info));
-                self.set_layouts[i] = .null_handle;
+                self.set_layouts[i] = try gc.vkd.createDescriptorSetLayout(gc.dev, &ly.create_info, null);
             } else {
                 self.set_hashes[i] = 0;
-                self.set_layouts[i] = .null_handle;
+                // self.set_layouts[i] = .null_handle;
             }
         }
 
@@ -225,6 +225,7 @@ pub const ShaderEffect = struct {
             }
         }
 
+        print("--- layout count: {}\n", .{ s });
         pipeline_layout_info.set_layout_count = s;
         pipeline_layout_info.p_set_layouts = &compacted_layouts;
 
@@ -240,6 +241,8 @@ const DescriptorSetLayoutData = struct {
     pub fn init(allocator: std.mem.Allocator, binding_size: usize) !DescriptorSetLayoutData {
         var bindings = try std.ArrayList(vk.DescriptorSetLayoutBinding).initCapacity(allocator, binding_size);
         bindings.expandToCapacity();
+
+        for (bindings.items) |*b| b.* = std.mem.zeroes(vk.DescriptorSetLayoutBinding);
 
         return DescriptorSetLayoutData{
             .bindings = bindings,

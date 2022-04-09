@@ -34,7 +34,7 @@ pub const PipelineBuilder = struct {
         self.vertex_input_info.vertex_binding_description_count = 0;
     }
 
-    pub fn setShaders(self: *PipelineBuilder, effect: *vkutil.ShaderEffect) !void {
+    pub fn setShaders(self: *PipelineBuilder, effect: *const vkutil.ShaderEffect) !void {
         self.shader_stages.len = 0;
         try effect.fillStages(&self.shader_stages);
         self.pipeline_layout = effect.built_layout;

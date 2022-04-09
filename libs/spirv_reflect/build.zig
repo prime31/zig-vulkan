@@ -11,8 +11,7 @@ pub fn link(exe: *std.build.LibExeObjStep) void {
     exe.addCSourceFile(pwd() ++ "spirv_reflect.c", &.{});
 }
 
-pub const pkg =
-    std.build.Pkg{
+pub const pkg = std.build.Pkg{
     .name = "spirv",
     .path = .{ .path = pwd() ++ "spirv_reflect.zig" },
 };

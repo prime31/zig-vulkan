@@ -1330,16 +1330,6 @@ fn createShaderModule(gc: *const GraphicsContext, data: [*]const u32, len: usize
     }, null);
 }
 
-fn createShaderStageCreateInfo(shader_module: vk.ShaderModule, stage: vk.ShaderStageFlags) vk.PipelineShaderStageCreateInfo {
-    return .{
-        .flags = .{},
-        .stage = stage,
-        .module = shader_module,
-        .p_name = "main",
-        .p_specialization_info = null,
-    };
-}
-
 fn createPipeline(gc: *const GraphicsContext, render_pass: vk.RenderPass, pipeline_layout: vk.PipelineLayout, frag_shader_bytes: [:0]const u8) !vk.Pipeline {
     const vert = try createShaderModule(gc, @ptrCast([*]const u32, resources.tri_mesh_descriptors_vert), resources.tri_mesh_descriptors_vert.len);
     const frag = try createShaderModule(gc, @ptrCast([*]const u32, @alignCast(@alignOf(u32), std.mem.bytesAsSlice(u32, frag_shader_bytes))), frag_shader_bytes.len);
@@ -1352,8 +1342,8 @@ fn createPipeline(gc: *const GraphicsContext, render_pass: vk.RenderPass, pipeli
     builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less_or_equal);
     builder.vertex_description = Vertex.vertex_description;
 
-    try builder.addShaderStage(createShaderStageCreateInfo(vert, .{ .vertex_bit = true }));
-    try builder.addShaderStage(createShaderStageCreateInfo(frag, .{ .fragment_bit = true }));
+    try builder.addShaderStage(vkinit.pipelineShaderStageCreateInfo(vert, .{ .vertex_bit = true }));
+    try builder.addShaderStage(vkinit.pipelineShaderStageCreateInfo(frag, .{ .fragment_bit = true }));
     return try builder.build(gc, render_pass);
 }
 

@@ -7,20 +7,19 @@ layout (location = 3) in vec2 vTexCoord;
 layout (location = 0) out vec3 outColor;
 layout (location = 1) out vec2 texCoord;
 layout (location = 2) out vec3 outNormal;
-layout(location = 3) out vec4 ShadowCoord;
+layout (location = 3) out vec4 ShadowCoord;
 
-layout(set = 0, binding = 0) uniform  CameraBuffer {   
+layout (set = 0, binding = 0) uniform CameraBuffer {   
     mat4 view;
     mat4 proj;
 	mat4 viewproj;
 } cameraData;
 
-
-layout(set = 0, binding = 1) uniform SceneData {
+layout (set = 0, binding = 1) uniform SceneData {
     vec4 fogColor; // w is for exponent
-	vec4 fogDistances; //x for min, y for max, zw unused.
+	vec4 fogDistances; // x for min, y for max, zw unused.
 	vec4 ambientColor;
-	vec4 sunlightDirection; //w for sun power
+	vec4 sunlightDirection; // w for sun power
 	vec4 sunlightColor;
 	mat4 sunlightShadowMatrix;
 } sceneData;
@@ -45,13 +44,13 @@ vec3 OctNormalDecode(vec2 f) {
     return normalize( n );
 }
 
-//all object matrices
-layout(std140, set = 1, binding = 0) readonly buffer ObjectBuffer {
+// all object matrices
+layout (std140, set = 1, binding = 0) readonly buffer ObjectBuffer {
 	ObjectData objects[];
 } objectBuffer;
 
-//all object indices
-layout(set = 1, binding = 1) readonly buffer InstanceBuffer {
+// all object indices
+layout (set = 1, binding = 1) readonly buffer InstanceBuffer {
 	uint IDs[];
 } instanceBuffer;
 

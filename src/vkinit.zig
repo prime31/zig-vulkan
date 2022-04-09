@@ -67,20 +67,15 @@ pub fn submitInfo(cmd_buffer: *const vk.CommandBuffer) vk.SubmitInfo {
 // 	return info;
 // }
 
-// VkPipelineShaderStageCreateInfo vkinit::pipeline_shader_stage_create_info(VkShaderStageFlagBits stage, VkShaderModule shaderModule)
-// {
-// 	VkPipelineShaderStageCreateInfo info{};
-// 	info.sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
-// 	info.pNext = nullptr;
-
-// 	//shader stage
-// 	info.stage = stage;
-// 	//module containing the code for this shader stage
-// 	info.module = shaderModule;
-// 	//the entry point of the shader
-// 	info.pName = "main";
-// 	return info;
-// }
+pub fn pipelineShaderStageCreateInfo(shader_module: vk.ShaderModule, stage: vk.ShaderStageFlags) vk.PipelineShaderStageCreateInfo {
+    return .{
+        .flags = .{},
+        .stage = stage,
+        .module = shader_module,
+        .p_name = "main",
+        .p_specialization_info = null,
+    };
+}
 
 /// vertex input controls how to read vertices from vertex buffers
 pub fn pipelineVertexInputStateCreateInfo() vk.PipelineVertexInputStateCreateInfo {

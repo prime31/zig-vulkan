@@ -15,7 +15,6 @@ pub const GpuObjectData = struct {
 };
 
 pub const MeshPassType = enum(u8) {
-    none,
     forward,
     transparency,
     directional_shadow,
