@@ -79,14 +79,8 @@ pub const ShaderEffect = struct {
     }
 
     pub fn reflectLayout(self: *ShaderEffect, gc: *const GraphicsContext, overrides: []const ReflectionOverrides) !void {
-        var gpa = gc.gpa;
-
-        var set_layouts = std.ArrayList(DescriptorSetLayoutData).init(gpa);
-        defer set_layouts.deinit();
-        defer for (set_layouts.items) |layout| layout.deinit();
-
-        var constant_ranges = std.ArrayList(vk.PushConstantRange).init(gpa);
-        defer constant_ranges.deinit();
+        var set_layouts = std.ArrayList(DescriptorSetLayoutData).init(gc.scratch);
+        var constant_ranges = std.BoundedArray(vk.PushConstantRange, 4){};
 
         for (self.stages.items) |*s| {
             var spvmodule: spv.SpvReflectShaderModule = undefined;
@@ -97,15 +91,14 @@ pub const ShaderEffect = struct {
             res = spv.spvReflectEnumerateDescriptorSets(&spvmodule, &count, null);
             if (res != spv.SPV_REFLECT_RESULT_SUCCESS) return error.EnumerateDescriptorSetsFailed;
 
-            var sets = try gpa.alloc(*spv.SpvReflectDescriptorSet, count);
-            defer gpa.free(sets);
+            var sets = try gc.scratch.alloc(*spv.SpvReflectDescriptorSet, count);
             res = spv.spvReflectEnumerateDescriptorSets(&spvmodule, &count, @ptrCast([*c][*c]spv.SpvReflectDescriptorSet, sets.ptr));
             if (res != spv.SPV_REFLECT_RESULT_SUCCESS) return error.EnumerateFailed;
 
             var i_set: usize = 0;
             while (i_set < sets.len) : (i_set += 1) {
                 const refl_set = sets[i_set];
-                var layout = try DescriptorSetLayoutData.init(gpa, refl_set.binding_count);
+                var layout = try DescriptorSetLayoutData.init(gc.scratch, refl_set.binding_count);
 
                 var i_binding: usize = 0;
                 while (i_binding < refl_set.binding_count) : (i_binding += 1) {
@@ -148,8 +141,7 @@ pub const ShaderEffect = struct {
             res = spv.spvReflectEnumeratePushConstantBlocks(&spvmodule, &count, null);
             if (res != spv.SPV_REFLECT_RESULT_SUCCESS) return error.EnumeratePushConstantsFailed;
 
-            var pconstants = try gpa.alloc(*spv.SpvReflectBlockVariable, count);
-            defer gpa.free(pconstants);
+            var pconstants = try gc.scratch.alloc(*spv.SpvReflectBlockVariable, count);
             res = spv.spvReflectEnumeratePushConstantBlocks(&spvmodule, &count, @ptrCast([*c][*c]spv.SpvReflectBlockVariable, pconstants.ptr));
             if (res != spv.SPV_REFLECT_RESULT_SUCCESS) return error.EnumeratePushConstantsFailed;
 
@@ -164,14 +156,11 @@ pub const ShaderEffect = struct {
         }
 
         var merged_layouts: [4]DescriptorSetLayoutData = undefined;
-        defer for (merged_layouts) |ly| ly.deinit();
-
         for (merged_layouts) |*ly, i| {
-            ly.* = try DescriptorSetLayoutData.init(gpa, 0);
+            ly.* = try DescriptorSetLayoutData.init(gc.scratch, 0);
             ly.set_number = @intCast(u32, i);
 
-            var binds = std.AutoHashMap(usize, vk.DescriptorSetLayoutBinding).init(gpa);
-            defer binds.deinit();
+            var binds = std.AutoHashMap(usize, vk.DescriptorSetLayoutBinding).init(gc.scratch);
 
             for (set_layouts.items) |*s| {
                 if (s.set_number == i) {
@@ -215,8 +204,8 @@ pub const ShaderEffect = struct {
 
         // we start from just the default empty pipeline layout info
         var pipeline_layout_info = vkinit.pipelineLayoutCreateInfo();
-        pipeline_layout_info.p_push_constant_ranges = constant_ranges.items.ptr;
-        pipeline_layout_info.push_constant_range_count = @intCast(u32, constant_ranges.items.len);
+        pipeline_layout_info.p_push_constant_ranges = &constant_ranges.buffer;
+        pipeline_layout_info.push_constant_range_count = @intCast(u32, constant_ranges.len);
 
         var compacted_layouts: [4]vk.DescriptorSetLayout = undefined;
         var s: u32 = 0;
