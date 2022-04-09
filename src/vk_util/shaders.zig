@@ -60,10 +60,13 @@ pub const ShaderEffect = struct {
     }
 
     pub fn deinit(self: *ShaderEffect, gc: *const GraphicsContext) void {
+        // ShaderStage.shader_module is owned by ShaderCache and will be deinitted there
         gc.destroy(self.built_layout);
         self.bindings.deinit();
-        // ShaderStage.shader_module is owned by ShaderCache and will be deinitted there
         self.stages.deinit();
+
+        for (self.set_layouts) |sl|
+            if (sl != .null_handle) gc.destroy(sl);
     }
 
     pub fn addStage(self: *ShaderEffect, shader_module: *ShaderModule, stage: vk.ShaderStageFlags) !void {

@@ -18,8 +18,10 @@ pub const MaterialSystem = struct {
     template_cache: std.StringHashMap(EffectTemplate),
     materials: std.StringHashMap(Material),
     material_cache: std.HashMap(MaterialData, Material, MaterialDataHashContext, 80),
-    // tmp until I figure out who owns ShaderEffect since one ShaderEffect can be used in may EffectTemplates
+    // tmp until I figure out who owns ShaderEffect since one ShaderEffect can be used in many EffectTemplates
     tmp_effect_cache: std.ArrayList(ShaderEffect),
+    // tmp until I figure out who owns ShaderPass since one ShaderPass can be used in many EffectTemplates
+    tmp_pass_cache: std.ArrayList(ShaderPass),
 
     pub fn init(engine: *Engine) !MaterialSystem {
         var self = MaterialSystem{
@@ -30,6 +32,7 @@ pub const MaterialSystem = struct {
             .materials = std.StringHashMap(Material).init(engine.gc.gpa),
             .material_cache = std.HashMap(MaterialData, Material, MaterialDataHashContext, 80).init(engine.gc.gpa),
             .tmp_effect_cache = std.ArrayList(ShaderEffect).init(engine.gc.gpa),
+            .tmp_pass_cache = std.ArrayList(ShaderPass).init(engine.gc.gpa),
         };
 
         try self.fillBuilders();
@@ -38,7 +41,8 @@ pub const MaterialSystem = struct {
     }
 
     pub fn deinit(self: *MaterialSystem) void {
-        // TODO: see tmp_effect_cache comment
+        // TODO: see tmp_effect_cache/tmp_pass_cache comment
+
         // var template_cache_iter = self.template_cache.valueIterator();
         // while (template_cache_iter.next()) |et| et.deinit(self.engine.gc);
         self.template_cache.deinit();
@@ -46,8 +50,23 @@ pub const MaterialSystem = struct {
         for (self.tmp_effect_cache.items) |*se| se.deinit(self.engine.gc);
         self.tmp_effect_cache.deinit();
 
+        for (self.tmp_pass_cache.items) |*sp| sp.deinit(self.engine.gc);
+        self.tmp_pass_cache.deinit();
+
         self.materials.deinit();
         self.material_cache.deinit();
+    }
+
+    fn fillBuilders(self: *MaterialSystem) !void {
+        // forward builder
+        self.forward_builder.vertex_description = Vertex.vertex_description;
+        self.forward_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .greater_or_equal);
+
+        // shadow builder
+        self.shadow_builder.vertex_description = Vertex.vertex_description;
+        self.shadow_builder.rasterizer.cull_mode = .{ .front_bit = true };
+        self.shadow_builder.rasterizer.depth_bias_enable = vk.TRUE;
+        self.shadow_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less);
     }
 
     fn buildDefaultTemplates(self: *MaterialSystem) !void {
@@ -60,6 +79,10 @@ pub const MaterialSystem = struct {
         var textured_lit_pass = try self.buildShader(self.engine.render_pass, &self.forward_builder, textured_lit);
         var default_lit_pass = try self.buildShader(self.engine.render_pass, &self.forward_builder, default_lit);
         var opaque_shadowcast_pass = try self.buildShader(self.engine.shadow_pass, &self.shadow_builder, opaque_shadowcast);
+
+        try self.tmp_pass_cache.append(textured_lit_pass);
+        try self.tmp_pass_cache.append(default_lit_pass);
+        try self.tmp_pass_cache.append(opaque_shadowcast_pass);
 
         {
             var default_textured = EffectTemplate.init(.@"opaque");
@@ -80,8 +103,9 @@ pub const MaterialSystem = struct {
 
             // passes
             const transparent_lit_pass = try self.buildShader(self.engine.render_pass, &self.forward_builder, textured_lit);
+            try self.tmp_pass_cache.append(transparent_lit_pass);
 
-            var default_textured = EffectTemplate.init(.transparent); 
+            var default_textured = EffectTemplate.init(.transparent);
             default_textured.pass_shaders.set(.transparency, transparent_lit_pass);
             try self.template_cache.put("texturedPBR_transparent", default_textured);
         }
@@ -94,21 +118,9 @@ pub const MaterialSystem = struct {
         }
     }
 
-    fn fillBuilders(self: *MaterialSystem) !void {
-        // forward builder
-        self.forward_builder.vertex_description = Vertex.vertex_description;
-        self.forward_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .greater_or_equal);
-
-        // shadow builder
-        self.shadow_builder.vertex_description = Vertex.vertex_description;
-        self.shadow_builder.rasterizer.cull_mode = .{ .front_bit = true };
-        self.shadow_builder.rasterizer.depth_bias_enable = vk.TRUE;
-        self.shadow_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less);
-    }
-
     // TODO: rename to buildShaderEffect
     fn buildEffect(self: *MaterialSystem, comptime vert_res_path: []const u8, comptime frag_res_path: ?[]const u8) !ShaderEffect {
-        const overrides = &[_]ShaderEffect.ReflectionOverrides {
+        const overrides = &[_]ShaderEffect.ReflectionOverrides{
             .{ .name = "sceneData", .overriden_type = .uniform_buffer_dynamic },
             .{ .name = "cameraData", .overriden_type = .uniform_buffer_dynamic },
         };
@@ -165,6 +177,11 @@ pub const ShaderPass = struct {
             .pip_layout = effect.built_layout,
         };
     }
+
+    pub fn deinit(self: ShaderPass, gc: *const GraphicsContext) void {
+        // ShaderEffect owns the PipelineLayout and ShaderCache and it is owned by EffectTemplate for now...
+        gc.destroy(self.pip);
+    }
 };
 
 pub const SampledTexture = struct {
@@ -178,7 +195,7 @@ pub fn PerPassData(comptime T: type) type {
     return struct {
         const Self = @This();
 
-        data: [3]?T = [_]?T{ null } ** 3,
+        data: [3]?T = [_]?T{null} ** 3,
 
         pub fn set(self: *Self, mesh_pass_type: MeshPassType, value: T) void {
             self.data[@intCast(u64, @enumToInt(mesh_pass_type))] = value;
