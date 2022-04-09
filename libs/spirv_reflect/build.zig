@@ -8,7 +8,7 @@ fn pwd() []const u8 {
 
 pub fn link(exe: *std.build.LibExeObjStep) void {
     exe.addIncludePath(pwd());
-    exe.addCSourceFile(pwd() ++ "spirv_reflect.c", &.{});
+    exe.addCSourceFile(pwd() ++ "spirv_reflect.c", &[_][]const u8{ "-std=c99", "-O3", "-fno-sanitize=pointer-overflow" });
 }
 
 pub const pkg = std.build.Pkg{

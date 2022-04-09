@@ -118,7 +118,6 @@ pub const MaterialSystem = struct {
         if (frag_res_path) |frag|
             try effect.addStage(self.engine.shader_cache.getShader(frag), .{ .fragment_bit = true });
 
-        std.debug.print("builder {s} and {s}\n", .{ vert_res_path, frag_res_path });
         try effect.reflectLayout(self.engine.gc, overrides[0..]);
         try self.tmp_effect_cache.append(effect);
         return effect;

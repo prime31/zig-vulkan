@@ -136,7 +136,7 @@ pub const GraphicsContext = struct {
                 .message_type = .{
                     .general_bit_ext = true,
                     .validation_bit_ext = true,
-                    .performance_bit_ext = true,
+                    .performance_bit_ext = false,
                 },
                 .pfn_user_callback = debugCallback,
                 .p_user_data = null,

@@ -106,7 +106,7 @@ pub const ShaderEffect = struct {
 
                 var i_binding: usize = 0;
                 while (i_binding < refl_set.binding_count) : (i_binding += 1) {
-                    const refl_binding = refl_set.bindings[0].*;
+                    const refl_binding = refl_set.bindings[i_binding].*;
                     var layout_binding = &layout.bindings.items[i_binding];
                     layout_binding.binding = refl_binding.binding;
                     layout_binding.descriptor_type = @intToEnum(vk.DescriptorType, refl_binding.descriptor_type);
@@ -151,11 +151,11 @@ pub const ShaderEffect = struct {
             if (res != spv.SPV_REFLECT_RESULT_SUCCESS) return error.EnumeratePushConstantsFailed;
 
             if (count > 0) {
-                const pcs = std.mem.zeroInit(vk.PushConstantRange, .{
+                const pcs = vk.PushConstantRange{
                     .offset = pconstants[0].offset,
                     .size = pconstants[0].size,
                     .stage_flags = s.stage,
-                });
+                };
                 try constant_ranges.append(pcs);
             }
         }
@@ -173,11 +173,11 @@ pub const ShaderEffect = struct {
             for (set_layouts.items) |*s| {
                 if (s.set_number == i) {
                     for (s.bindings.items) |b| {
-                        if (binds.getPtr(i)) |found_bind| {
+                        if (binds.getPtr(b.binding)) |found_bind| {
                             // merge flags
                             found_bind.stage_flags = found_bind.stage_flags.merge(b.stage_flags);
                         } else {
-                            try binds.put(i, b);
+                            try binds.put(b.binding, b);
                         }
                     }
                 }
@@ -207,7 +207,6 @@ pub const ShaderEffect = struct {
                 self.set_layouts[i] = try gc.vkd.createDescriptorSetLayout(gc.dev, &ly.create_info, null);
             } else {
                 self.set_hashes[i] = 0;
-                // self.set_layouts[i] = .null_handle;
             }
         }
 
@@ -225,7 +224,6 @@ pub const ShaderEffect = struct {
             }
         }
 
-        print("--- layout count: {}\n", .{ s });
         pipeline_layout_info.set_layout_count = s;
         pipeline_layout_info.p_set_layouts = &compacted_layouts;
 
