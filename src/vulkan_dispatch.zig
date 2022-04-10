@@ -91,6 +91,7 @@ pub const DeviceDispatch = vk.DeviceWrapper(.{
     .createRenderPass = true,
     .destroyRenderPass = true,
     .createGraphicsPipelines = true,
+    .createComputePipelines = true,
     .destroyPipeline = true,
     .createFramebuffer = true,
     .destroyFramebuffer = true,

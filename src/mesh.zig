@@ -57,13 +57,14 @@ pub const Vertex = extern struct {
 };
 
 pub const RenderBounds = struct {
-    origin: Vec3,
-    radius: f32,
-    extents: Vec3,
-    valid: bool,
+    origin: Vec3 = .{},
+    radius: f32 = 0,
+    extents: Vec3 = .{},
+    valid: bool = false,
 };
 
 pub const Mesh = struct {
+    bounds: RenderBounds = .{},
     vertices: std.ArrayList(Vertex),
     indices: []u32,
     index_count: u32 = 0,

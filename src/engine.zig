@@ -259,12 +259,9 @@ pub const Engine = struct {
 
     camera: FlyCamera,
     main_light: DirectionalLight = undefined,
-    cull_pipeline: vk.Pipeline = undefined,
-    cull_layout: vk.PipelineLayout = undefined,
-    depth_reduce_pipeline: vk.Pipeline = undefined,
-    depth_reduce_layout: vk.PipelineLayout = undefined,
-    sparse_upload_pipeline: vk.Pipeline = undefined,
-    sparse_upload_layout: vk.PipelineLayout = undefined,
+    cull_pip_lay: vkutil.PipelineAndPipelineLayout = .{},
+    depth_reduce_pip_lay: vkutil.PipelineAndPipelineLayout = .{},
+    spares_upload_pip_lay: vkutil.PipelineAndPipelineLayout = .{},
     blit_pipeline: vk.Pipeline = undefined,
     blit_layout: vk.PipelineLayout = undefined,
 
@@ -657,6 +654,53 @@ pub const Engine = struct {
 
     fn createPipelines(self: *Self) !void {
         self.material_system = try vkutil.MaterialSystem.init(self);
+
+        // fullscreen triangle pipeline for blits
+        var blit_effect = vkutil.ShaderEffect.init(gpa);
+        try blit_effect.addStage(self.shader_cache.getShader("fullscreen_vert"), .{ .vertex_bit = true });
+        try blit_effect.addStage(self.shader_cache.getShader("blit_frag"), .{ .fragment_bit = true });
+        try blit_effect.reflectLayout(self.gc, null);
+
+        // defaults are triangle_list, polygon fill, no culling, no blending
+        var pip_builder = vkutil.PipelineBuilder.init();
+        pip_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .greater_or_equal);
+        try pip_builder.setShaders(&blit_effect);
+
+        // blit pipeline uses hardcoded triangle so no need for vertex input
+        pip_builder.clearVertexInput();
+        pip_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(false, false, .always);
+        self.blit_pipeline = try pip_builder.build(self.gc, self.copy_pass);
+        self.blit_layout = blit_effect.built_layout;
+
+        self.deletion_queue.append(blit_effect);
+        self.deletion_queue.append(self.blit_pipeline);
+
+        // load the compute shaders
+        self.cull_pip_lay = try self.loadComputeShader("indirect_cull_comp");
+        self.depth_reduce_pip_lay = try self.loadComputeShader("depth_reduce_comp");
+        self.spares_upload_pip_lay = try self.loadComputeShader("sparse_upload_comp");
+
+        // TODO: who owns the ShaderModule/ShaderEffect? here we only kill the pip because ShaderEffect kills the layout...
+        self.deletion_queue.append(self.cull_pip_lay.pipeline);
+        self.deletion_queue.append(self.depth_reduce_pip_lay.pipeline);
+        self.deletion_queue.append(self.spares_upload_pip_lay.pipeline);
+    }
+
+    fn loadComputeShader(self: *Self, comptime res_path: []const u8) !vkutil.PipelineAndPipelineLayout {
+        const compute_module = try vkutil.ShaderModule.init(self.gc, res_path);
+
+        var compute_effect = vkutil.ShaderEffect.init(self.gc.gpa);
+        try compute_effect.addStage(&compute_module, .{ .compute_bit = true });
+        try compute_effect.reflectLayout(self.gc, null);
+
+        self.deletion_queue.append(compute_module);
+        self.deletion_queue.append(compute_effect);
+
+        var compute_builder = vkutil.ComputePipelineBuilder.init(compute_effect.built_layout, compute_module.module);
+        return vkutil.PipelineAndPipelineLayout{
+            .pipeline = try compute_builder.buildPipeline(self.gc),
+            .layout = compute_effect.built_layout,
+        };
     }
 
     fn initImgui(self: *Self) !void {

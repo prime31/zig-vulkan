@@ -1,3 +1,6 @@
+const std = @import("std");
+const vk = @import("vulkan");
+
 const Mat4 = @import("../chapters/mat4.zig").Mat4;
 const Vec4 = @import("../chapters/vec4.zig").Vec4;
 
@@ -20,12 +23,19 @@ pub const MeshPassType = enum(u8) {
     directional_shadow,
 };
 
+pub const PipelineAndPipelineLayout = struct {
+    pipeline: vk.Pipeline = undefined,
+    layout: vk.PipelineLayout = undefined,
+};
+
 /// given a pointer returns a C-style pointer to many retaining constness
 pub fn ptrToMany(value: anytype) PointerToMany(@TypeOf(value)) {
     return @ptrCast(PointerToMany(@TypeOf(value)), value);
 }
 
 fn PointerToMany(comptime T: type) type {
+    std.debug.assert(@typeInfo(T) == .Pointer);
+
     const info = @typeInfo(T).Pointer;
     const InnerType = @Type(.{
         .Pointer = .{

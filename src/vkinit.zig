@@ -97,6 +97,7 @@ pub fn pipelineInputAssemblyCreateInfo(topology: vk.PrimitiveTopology) vk.Pipeli
     };
 }
 
+/// defaults to no clockwise front face, no culling and no depth bias
 pub fn pipelineRasterizationStateCreateInfo(polygon_mode: vk.PolygonMode) vk.PipelineRasterizationStateCreateInfo {
     return .{
         .flags = .{},

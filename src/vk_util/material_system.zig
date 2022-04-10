@@ -189,11 +189,24 @@ pub const EffectBuilder = struct {
 };
 
 pub const ComputePipelineBuilder = struct {
-    shader_stage: vk.PipelineShaderStageCreateInfo,
     pip_layout: vk.PipelineLayout,
+    shader_stage: vk.PipelineShaderStageCreateInfo,
 
-    pub fn buildPipeline(self: ComputePipelineBuilder) void {
-        _ = self;
+    pub fn init(layout: vk.PipelineLayout, module: vk.ShaderModule) ComputePipelineBuilder {
+        return .{
+            .pip_layout = layout,
+            .shader_stage = vkinit.pipelineShaderStageCreateInfo(module, .{ .compute_bit = true }),
+        };
+    }
+
+    pub fn buildPipeline(self: ComputePipelineBuilder, gc: *const GraphicsContext) !vk.Pipeline {
+        const pip_info = std.mem.zeroInit(vk.ComputePipelineCreateInfo, .{
+            .stage = self.shader_stage,
+            .layout = self.pip_layout,
+        });
+        var pipeline: vk.Pipeline = undefined;
+        _ = try gc.vkd.createComputePipelines(gc.dev, .null_handle, 1, vkutil.ptrToMany(&pip_info), null, vkutil.ptrToMany(&pipeline));
+        return pipeline;
     }
 };
 

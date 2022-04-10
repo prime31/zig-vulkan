@@ -38,7 +38,7 @@ pub const ShaderEffect = struct {
     };
 
     const ShaderStage = struct {
-        shader_module: *ShaderModule,
+        shader_module: *const ShaderModule,
         stage: vk.ShaderStageFlags,
 
         pub fn deinit(self: ShaderStage, gc: *const GraphicsContext) void {
@@ -69,13 +69,8 @@ pub const ShaderEffect = struct {
             if (sl != .null_handle) gc.destroy(sl);
     }
 
-    pub fn addStage(self: *ShaderEffect, shader_module: *ShaderModule, stage: vk.ShaderStageFlags) !void {
+    pub fn addStage(self: *ShaderEffect, shader_module: *const ShaderModule, stage: vk.ShaderStageFlags) !void {
         try self.stages.append(.{ .shader_module = shader_module, .stage = stage });
-    }
-
-    pub fn fillStages(self: ShaderEffect, pipeline_stages: *std.BoundedArray(vk.PipelineShaderStageCreateInfo, 2)) !void {
-        for (self.stages.items) |s|
-            try pipeline_stages.append(vkinit.pipelineShaderStageCreateInfo(s.shader_module.module, s.stage));
     }
 
     pub fn reflectLayout(self: *ShaderEffect, gc: *const GraphicsContext, overrides: ?[]const ReflectionOverrides) !void {

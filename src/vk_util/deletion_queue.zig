@@ -2,6 +2,7 @@ const std = @import("std");
 const vk = @import("vulkan");
 const vma = @import("vma");
 const vkinit = @import("../vkinit.zig");
+const vkutil = @import("vk_util.zig");
 
 const GraphicsContext = @import("../graphics_context.zig").GraphicsContext;
 
@@ -17,6 +18,8 @@ const VkObject = union(enum) {
     render_pass: vk.RenderPass,
     image_view: vk.ImageView,
     sampler: vk.Sampler,
+    shader_effect: vkutil.ShaderEffect,
+    shader_module: vkutil.ShaderModule,
     allocated_buffer: vma.AllocatedBufferUntyped,
     allocated_image: vma.AllocatedImage,
 };
@@ -47,6 +50,8 @@ pub const DeletionQueue = struct {
             vk.RenderPass => .{ .render_pass = obj },
             vk.ImageView => .{ .image_view = obj },
             vk.Sampler => .{ .sampler = obj },
+            vkutil.ShaderEffect => .{ .shader_effect = obj },
+            vkutil.ShaderModule => .{ .shader_module = obj },
             vma.AllocatedBufferUntyped => .{ .allocated_buffer = obj },
             vma.AllocatedImage => .{ .allocated_image = obj },
             else => @panic("Attempted to delete an object that isnt supported by the DeletionQueue: " ++ @typeName(@TypeOf(obj))),
@@ -65,7 +70,7 @@ pub const DeletionQueue = struct {
     pub fn flush(self: *DeletionQueue) void {
         var iter = ReverseSliceIterator(VkObject).init(self.queue.items);
         while (iter.next()) |obj| {
-            switch (obj) {
+            switch (obj.*) {
                 .cmd_buffer => |*buf_pool| self.gc.vkd.freeCommandBuffers(self.gc.dev, buf_pool.pool, 1, @ptrCast([*]const vk.CommandBuffer, &buf_pool.buffer)),
                 .cmd_pool => |pool| self.gc.destroy(pool),
                 .framebuffer => |fb| self.gc.destroy(fb),
@@ -74,11 +79,14 @@ pub const DeletionQueue = struct {
                 .render_pass => |rp| self.gc.destroy(rp),
                 .image_view => |iv| self.gc.destroy(iv),
                 .sampler => |s| self.gc.destroy(s),
+                .shader_effect => obj.shader_effect.deinit(self.gc), // we need mutable object for this one
+                .shader_module => |sm| sm.deinit(self.gc),
                 .allocated_buffer => |buf| buf.deinit(self.gc.vma),
                 .allocated_image => |img| {
                     self.gc.destroy(img.default_view);
                     img.deinit(self.gc.vma);
                 },
+                // else => unreachable,
             }
         }
 
@@ -98,11 +106,11 @@ fn ReverseSliceIterator(comptime T: type) type {
             };
         }
 
-        pub fn next(self: *@This()) ?T {
+        pub fn next(self: *@This()) ?*T {
             if (self.index == 0) return null;
             self.index -= 1;
 
-            return self.slice[self.index];
+            return &self.slice[self.index];
         }
     };
 }

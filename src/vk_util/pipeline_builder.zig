@@ -9,7 +9,6 @@ const VertexInputDescription = @import("../mesh.zig").VertexInputDescription;
 pub const PipelineBuilder = struct {
     shader_stages: std.BoundedArray(vk.PipelineShaderStageCreateInfo, 2) = .{},
     vertex_description: VertexInputDescription = .{},
-    vertex_input_info: vk.PipelineVertexInputStateCreateInfo = undefined,
     input_assembly: vk.PipelineInputAssemblyStateCreateInfo,
     rasterizer: vk.PipelineRasterizationStateCreateInfo,
     color_blend_attachment: vk.PipelineColorBlendAttachmentState,
@@ -27,16 +26,14 @@ pub const PipelineBuilder = struct {
     }
 
     pub fn clearVertexInput(self: *PipelineBuilder) void {
-        self.vertex_input_info.p_vertex_attribute_descriptions = null;
-        self.vertex_input_info.vertex_attribute_description_count = 0;
-
-        self.vertex_input_info.p_vertex_binding_descriptions = null;
-        self.vertex_input_info.vertex_binding_description_count = 0;
+        self.vertex_description = .{};
     }
 
     pub fn setShaders(self: *PipelineBuilder, effect: *const vkutil.ShaderEffect) !void {
         self.shader_stages.len = 0;
-        try effect.fillStages(&self.shader_stages);
+
+        for (effect.stages.items) |s|
+            try self.shader_stages.append(vkinit.pipelineShaderStageCreateInfo(s.shader_module.module, s.stage));
         self.pipeline_layout = effect.built_layout;
     }
 
@@ -46,7 +43,7 @@ pub const PipelineBuilder = struct {
 
     pub fn build(self: *PipelineBuilder, gc: *const GraphicsContext, render_pass: vk.RenderPass) !vk.Pipeline {
         // connect the pipeline builder vertex input info to the one we get from Vertex
-        self.vertex_input_info = .{
+        const vertex_input_info = vk.PipelineVertexInputStateCreateInfo{
             .flags = self.vertex_description.flags,
             .vertex_binding_description_count = @intCast(u32, self.vertex_description.bindings.len),
             .p_vertex_binding_descriptions = self.vertex_description.bindings.ptr,
@@ -84,7 +81,7 @@ pub const PipelineBuilder = struct {
             .flags = .{},
             .stage_count = @intCast(u32, self.shader_stages.len),
             .p_stages = @ptrCast([*]const vk.PipelineShaderStageCreateInfo, &self.shader_stages.buffer),
-            .p_vertex_input_state = &self.vertex_input_info,
+            .p_vertex_input_state = &vertex_input_info,
             .p_input_assembly_state = &self.input_assembly,
             .p_tessellation_state = null,
             .p_viewport_state = &viewport_state,
