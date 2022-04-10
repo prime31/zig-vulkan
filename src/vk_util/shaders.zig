@@ -52,10 +52,10 @@ pub const ShaderEffect = struct {
     stages: std.ArrayList(ShaderStage),
     built_layout: vk.PipelineLayout = .null_handle,
 
-    pub fn init(allocator: std.mem.Allocator) ShaderEffect {
+    pub fn init(gpa: std.mem.Allocator) ShaderEffect {
         return .{
-            .bindings = std.StringHashMap(ReflectedBinding).init(allocator),
-            .stages = std.ArrayList(ShaderStage).init(allocator),
+            .bindings = std.StringHashMap(ReflectedBinding).init(gpa),
+            .stages = std.ArrayList(ShaderStage).init(gpa),
         };
     }
 
@@ -78,7 +78,7 @@ pub const ShaderEffect = struct {
             try pipeline_stages.append(vkinit.pipelineShaderStageCreateInfo(s.shader_module.module, s.stage));
     }
 
-    pub fn reflectLayout(self: *ShaderEffect, gc: *const GraphicsContext, overrides: []const ReflectionOverrides) !void {
+    pub fn reflectLayout(self: *ShaderEffect, gc: *const GraphicsContext, overrides: ?[]const ReflectionOverrides) !void {
         var set_layouts = std.ArrayList(DescriptorSetLayoutData).init(gc.scratch);
         var constant_ranges = std.BoundedArray(vk.PushConstantRange, 4){};
 
@@ -108,10 +108,10 @@ pub const ShaderEffect = struct {
                     layout_binding.descriptor_type = @intToEnum(vk.DescriptorType, refl_binding.descriptor_type);
 
                     // handle overrides
-                    for (overrides) |ov| {
+                    if (overrides) |unwrapped_overrides| for (unwrapped_overrides) |ov| {
                         if (std.mem.eql(u8, ov.name, std.mem.sliceTo(refl_binding.name, 0)))
                             layout_binding.descriptor_type = ov.overriden_type;
-                    }
+                    };
 
                     layout_binding.descriptor_count = 1;
                     var i_dim: usize = 0;
@@ -228,8 +228,8 @@ const DescriptorSetLayoutData = struct {
     create_info: vk.DescriptorSetLayoutCreateInfo = undefined,
     bindings: std.ArrayList(vk.DescriptorSetLayoutBinding),
 
-    pub fn init(allocator: std.mem.Allocator, binding_size: usize) !DescriptorSetLayoutData {
-        var bindings = try std.ArrayList(vk.DescriptorSetLayoutBinding).initCapacity(allocator, binding_size);
+    pub fn init(gpa: std.mem.Allocator, binding_size: usize) !DescriptorSetLayoutData {
+        var bindings = try std.ArrayList(vk.DescriptorSetLayoutBinding).initCapacity(gpa, binding_size);
         bindings.expandToCapacity();
 
         for (bindings.items) |*b| b.* = std.mem.zeroes(vk.DescriptorSetLayoutBinding);
