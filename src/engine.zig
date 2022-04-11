@@ -291,6 +291,8 @@ pub const Engine = struct {
     scene_param_buffer: vma.AllocatedBufferUntyped,
     blocky_sampler: vk.Sampler = undefined,
 
+    pub usingnamespace @import("scene_render.zig");
+
     pub fn init(app_name: [*:0]const u8) !Self {
         try glfw.init(.{});
 
@@ -370,6 +372,7 @@ pub const Engine = struct {
         self.gc.destroy(self.imgui_pool);
 
         self.gc.destroy(self.blocky_sampler);
+        self.gc.destroy(self.smooth_sampler);
 
         self.scene_param_buffer.deinit(self.gc.vma);
         self.gc.destroy(self.object_set_layout);
@@ -435,6 +438,7 @@ pub const Engine = struct {
         try self.loadImages();
         try self.loadMeshes();
         try self.initOldPipelines();
+        try self.initOldScene();
         try self.initScene();
     }
 
@@ -774,8 +778,11 @@ pub const Engine = struct {
         // const lost_empire_tex = try loadTextureFromAsset(self.gc, "/Users/desaro/zig-vulkan/zig-cache/baked_assets/lost_empire-RGBA.tx");
         const lost_empire_tex = try loadTextureFromFile(self.gc, self.allocator, "src/chapters/lost_empire-RGBA.png");
         self.deletion_queue.append(lost_empire_tex.image.default_view);
-
         try self.textures.put("empire_diffuse", lost_empire_tex);
+
+        const white_tex = try loadTextureFromFile(self.gc, self.allocator, "src/chapters/white.jpg");
+        self.deletion_queue.append(white_tex.image.default_view);
+        try self.textures.put("white", white_tex);
     }
 
     fn loadMeshes(self: *Self) !void {
@@ -845,10 +852,13 @@ pub const Engine = struct {
         try self.materials.put("texturedmesh", textured_material);
     }
 
-    fn initScene(self: *Self) !void {
+    fn initOldScene(self: *Self) !void {
         // create a sampler for the texture
         const sampler_info = vkinit.samplerCreateInfo(.nearest, vk.SamplerAddressMode.repeat);
         self.blocky_sampler = try self.gc.vkd.createSampler(self.gc.dev, &sampler_info, null);
+
+        const smooth_sampler_info = vkinit.samplerCreateInfo(.linear, vk.SamplerAddressMode.repeat);
+        self.smooth_sampler = try self.gc.vkd.createSampler(self.gc.dev, &smooth_sampler_info, null);
 
         const textured_mat = self.materials.getPtr("texturedmesh").?;
 
@@ -919,6 +929,33 @@ pub const Engine = struct {
                     .transform_matrix = Mat4.mul(matrix, scale_matrix),
                 };
                 try self.renderables.append(object);
+            }
+        }
+    }
+
+    fn initScene(self: *Self) !void {
+        var textured_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
+        try textured_data.addTexture(self.smooth_sampler, self.textures.get("white").?.view);
+        _ = try self.material_system.buildMaterial("textured", textured_data);
+
+        var mat_info = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
+        try mat_info.addTexture(self.smooth_sampler, self.textures.get("white").?.view);
+        _ = try self.material_system.buildMaterial("default", mat_info);
+
+        var x: f32 = 0;
+        while (x < 5) : (x += 1) {
+            var y: f32 = 0;
+            while (y < 4) : (y += 1) {
+                var tri = MeshObject{
+                    .mesh = self.meshes.getPtr("triangle").?,
+                    .material = self.material_system.getMaterial("default").?,
+                    .custom_sort_key = 0,
+                    .transform_matrix = Mat4.createTranslation(.{ .x = x, .y = 0, .z = y }),
+                    .bounds = self.meshes.getPtr("triangle").?.bounds,
+                    .draw_forward_pass = true,
+                    .draw_shadow_pass = true,
+                };
+                _ = try self.render_scene.registerObject(tri);
             }
         }
     }

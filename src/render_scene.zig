@@ -67,9 +67,9 @@ pub const RenderScene = struct {
         self.object_data_buffer.deinit(self.gc.vma);
     }
 
-    pub fn registerObject(self: Self, object: MeshObject) !Handle(RenderObject) {
-        const new_obj = RenderObject{
-            .mesh_id = self.getMeshHandle(object.mesh),
+    pub fn registerObject(self: *Self, object: MeshObject) !Handle(RenderObject) {
+        var new_obj = RenderObject{
+            .mesh_id = try self.getMeshHandle(object.mesh),
             .material = self.getMaterialHandle(object.material),
             .update_index = std.math.maxInt(u32),
             .custom_sort_key = object.custom_sort_key,
@@ -79,18 +79,18 @@ pub const RenderScene = struct {
         };
         new_obj.pass_indices.clear(-1);
 
-        const handle = Handle(RenderObject){ .handle = self.renderables.items.len };
-        try self.renderables.append(handle);
+        const handle = Handle(RenderObject){ .handle = @intCast(u32, self.renderables.items.len) };
+        try self.renderables.append(new_obj);
 
         if (object.draw_forward_pass) {
-            if (object.material.original.pass_shaders.getOpt(.transparency) != null)
+            if (object.material.original.pass_shaders.get(.transparency).pip != .null_handle)
                 try self.transparent_forward_pass.unbatched_objects.append(handle);
-            if (object.material.original.pass_shaders.getOpt(.forward) != null)
+            if (object.material.original.pass_shaders.get(.forward).pip != .null_handle)
                 try self.forward_pass.unbatched_objects.append(handle);
         }
 
         if (object.draw_shadow_pass) {
-            if (object.material.original.pass_shaders.getOpt(.directional_shadow) != null)
+            if (object.material.original.pass_shaders.get(.directional_shadow).pip != .null_handle)
                 try self.shadow_pass.unbatched_objects.append(handle);
         }
 
@@ -439,31 +439,32 @@ pub const RenderScene = struct {
         return &self.materials.items[object_id.handle];
     }
 
-    pub fn getMaterialHandle(self: Self, m: Material) Handle(Material) {
+    pub fn getMaterialHandle(self: *Self, m: *Material) Handle(Material) {
         if (self.material_convert.get(m)) |mat| {
             return mat;
         }
 
         const index = self.materials.items.len;
-        try self.material_convert.append(m);
+        self.materials.append(m.*) catch unreachable;
 
-        const handle = Handle(Material).init(index);
-        try self.material_convert.put(m, handle);
+        const handle = Handle(Material).init(@intCast(u32, index));
+        self.material_convert.put(m, handle) catch unreachable;
         return handle;
     }
 
-    pub fn getMeshHandle(self: Self, m: *Mesh) !Handle(DrawMesh) {
+    pub fn getMeshHandle(self: *Self, m: *Mesh) !Handle(DrawMesh) {
         if (self.mesh_convert.get(m)) |mesh| {
             return mesh;
         }
 
-        const index = self.meshes.items.len;
+        const index = @intCast(u32, self.meshes.items.len);
         try self.meshes.append(.{
-            .original = m,
             .first_index = 0,
-            .first_vertex = 0,
+            .first_vert = 0,
             .vert_count = @intCast(u32, m.vertices.items.len),
             .index_count = @intCast(u32, m.indices.len),
+            .is_merged = false,
+            .original = m,
         });
         
         const handle = Handle(DrawMesh).init(index);
@@ -484,12 +485,12 @@ pub fn Handle(comptime T: type) type {
 
 pub const MeshObject = struct {
     mesh: *Mesh,
-    material: Material,
+    material: *Material,
     custom_sort_key: u32,
     transform_matrix: Mat4,
     bounds: RenderBounds,
-    draw_forward_pass: u1,
-    draw_shadow_pass: u1,
+    draw_forward_pass: bool,
+    draw_shadow_pass: bool,
 };
 
 const GpuIndirectObject = struct {
@@ -507,7 +508,7 @@ const DrawMesh = struct {
     original: *Mesh,
 };
 
-const RenderObject = struct {
+pub const RenderObject = struct {
     mesh_id: Handle(DrawMesh),
     material: Handle(Material),
     update_index: u32,
@@ -562,9 +563,9 @@ const MeshPass = struct {
     batches: ArrayList(IndirectBatch), // draw indirect batches
     flat_batches: ArrayList(RenderBatch), // sorted list of objects in the pass
     objects: ArrayList(PassObject), // unsorted object data
-    unbatched_objects: ArrayList(RenderObject), // objects pending addition
-    reusable_objects: ArrayList(PassObject), // indicides for the objects array that can be reused
-    objects_to_delete: ArrayList(PassObject),
+    unbatched_objects: ArrayList(Handle(RenderObject)), // objects pending addition
+    reusable_objects: ArrayList(Handle(PassObject)), // indicides for the objects array that can be reused
+    objects_to_delete: ArrayList(Handle(PassObject)),
 
     compacted_instance_buffer: vma.AllocatedBuffer(u32) = undefined,
     pass_objects_buffer: vma.AllocatedBuffer(GpuInstance) = undefined,
@@ -582,9 +583,9 @@ const MeshPass = struct {
             .batches = ArrayList(IndirectBatch).init(gpa),
             .flat_batches = ArrayList(RenderBatch).init(gpa),
             .objects = ArrayList(PassObject).init(gpa),
-            .unbatched_objects = ArrayList(RenderObject).init(gpa),
-            .reusable_objects = ArrayList(PassObject).init(gpa),
-            .objects_to_delete = ArrayList(PassObject).init(gpa),
+            .unbatched_objects = ArrayList(Handle(RenderObject)).init(gpa),
+            .reusable_objects = ArrayList(Handle(PassObject)).init(gpa),
+            .objects_to_delete = ArrayList(Handle(PassObject)).init(gpa),
             .pass_type = pass_type,
         };
     }

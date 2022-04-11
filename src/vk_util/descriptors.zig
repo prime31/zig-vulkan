@@ -2,7 +2,6 @@ const std = @import("std");
 const vk = @import("vulkan");
 
 const GraphicsContext = @import("../graphics_context.zig").GraphicsContext;
-
 const PoolSizes = struct { @"type": vk.DescriptorType, count: f32 };
 
 const pool_sizes = [_]PoolSizes{
@@ -36,17 +35,21 @@ pub const DescriptorAllocator = struct {
     }
 
     pub fn deinit(self: Self) void {
-        for (self.used_pools.items) |p| self.gc.destroy(p);
+        for (self.used_pools.items) |p| {
+            if (p != .null_handle) self.gc.destroy(p);
+        }
         self.used_pools.deinit();
 
-        for (self.free_pools.items) |p| self.gc.destroy(p);
+        for (self.free_pools.items) |p| {
+            if (p != .null_handle) self.gc.destroy(p);
+        }
         self.free_pools.deinit();
     }
 
     pub fn createPool(self: Self, count: u32, flags: vk.DescriptorPoolCreateFlags) !vk.DescriptorPool {
         var sizes: [pool_sizes.len]vk.DescriptorPoolSize = undefined;
         for (pool_sizes) |ps, i| {
-            sizes[i] = .{ .@"type" = ps.@"type", .count = @floatToInt(u32, count * ps.count) };
+            sizes[i] = .{ .@"type" = ps.@"type", .descriptor_count = @floatToInt(u32, @intToFloat(f32, count) * ps.count) };
         }
 
         return try self.gc.vkd.createDescriptorPool(self.gc.dev, &.{
@@ -57,9 +60,9 @@ pub const DescriptorAllocator = struct {
         }, null);
     }
 
-    pub fn grabPool(self: Self) vk.DescriptorPool {
+    pub fn grabPool(self: *Self) vk.DescriptorPool {
         if (self.free_pools.popOrNull()) |pool| return pool;
-        return self.createPool(1000, .{});
+        return self.createPool(1000, .{}) catch unreachable;
     }
 
     pub fn allocate(self: *Self, layout: vk.DescriptorSetLayout) !vk.DescriptorSet {
@@ -68,7 +71,7 @@ pub const DescriptorAllocator = struct {
             try self.used_pools.append(self.current_pool);
         }
 
-        const alloc_info = std.mem.zeroInit(vk.DescriptorSetAllocateInfo, .{
+        var alloc_info = std.mem.zeroInit(vk.DescriptorSetAllocateInfo, .{
             .descriptor_pool = self.current_pool,
             .descriptor_set_count = 1,
             .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &layout),
@@ -78,7 +81,7 @@ pub const DescriptorAllocator = struct {
         var set: vk.DescriptorSet = undefined;
         self.gc.vkd.allocateDescriptorSets(self.gc.dev, &alloc_info, @ptrCast([*]vk.DescriptorSet, &set)) catch |err| {
             switch (err) {
-                .FragmentedPool or .OutOfPoolMemory => {
+                error.FragmentedPool, error.OutOfPoolMemory => {
                     self.current_pool = self.grabPool();
                     try self.used_pools.append(self.current_pool);
                     alloc_info.descriptor_pool = self.current_pool;
@@ -168,21 +171,21 @@ pub const DescriptorLayoutCache = struct {
 pub const DescriptorBuilder = struct {
     const Self = @This();
 
-    alloc: DescriptorAllocator,
+    alloc: *DescriptorAllocator,
     cache: *DescriptorLayoutCache,
     writes: std.ArrayList(vk.WriteDescriptorSet),
     bindings: std.ArrayList(vk.DescriptorSetLayoutBinding),
 
-    pub fn init(alloc: DescriptorAllocator, cache: *DescriptorLayoutCache) Self {
+    pub fn init(gpa: std.mem.Allocator, alloc: *DescriptorAllocator, cache: *DescriptorLayoutCache) Self {
         return .{
             .alloc = alloc,
             .cache = cache,
-            .writes = std.ArrayList(vk.WriteDescriptorSet).init(std.heap.c_allocator),
-            .bindings = std.ArrayList(vk.DescriptorSetLayoutBinding).init(std.heap.c_allocator),
+            .writes = std.ArrayList(vk.WriteDescriptorSet).init(gpa),
+            .bindings = std.ArrayList(vk.DescriptorSetLayoutBinding).init(gpa),
         };
     }
 
-    fn deinit(self: Self) void {
+    pub fn deinit(self: Self) void {
         self.writes.deinit();
         self.bindings.deinit();
     }
@@ -210,7 +213,7 @@ pub const DescriptorBuilder = struct {
         }) catch unreachable;
     }
 
-    pub fn bindImage(self: *Self, binding: u32, image_info: *vk.DescriptorImageInfo, desc_type: vk.DescriptorType, stage_flags: vk.ShaderStageFlags) void {
+    pub fn bindImage(self: *Self, binding: u32, image_info: *const vk.DescriptorImageInfo, desc_type: vk.DescriptorType, stage_flags: vk.ShaderStageFlags) void {
         // create the descriptor binding for the layout
         self.bindings.append(.{
             .binding = binding,
@@ -228,32 +231,27 @@ pub const DescriptorBuilder = struct {
             .descriptor_count = 1,
             .descriptor_type = desc_type,
             .p_image_info = @ptrCast([*]const vk.DescriptorImageInfo, image_info),
-            .p_buffer_info = null,
+            .p_buffer_info = undefined,
             .p_texel_buffer_view = undefined,
         }) catch unreachable;
     }
 
-    pub fn build(self: Self) !vk.DescriptorSet {
-        var layout: vk.DescriptorSetLayout = undefined;
-        return self.buildWithLayout(&layout);
-    }
-
-    pub fn buildWithLayout(self: Self, layout: *vk.DescriptorSetLayout) !vk.DescriptorSet {
+    pub fn build(self: *Self, descriptor_set: *vk.DescriptorSet) !vk.DescriptorSetLayout {
         // build layout first
-        layout.* = try self.cache.createDescriptorSetLayout(&.{
+        const layout = try self.cache.createDescriptorSetLayout(&.{
             .flags = .{},
             .binding_count = @intCast(u32, self.bindings.items.len),
             .p_bindings = self.bindings.items.ptr,
         });
 
-        const set = try self.alloc.allocate(layout);
+        // allocate descriptor
+        descriptor_set.* = try self.alloc.allocate(layout);
 
         // write descriptor
-        for (self.writes.items) |*write| write.dst_set = set;
-        self.alloc.gc.vkd.updateDescriptorSets(self.alloc.gc.dev, self.writes.items.len, self.writes.items.ptr, 0, null);
+        for (self.writes.items) |*write| write.dst_set = descriptor_set.*;
+        self.alloc.gc.vkd.updateDescriptorSets(self.alloc.gc.dev, @intCast(u32, self.writes.items.len), self.writes.items.ptr, 0, undefined);
 
-        self.deinit();
-        return set;
+        return layout;
     }
 };
 

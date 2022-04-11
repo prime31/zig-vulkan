@@ -53,6 +53,12 @@ pub const MaterialSystem = struct {
         for (self.tmp_pass_cache.items) |*sp| sp.deinit(self.engine.gc);
         self.tmp_pass_cache.deinit();
 
+        var iter = self.material_cache.iterator();
+        while (iter.next()) |entry| {
+            entry.key_ptr.deinit();
+            entry.value_ptr.deinit();
+        }
+
         self.materials.deinit();
         self.material_cache.deinit();
     }
@@ -141,36 +147,43 @@ pub const MaterialSystem = struct {
         return ShaderPass.init(effect, try builder.build(self.engine.gc, render_pass));
     }
 
-    fn buildMaterial(self: *MaterialSystem, name: []const u8, info: MaterialData) !Material {
-        if (self.getMaterial(info.base_template)) |mat| return mat;
+    pub fn buildMaterial(self: *MaterialSystem, name: []const u8, info: MaterialData) !Material {
+        if (self.material_cache.get(info)) |mat| {
+            try self.materials.put(name, mat);
+            // we have to deinit the MaterialData since MaterialSystem.deinit wont catch it
+            info.deinit();
+            return mat;
+        }
 
         var material = Material.init(self.engine.gc.gpa, self.template_cache.getPtr(info.base_template).?);
         try material.textures.appendSlice(info.textures.items);
         // not handled yet
         material.pass_sets.set(.directional_shadow, .null_handle);
 
-        var db = vkutil.DescriptorBuilder.init(self.engine.descriptor_allocator, self.engine.descriptor_layout_cache);
-        for (info.textures) |tex, i| {
+        var db = vkutil.DescriptorBuilder.init(self.engine.gc.gpa, &self.engine.descriptor_allocator, &self.engine.descriptor_layout_cache);
+        defer db.deinit();
+
+        for (info.textures.items) |tex, i| {
             const image_buffer_info = vk.DescriptorImageInfo{
                 .sampler = tex.sampler,
                 .image_view = tex.view,
-                .layout = .shader_read_only_optimal,
+                .image_layout = .shader_read_only_optimal,
             };
             db.bindImage(@intCast(u32, i), &image_buffer_info, .combined_image_sampler, .{ .fragment_bit = true });
         }
 
-        _ = db.build(material.pass_sets.get(.forward));
-        _ = db.build(material.pass_sets.get(.transparency));
+        _ = try db.build(material.pass_sets.getPtr(.forward));
+        _ = try db.build(material.pass_sets.getPtr(.transparency));
 
         // add material to cache
-        self.material_cache.put(info, material);
-        self.materials.put(name, material);
+        try self.material_cache.put(info, material);
+        try self.materials.put(name, material);
 
         return material;
     }
 
-    pub fn getMaterial(self: MaterialSystem, name: []const u8) ?Material {
-        return self.materials.get(name);
+    pub fn getMaterial(self: MaterialSystem, name: []const u8) ?*Material {
+        return self.materials.getPtr(name);
     }
 };
 
@@ -211,9 +224,9 @@ pub const ComputePipelineBuilder = struct {
 };
 
 pub const ShaderPass = struct {
-    effect: ShaderEffect,
-    pip: vk.Pipeline,
-    pip_layout: vk.PipelineLayout,
+    effect: ShaderEffect = undefined,
+    pip: vk.Pipeline = .null_handle,
+    pip_layout: vk.PipelineLayout = .null_handle,
 
     pub fn init(effect: ShaderEffect, pipeline: vk.Pipeline) ShaderPass {
         return .{
@@ -240,7 +253,7 @@ pub fn PerPassData(comptime T: type) type {
     return struct {
         const Self = @This();
 
-        data: [3]?T = [_]?T{null} ** 3,
+        data: [3]T = undefined,
 
         pub fn set(self: *Self, mesh_pass_type: MeshPassType, value: T) void {
             self.data[@intCast(u64, @enumToInt(mesh_pass_type))] = value;
@@ -248,22 +261,22 @@ pub fn PerPassData(comptime T: type) type {
 
         pub fn get(self: Self, mesh_pass_type: MeshPassType) T {
             return switch (mesh_pass_type) {
-                .forward => self.data[0].?,
-                .transparency => self.data[1].?,
-                .directional_shadow => self.data[2].?,
-            };
-        }
-
-        pub fn getOpt(self: Self, mesh_pass_type: MeshPassType) ?T {
-            return switch (mesh_pass_type) {
                 .forward => self.data[0],
                 .transparency => self.data[1],
                 .directional_shadow => self.data[2],
             };
         }
 
-        pub fn clear(self: Self, value: T) void {
-            inline for (std.enums.values(MeshPassType)) |mpt|
+        pub fn getPtr(self: *Self, mesh_pass_type: MeshPassType) *T {
+            return switch (mesh_pass_type) {
+                .forward => &self.data[0],
+                .transparency => &self.data[1],
+                .directional_shadow => &self.data[2],
+            };
+        }
+
+        pub fn clear(self: *Self, value: T) void {
+            for (std.enums.values(MeshPassType)) |mpt|
                 self.data[@enumToInt(mpt)] = value;
         }
     };
@@ -275,7 +288,10 @@ pub const EffectTemplate = struct {
     transparency: assets.TransparencyMode,
 
     pub fn init(transparency: assets.TransparencyMode) EffectTemplate {
-        return .{ .transparency = transparency };
+        var pass_shaders = PerPassData(ShaderPass){};
+        pass_shaders.clear(.{});
+
+        return .{ .pass_shaders = pass_shaders, .transparency = transparency };
     }
 
     pub fn deinit(self: EffectTemplate, gc: *const GraphicsContext) void {
@@ -311,7 +327,7 @@ pub const MaterialData = struct {
         };
     }
 
-    pub fn deinit(self: Material) void {
+    pub fn deinit(self: MaterialData) void {
         self.textures.deinit();
     }
 
@@ -321,14 +337,18 @@ pub const MaterialData = struct {
 };
 
 pub const Material = struct {
-    base_template: *EffectTemplate,
+    original: *EffectTemplate,
     pass_sets: PerPassData(vk.DescriptorSet) = .{},
     textures: std.ArrayList(SampledTexture),
     params: *ShaderParameters = undefined,
 
     pub fn init(gpa: std.mem.Allocator, base_template: *EffectTemplate) Material {
+        var pass_sets = PerPassData(vk.DescriptorSet){};
+        pass_sets.clear(.null_handle);
+
         return .{
-            .base_template = base_template,
+            .original = base_template,
+            .pass_sets = pass_sets,
             .textures = std.ArrayList(SampledTexture).init(gpa),
         };
     }
