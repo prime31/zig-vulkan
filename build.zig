@@ -45,7 +45,7 @@ pub fn build(b: *Builder) void {
         exe.addPackage(.{
             .name = "vengine",
             .path = .{ .path = "src/v.zig" },
-            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobj_build.pkg, vma_pkg, stb_build.pkg, imgui_build.pkg, imgui_vk_pkg, spirv_build.pkg },
+            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobj_build.pkg, vma_pkg, stb_build.pkg, imgui_build.pkg, imgui_vk_pkg, spirv_build.pkg, lz4_build.pkg },
         });
 
         const run_cmd = exe.run();

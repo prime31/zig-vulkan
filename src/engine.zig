@@ -6,6 +6,7 @@ const resources = @import("resources");
 const glfw = @import("glfw");
 const ig = @import("imgui");
 const igvk = @import("imgui_vk");
+const assets = @import("assetlib/assets.zig");
 const vkinit = @import("vkinit.zig");
 const vkutil = @import("vk_util/vk_util.zig");
 
@@ -44,7 +45,7 @@ pub const Texture = struct {
     view: vk.ImageView,
 
     pub fn init(image: vma.AllocatedImage) Texture {
-        return .{ .image = image, .view = undefined };
+        return .{ .image = image, .view = image.default_view };
     }
 
     pub fn deinit(self: Texture, gc: *const GraphicsContext) void {
@@ -375,6 +376,7 @@ pub const Engine = struct {
         self.gc.destroy(self.global_set_layout);
         self.gc.destroy(self.descriptor_pool);
 
+        self.gc.destroy(self.depth_image.image.default_view);
         self.depth_image.deinit(self.gc);
 
         for (self.depth_pyramid_mips[0..self.depth_pyramid_levels]) |mip|
@@ -470,6 +472,7 @@ pub const Engine = struct {
                 for (self.framebuffers) |fb| self.gc.destroy(fb);
                 self.allocator.free(self.framebuffers);
 
+                self.gc.destroy(self.depth_image.image.default_view);
                 self.depth_image.deinit(self.gc);
                 self.depth_image = try createDepthImage(self.gc, self.depth_format, self.swapchain);
                 self.framebuffers = try createSwapchainFramebuffers(self.gc, self.allocator, self.old_render_pass, self.swapchain, self.depth_image.view);
@@ -768,12 +771,10 @@ pub const Engine = struct {
     }
 
     fn loadImages(self: *Self) !void {
-        const lost_empire_img = try loadTextureFromFile(self.gc, self.allocator, "src/chapters/lost_empire-RGBA.png");
-        const lost_empire_tex = Texture{
-            .image = lost_empire_img,
-            .view = lost_empire_img.default_view,
-        };
-        self.deletion_queue.append(lost_empire_img.default_view);
+        // const lost_empire_tex = try loadTextureFromAsset(self.gc, "/Users/desaro/zig-vulkan/zig-cache/baked_assets/lost_empire-RGBA.tx");
+        const lost_empire_tex = try loadTextureFromFile(self.gc, self.allocator, "src/chapters/lost_empire-RGBA.png");
+        self.deletion_queue.append(lost_empire_tex.image.default_view);
+
         try self.textures.put("empire_diffuse", lost_empire_tex);
     }
 
@@ -1340,12 +1341,12 @@ fn createDepthImage(gc: *const GraphicsContext, depth_format: vk.Format, swapcha
         .usage = .gpu_only,
         .requiredFlags = .{ .device_local_bit = true },
     });
-    var depth_image = Texture.init(try gc.vma.createImage(&dimg_info, &malloc_info, null));
+    var depth_image = try gc.vma.createImage(&dimg_info, &malloc_info, null);
 
-    const dview_info = vkinit.imageViewCreateInfo(depth_format, depth_image.image.image, .{ .depth_bit = true });
-    depth_image.view = try gc.vkd.createImageView(gc.dev, &dview_info, null);
+    const dview_info = vkinit.imageViewCreateInfo(depth_format, depth_image.image, .{ .depth_bit = true });
+    depth_image.default_view = try gc.vkd.createImageView(gc.dev, &dview_info, null);
 
-    return depth_image;
+    return Texture.init(depth_image);
 }
 
 fn createSwapchainFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, swapchain: Swapchain, depth_image_view: vk.ImageView) ![]vk.Framebuffer {
@@ -1501,7 +1502,7 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
     }
 }
 
-fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: []const u8) !vma.AllocatedImage {
+fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: []const u8) !Texture {
     const img = try stb.loadFromFile(allocator, file);
     defer img.deinit();
 
@@ -1512,12 +1513,35 @@ fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: [
     std.mem.copy(u8, data[0..img_pixels.len], img_pixels);
     gc.vma.unmapMemory(staging_buffer.allocation);
 
+    const new_img = try uploadImage(gc, @intCast(u32, img.w), @intCast(u32, img.h), vk.Format.r8g8b8a8_srgb, staging_buffer);
+
+    staging_buffer.deinit(gc.vma);
+    return Texture.init(new_img);
+}
+
+fn loadTextureFromAsset(gc: *const GraphicsContext, file: []const u8) !Texture {
+    const tex_asset = try assets.load(assets.TextureInfo, file);
+
+    const staging_buffer = try gc.vma.createUntypedBuffer(tex_asset.info.size, .{ .transfer_src_bit = true }, .cpu_only, .{});
+    const data = try gc.vma.mapMemory(u8, staging_buffer.allocation);
+    std.mem.copy(u8, data[0..tex_asset.blob.len], tex_asset.blob);
+    gc.vma.unmapMemory(staging_buffer.allocation);
+
+    const new_img = try uploadImage(gc, tex_asset.info.width, tex_asset.info.height, vk.Format.r8g8b8a8_srgb, staging_buffer);
+
+    staging_buffer.deinit(gc.vma);
+    tex_asset.deinit();
+
+    return Texture.init(new_img);
+}
+
+fn uploadImage(gc: *const GraphicsContext, width: u32, height: u32, format: vk.Format, staging_buffer: vma.AllocatedBufferUntyped) !vma.AllocatedImage {
     const img_extent = vk.Extent3D{
-        .width = @intCast(u32, img.w),
-        .height = @intCast(u32, img.h),
+        .width = width,
+        .height = height,
         .depth = 1,
     };
-    const dimg_info = vkinit.imageCreateInfo(vk.Format.r8g8b8a8_srgb, img_extent, .{ .sampled_bit = true, .transfer_dst_bit = true });
+    const dimg_info = vkinit.imageCreateInfo(format, img_extent, .{ .sampled_bit = true, .transfer_dst_bit = true });
     const malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
         .usage = .gpu_only,
     });
@@ -1571,9 +1595,7 @@ fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: [
         try gc.endOneTimeCommandBuffer();
     }
 
-    const image_info = vkinit.imageViewCreateInfo(.r8g8b8a8_srgb, new_img.image, .{ .color_bit = true });
+    const image_info = vkinit.imageViewCreateInfo(format, new_img.image, .{ .color_bit = true });
     new_img.default_view = try gc.vkd.createImageView(gc.dev, &image_info, null);
-
-    staging_buffer.deinit(gc.vma);
     return new_img;
 }
