@@ -783,7 +783,9 @@ pub const Engine = struct {
         try tri_mesh.vertices.append(.{ .position = .{ 1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 1, 0 } });
         try tri_mesh.vertices.append(.{ .position = .{ -1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 0, 0 } });
         try tri_mesh.vertices.append(.{ .position = .{ 0, -1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 0.5, 1 } });
+        tri_mesh.recalculateBounds();
 
+        // var monkey_mesh = try Mesh.initFromAsset(gpa, "/Users/desaro/zig-vulkan/zig-cache/baked_assets/monkey_flat.mesh");
         var monkey_mesh = try Mesh.initFromObj(gpa, "src/chapters/monkey_flat.obj");
         var cube_thing_mesh = try Mesh.initFromObj(gpa, "src/chapters/cube_thing.obj");
         var cube = try Mesh.initFromObj(gpa, "src/chapters/cube.obj");

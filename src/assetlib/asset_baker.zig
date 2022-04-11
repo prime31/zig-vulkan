@@ -183,6 +183,7 @@ fn bakeMesh(src: []const u8, dst: []const u8) !void {
     var mesh_info = assets.MeshInfo {
         .vert_buffer_size = vertices.len * @sizeOf(assets.VertexF32PNCV),
         .index_buffer_size = indices.len * @sizeOf(u32),
+        .bounds = assets.calculateBounds(assets.VertexF32PNCV, vertices),
         .vert_format = .pncv_f32,
         .index_size = @sizeOf(u32),
         .orig_file = src,

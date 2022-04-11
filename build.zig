@@ -129,7 +129,6 @@ fn createAssetBaker(b: *Builder, target: std.zig.CrossTarget) void {
     exe.setBuildMode(b.standardReleaseOptions());
 
     linkExeDeps(exe, b, target);
-    exe.addPackage(tinyobj_build.pkg);
 
     const run_cmd = exe.run();
     run_cmd.step.dependOn(b.getInstallStep());

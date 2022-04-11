@@ -2,9 +2,9 @@ const std = @import("std");
 const vk = @import("vulkan");
 const vma = @import("vma");
 const tiny = @import("tiny");
+const assets = @import("assetlib/assets.zig");
 
 const Vec3 = @import("chapters/vec3.zig").Vec3;
-
 const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 
 pub const VertexInputDescription = struct {
@@ -61,6 +61,23 @@ pub const RenderBounds = struct {
     radius: f32 = 0,
     extents: Vec3 = .{},
     valid: bool = false,
+
+    pub fn initWithMeshBounds(bounds: assets.MeshBounds) RenderBounds {
+        var self = RenderBounds{};
+
+        self.origin.x = bounds.origin[0];
+        self.origin.y = bounds.origin[1];
+        self.origin.z = bounds.origin[2];
+
+        self.extents.x = bounds.extents[0];
+        self.extents.y = bounds.extents[1];
+        self.extents.z = bounds.extents[2];
+
+        self.radius = bounds.radius;
+        self.valid = true;
+
+        return self;
+    }
 };
 
 pub const Mesh = struct {
@@ -110,9 +127,24 @@ pub const Mesh = struct {
         std.mem.copy(u32, indices, tiny_mesh.indices[0..tiny_mesh.num_indices]);
 
         return Mesh{
+            .bounds = RenderBounds.initWithMeshBounds(assets.calculateBounds(Vertex, vertices.items)),
             .vertices = vertices,
             .indices = indices,
             .index_count = @intCast(u32, indices.len),
+        };
+    }
+
+    pub fn initFromAsset(allocator: std.mem.Allocator, filename: []const u8) !Mesh {
+        const mesh_asset = try assets.load(assets.MeshInfo, filename);
+        const mesh_buffers = try assets.unpackMesh(Vertex, allocator, mesh_asset);
+
+        var vertices = std.ArrayList(Vertex).fromOwnedSlice(allocator, mesh_buffers.vert);
+
+        return Mesh{
+            .bounds = RenderBounds.initWithMeshBounds(mesh_asset.info.bounds),
+            .vertices = vertices,
+            .indices = mesh_buffers.index,
+            .index_count = @intCast(u32, mesh_buffers.index.len),
         };
     }
 
@@ -121,5 +153,13 @@ pub const Mesh = struct {
         self.index_buffer.deinit(allocator);
         self.vertices.deinit();
         self.vertices.allocator.free(self.indices);
+    }
+
+    pub fn recalculateBounds(self: *Mesh) void {
+        if (!self.bounds.valid) {
+            self.bounds = RenderBounds.initWithMeshBounds(assets.calculateBounds(Vertex, self.vertices.items));
+            self.bounds.valid = true;
+        }
+
     }
 };
