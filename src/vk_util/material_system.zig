@@ -240,6 +240,11 @@ pub const ShaderPass = struct {
         // ShaderEffect owns the PipelineLayout and ShaderCache and it is owned by EffectTemplate for now...
         gc.destroy(self.pip);
     }
+
+    pub fn eql(self: ShaderPass, other: ShaderPass) bool {
+        // TODO: do we need to check the ShaderEffect as well?
+        return self.pip == other.pip and self.pip_layout == other.pip_layout;
+    }
 };
 
 pub const SampledTexture = struct {

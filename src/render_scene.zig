@@ -18,6 +18,7 @@ const GpuObjectData = vkutil.GpuObjectData;
 const Vertex = @import("mesh.zig").Vertex;
 const Mat4 = @import("chapters/mat4.zig").Mat4;
 const Vec4 = @import("chapters/vec4.zig").Vec4;
+const Vec3 = @import("chapters/vec3.zig").Vec3;
 
 pub const RenderScene = struct {
     const Self = @This();
@@ -56,9 +57,9 @@ pub const RenderScene = struct {
         self.meshes.deinit();
         self.materials.deinit();
         self.dirty_objects.deinit();
-        self.forward_pass.deinit();
-        self.transparent_forward_pass.deinit();
-        self.shadow_pass.deinit();
+        self.forward_pass.deinit(self.gc);
+        self.transparent_forward_pass.deinit(self.gc);
+        self.shadow_pass.deinit(self.gc);
         self.material_convert.deinit();
         self.mesh_convert.deinit();
 
@@ -183,20 +184,23 @@ pub const RenderScene = struct {
         self.dirty_objects.clearRetainingCapacity();
     }
 
-    pub fn buildBatches(self: Self) void {
+    pub fn buildBatches(self: *Self) !void {
         // TODO: thread this
-        self.refreshPass(&self.forward_pass);
-        self.refreshPass(&self.transparent_forward_pass);
-        self.refreshPass(&self.shadow_pass);
+        try self.refreshPass(&self.forward_pass);
+        try self.refreshPass(&self.transparent_forward_pass);
+        try self.refreshPass(&self.shadow_pass);
     }
 
-    pub fn mergeMeshes(self: Self) !void {
-        var total_verts: usize = 0;
+    pub fn mergeMeshes(self: *Self) !void {
         var total_indices: usize = 0;
+        var total_verts: usize = 0;
 
         for (self.meshes.items) |*m| {
             m.first_index = @intCast(u32, total_indices);
             m.first_vert = @intCast(u32, total_verts);
+
+            total_indices += m.index_count;
+            total_verts += m.vert_count;
         }
 
         self.merged_vert_buffer = try self.gc.vma.createBuffer(Vertex, total_verts * @sizeOf(Vertex), .{ .transfer_dst_bit = true, .vertex_buffer_bit = true }, .gpu_only, .{});
@@ -209,37 +213,39 @@ pub const RenderScene = struct {
                 .size = m.vert_count * @sizeOf(Vertex),
                 .src_offset = 0,
             };
-            self.gc.vkd.cmdCopyBuffer(cmd_buf, m.original.vert_buffer.buffer, self.merged_vert_buffer, 1, @ptrCast([*]const vk.BufferCopy, &vertex_copy));
+            self.gc.vkd.cmdCopyBuffer(cmd_buf, m.original.vert_buffer.buffer, self.merged_vert_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &vertex_copy));
 
             const index_copy = vk.BufferCopy{
                 .dst_offset = m.first_index * @sizeOf(u32),
-                .size = m.total_indices * @sizeOf(u32),
+                .size = m.index_count * @sizeOf(u32),
                 .src_offset = 0,
             };
-            self.gc.vkd.cmdCopyBuffer(cmd_buf, m.original.index_buffer.buffer, self.merged_index_buffer, 1, @ptrCast([*]const vk.BufferCopy, &index_copy));
+            self.gc.vkd.cmdCopyBuffer(cmd_buf, m.original.index_buffer.buffer, self.merged_index_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &index_copy));
         }
         try self.gc.endOneTimeCommandBuffer();
     }
 
-    pub fn refreshPass(self: Self, pass: *MeshPass) void {
+    pub fn refreshPass(self: Self, pass: *MeshPass) !void {
         pass.needs_indirect_flush = true;
         pass.needs_instance_flush = true;
 
-        var new_objects = std.ArrayList(u32).init(self.gc.gpa);
+        var new_objects = std.ArrayList(u32).init(self.gc.scratch);
+
+        // delete objects
         if (pass.objects_to_delete.items.len > 0) {
             // create the render batches so that then we can do the deletion on the flat-array directly
-            var deletion_batches = std.ArrayList(RenderBatch).init(self.gc.gpa);
+            var deletion_batches = std.ArrayList(RenderBatch).init(self.gc.scratch);
 
-            for (pass.objects_to_delete) |pass_obj, i| {
+            for (pass.objects_to_delete.items) |pass_obj| {
                 try pass.reusable_objects.append(pass_obj);
 
-                var obj = pass.objects.items[pass_obj.handle];
                 var new_command = RenderBatch{
-                    .object = obj,
+                    .object = pass_obj,
                     .sort_key = 0,
                 };
 
-                const pip_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.shader_pass.pipeline));
+                var obj = pass.objects.items[pass_obj.handle];
+                const pip_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.shader_pass.pip));
                 const set_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.material_set));
                 const mathash = pip_hash ^ set_hash;
                 const meshmat = @intCast(u64, mathash) ^ @intCast(u64, obj.mesh_id.handle);
@@ -247,10 +253,10 @@ pub const RenderScene = struct {
                 // pack mesh id and material into 64 bits
                 new_command.sort_key = @intCast(u64, meshmat) | (@intCast(u64, obj.custom_key) << 32);
 
-                pass.objects.items[i.handle].custom_key = 0;
-                pass.objects.items[i.handle].material.shader_pass = null;
-                pass.objects.items[i.handle].mesh_id.handle = -1;
-                pass.objects.items[i.handle].original.handle = -1;
+                pass.objects.items[pass_obj.handle].custom_key = 0;
+                pass.objects.items[pass_obj.handle].material.shader_pass = .{};
+                pass.objects.items[pass_obj.handle].mesh_id.handle = std.math.maxInt(u32);
+                pass.objects.items[pass_obj.handle].original.handle = std.math.maxInt(u32);
 
                 try deletion_batches.append(new_command);
             }
@@ -259,120 +265,132 @@ pub const RenderScene = struct {
             std.sort.sort(RenderBatch, deletion_batches.items, {}, sortRenderBatches);
 
             {
+                const contains_closure = struct {
+                    pub fn contains(slice: []RenderBatch, value: RenderBatch) bool {
+                        for (slice) |rb| {
+                            if (rb.eql(value)) return true;
+                        }
+                        return false;
+                    }
+                }.contains;
+
                 // removal. get all the elements from flat_batches that are not in deletion_batches
-                var new_batches = ArrayList(RenderBatch).initCapacity(self.gc.gpa, pass.flat_batches.items.len);
+                var new_batches = try ArrayList(RenderBatch).initCapacity(self.gc.gpa, pass.flat_batches.items.len);
 
                 for (pass.flat_batches.items) |fb_batch| {
-                    if (std.mem.indexOfScalar(RenderBatch, deletion_batches, fb_batch) == null)
+                    if (!contains_closure(deletion_batches.items, fb_batch))
                         try new_batches.append(fb_batch);
                 }
                 pass.flat_batches.deinit();
                 pass.flat_batches = new_batches;
             }
+        }
 
-            {
-                // fill object list
-                try new_objects.ensureUnusedCapacity(pass.unbatched_objects.items.len);
-                for (pass.unbatched_objects.items) |o| {
-                    const mt = self.getMaterial(self.getObject(o).material);
-                    var new_obj = PassObject{
-                        .material = .{
-                            .material_set = mt.pass_sets[pass.pass_type],
-                            .shader_pass = mt.original.pass_shaders[pass.pass_type],
-                        },
-                        .mesh_id = self.getObject(o).mesh_id,
-                        .original = o,
-                        .custom_key = self.getObject(o).custom_sort_key,
-                    };
-
-                    // reuse handle
-                    var handle: u32 = 0;
-                    if (pass.reusable_objects.items.len > 0) {
-                        handle = pass.reusable_objects.items[pass.reusable_objects.items.len - 1].handle;
-                        _ = pass.reusable_objects.pop();
-                        pass.objects.items[handle] = new_obj;
-                    } else {
-                        try pass.objects.append(new_obj);
-                    }
-
-                    try new_objects.append(handle);
-                    self.getObject(o).pass_indices[pass.pass_type] = @intCast(i32, handle);
-                }
-            }
-
-            var new_batches = std.ArrayList(RenderBatch).init(self.gc.gpa);
-            {
-                // fill draw list
-                for (new_objects) |i| {
-                    const obj = pass.objects[i];
-                    const pip_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.shader_pass.pipeline));
-                    const set_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.material_set));
-                    const mathash = @intCast(u32, pip_hash ^ set_hash);
-                    const meshmat = @intCast(u64, mathash) ^ @intCast(u64, obj.mesh_id.handle);
-
-                    // pack mesh id and material into 64 bits
-                    try new_batches.append(.{
-                        .object = pass.objects[i],
-                        .sort_key = @intCast(u64, meshmat) | (@intCast(u64, obj.custom_key) << 32),
-                    });
-                }
-            }
-
-            {
-                // draw sort
-                std.sort.sort(RenderBatch, new_batches.items, {}, sortRenderBatches);
-            }
-
-            {
-                // draw merged batches. merge the new batches into the main batch array
-                if (new_batches.items.len > 0) {
-                    try pass.flat_batches.ensureUnusedCapacity(pass.flat_batches.items.len + new_batches.items.len);
-
-                    for (new_batches.items) |b|
-                        pass.flat_batches.appendAssumeCapacity(b);
-
-                    std.sort.sort(RenderBatch, pass.flat_batches.items, {}, sortRenderBatches);
-                }
-            }
-
-            {
-                // draw merge
-                pass.batches.clearRetainingCapacity();
-                try buildIndirectBatches(pass, pass.batches, pass.flat_batches);
-
-                // flatten batches into multibatch
-                pass.multibatches.clearRetainingCapacity();
-                var new_batch = Multibatch{
-                    .first = 0,
-                    .count = 1,
+        {
+            // fill object list
+            try new_objects.ensureUnusedCapacity(pass.unbatched_objects.items.len);
+            for (pass.unbatched_objects.items) |o| {
+                const mt = self.getMaterial(self.getObject(o).material);
+                var new_obj = PassObject{
+                    .material = .{
+                        .material_set = mt.pass_sets.get(pass.pass_type),
+                        .shader_pass = mt.original.pass_shaders.get(pass.pass_type),
+                    },
+                    .mesh_id = self.getObject(o).mesh_id,
+                    .original = o,
+                    .custom_key = self.getObject(o).custom_sort_key,
                 };
 
-                for (pass.batches.items[1..]) |*batch, i| {
-                    var join_batch = *pass.batches.items[new_batch.first];
-
-                    const compatible_batch = self.getMesh(join_batch.mesh_id).is_merged;
-                    var same_mat = blk: {
-                        if (compatible_batch and join_batch.material.material_set == batch.material.material_set and
-                            join_batch.material.shader_pass == batch.material.shader_pass) {
-                            break :blk true;
-                        }
-                        break :blk false;
-                    };
-
-                    if (!same_mat or !compatible_batch) {
-                        try pass.multibatches.append(new_batch);
-                        new_batch.count = 1;
-                        new_batch.first = i;
-                    } else {
-                        new_batch.count += 1;
-                    }
+                // reuse handle
+                var handle: u32 = 0;
+                if (pass.reusable_objects.items.len > 0) {
+                    handle = pass.reusable_objects.items[pass.reusable_objects.items.len - 1].handle;
+                    _ = pass.reusable_objects.pop();
+                    pass.objects.items[handle] = new_obj;
+                } else {
+                    handle = @intCast(u32, pass.objects.items.len);
+                    try pass.objects.append(new_obj);
                 }
-                try pass.multibatches.append(new_batch);
 
-                // no multi batch
-                for (pass.batches.items) |_, i|
-                    try pass.multibatches.append(.{ .count = 1, .first = i });
+                try new_objects.append(handle);
+                self.getObject(o).pass_indices.set(pass.pass_type, @intCast(i32, handle));
             }
+        }
+
+        var new_batches = std.ArrayList(RenderBatch).init(self.gc.scratch);
+        {
+            // fill draw list
+            for (new_objects.items) |obj_id| {
+                const obj = pass.objects.items[obj_id];
+
+                const pip_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.shader_pass.pip));
+                const set_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.material_set));
+                const mathash = @truncate(u32, pip_hash ^ set_hash);
+                const meshmat = @intCast(u64, mathash) ^ @intCast(u64, obj.mesh_id.handle);
+
+                // pack mesh id and material into 64 bits
+                try new_batches.append(.{
+                    .object = Handle(PassObject).init(obj_id),
+                    .sort_key = @intCast(u64, meshmat) | (@intCast(u64, obj.custom_key) << 32),
+                });
+            }
+        }
+
+        {
+            // draw sort
+            std.sort.sort(RenderBatch, new_batches.items, {}, sortRenderBatches);
+        }
+
+        {
+            // draw merged batches. merge the new batches into the main batch array
+            if (new_batches.items.len > 0) {
+                try pass.flat_batches.ensureUnusedCapacity(pass.flat_batches.items.len + new_batches.items.len);
+
+                for (new_batches.items) |b|
+                    pass.flat_batches.appendAssumeCapacity(b);
+
+                std.sort.sort(RenderBatch, pass.flat_batches.items, {}, sortRenderBatches);
+            }
+        }
+
+        {
+            // draw merge
+            pass.batches.clearRetainingCapacity();
+            try buildIndirectBatches(pass, &pass.batches, pass.flat_batches);
+
+            // flatten batches into multibatch
+            pass.multibatches.clearRetainingCapacity();
+            var new_batch = Multibatch{
+                .first = 0,
+                .count = 1,
+            };
+
+            if (pass.batches.items.len > 1) for (pass.batches.items[1..]) |*batch, i| {
+                var join_batch = &pass.batches.items[new_batch.first];
+
+                const compatible_batch = self.getMesh(join_batch.mesh_id).is_merged;
+                var same_mat = blk: {
+                    if (compatible_batch and join_batch.material.material_set == batch.material.material_set and
+                        join_batch.material.shader_pass.eql(batch.material.shader_pass))
+                    {
+                        break :blk true;
+                    }
+                    break :blk false;
+                };
+
+                if (!same_mat or !compatible_batch) {
+                    try pass.multibatches.append(new_batch);
+                    new_batch.count = 1;
+                    new_batch.first = @intCast(u32, i);
+                } else {
+                    new_batch.count += 1;
+                }
+            };
+            try pass.multibatches.append(new_batch);
+
+            // no multi batch
+            for (pass.batches.items) |_, i|
+                try pass.multibatches.append(.{ .count = 1, .first = @intCast(u32, i) });
         }
     }
 
@@ -382,33 +400,34 @@ pub const RenderScene = struct {
         return false;
     }
 
-    pub fn buildIndirectBatches(pass: *MeshPass, out_batches: ArrayList(IndirectBatch), in_objects: ArrayList(RenderBatch)) !void {
+    pub fn buildIndirectBatches(pass: *MeshPass, out_batches: *ArrayList(IndirectBatch), in_objects: ArrayList(RenderBatch)) !void {
         if (in_objects.items.len == 0) return;
 
-        const new_batch = IndirectBatch{
-            .mesh_id = pass.get(in_objects[0].object).mesh_id,
-            .material = pass.get(in_objects[0].object).material,
+        var new_batch = IndirectBatch{
+            .mesh_id = pass.get(in_objects.items[0].object).mesh_id,
+            .material = pass.get(in_objects.items[0].object).material,
             .first = 0,
             .count = 0,
         };
         try out_batches.append(new_batch);
 
-        const back = &pass.batches.items[pass.batches.items - 1];
+        var back = &pass.batches.items[pass.batches.items.len - 1];
         const last_mat = new_batch.material;
-        for (in_objects.items) |obj, i| {
+        for (in_objects.items) |ind_batch, i| {
+            const obj = pass.get(ind_batch.object);
             const same_mesh = obj.mesh_id.handle == back.mesh_id.handle;
-            const same_material = obj.material == last_mat;
+            var same_material = obj.material.eql(last_mat);
 
             if (!same_mesh or !same_material) {
                 new_batch.material = obj.material;
-                if (new_batch.material == back.material)
+                if (new_batch.material.eql(back.material))
                     same_material = true;
             }
 
             if (same_mesh and same_material) {
                 back.count += 1;
             } else {
-                new_batch.first = i;
+                new_batch.first = @intCast(u32, i);
                 new_batch.count = 1;
                 new_batch.mesh_id = obj.mesh_id;
 
@@ -466,7 +485,7 @@ pub const RenderScene = struct {
             .is_merged = false,
             .original = m,
         });
-        
+
         const handle = Handle(DrawMesh).init(index);
         try self.mesh_convert.put(m, handle);
         return handle;
@@ -475,7 +494,7 @@ pub const RenderScene = struct {
 
 pub fn Handle(comptime T: type) type {
     return struct {
-        handle: u32,
+        handle: u32 = std.math.maxInt(u32),
 
         pub fn init(handle: u32) Handle(T) {
             return .{ .handle = handle };
@@ -491,6 +510,50 @@ pub const MeshObject = struct {
     bounds: RenderBounds,
     draw_forward_pass: bool,
     draw_shadow_pass: bool,
+
+    pub fn refreshRenderBounds(self: *MeshObject) void {
+        if (!self.mesh.bounds.valid) return;
+
+        const orig_bounds = self.mesh.bounds;
+
+        // convert bounds to 8 vertices, and transform those
+        var verts: [8]Vec3 = undefined;
+        for (verts) |*v| v.* = self.bounds.origin;
+
+        verts[0] = verts[0].add(orig_bounds.extents.mul(Vec3.new(1, 1, 1)));
+        verts[1] = verts[1].add(orig_bounds.extents.mul(Vec3.new(1, 1, -1)));
+        verts[2] = verts[2].add(orig_bounds.extents.mul(Vec3.new(1, -1, 1)));
+        verts[3] = verts[3].add(orig_bounds.extents.mul(Vec3.new(1, -1, -1)));
+        verts[4] = verts[4].add(orig_bounds.extents.mul(Vec3.new(-1, 1, 1)));
+        verts[5] = verts[5].add(orig_bounds.extents.mul(Vec3.new(-1, 1, -1)));
+        verts[6] = verts[6].add(orig_bounds.extents.mul(Vec3.new(-1, -1, 1)));
+        verts[7] = verts[7].add(orig_bounds.extents.mul(Vec3.new(-1, -1, -1)));
+
+        // recalc min/max
+        var min = Vec3.new(std.math.f32_max, std.math.f32_max, std.math.f32_max);
+        var max = Vec3.new(std.math.f32_min, std.math.f32_min, std.math.f32_min);
+
+        // transform every vertex, accumulating max/min
+        for (verts) |*vert| {
+            vert.* = vert.transform(self.transform_matrix);
+
+            min = vert.componentMin(min);
+            max = vert.componentMax(max);
+        }
+
+        const m = self.transform_matrix.fields;
+        var max_scale: f32 = 0;
+        max_scale = std.math.max(Vec3.new(m[0][0], m[0][1], m[0][2]).length(), max_scale);
+        max_scale = std.math.max(Vec3.new(m[1][0], m[1][1], m[1][2]).length(), max_scale);
+        max_scale = std.math.max(Vec3.new(m[2][0], m[2][1], m[2][2]).length(), max_scale);
+
+        const extents = max.sub(min).scale(0.5);
+
+        self.bounds.extents = extents;
+        self.bounds.origin = min.add(extents);
+        self.bounds.radius = max_scale * orig_bounds.radius;
+        self.bounds.valid = true;
+    }
 };
 
 const GpuIndirectObject = struct {
@@ -529,7 +592,7 @@ const PassMaterial = struct {
     shader_pass: ShaderPass,
 
     pub fn eql(self: PassMaterial, other: PassMaterial) bool {
-        return self.material_set == other.material_set and self.shader_pass == other.shader_pass;
+        return self.material_set == other.material_set and self.shader_pass.eql(other.shader_pass);
     }
 };
 
@@ -537,13 +600,17 @@ const PassObject = struct {
     material: PassMaterial,
     mesh_id: Handle(DrawMesh),
     original: Handle(RenderObject),
-    built_batch: i32,
+    built_batch: i32 = -1,
     custom_key: u32,
 };
 
 const RenderBatch = struct {
     object: Handle(PassObject),
     sort_key: u64,
+
+    pub fn eql(self: RenderBatch, other: RenderBatch) bool {
+        return self.object.handle == other.object.handle and self.sort_key == other.sort_key;
+    }
 };
 
 const IndirectBatch = struct {
@@ -590,7 +657,7 @@ const MeshPass = struct {
         };
     }
 
-    pub fn deinit(self: MeshPass) void {
+    pub fn deinit(self: MeshPass, gc: *const GraphicsContext) void {
         self.multibatches.deinit();
         self.batches.deinit();
         self.flat_batches.deinit();
@@ -598,10 +665,17 @@ const MeshPass = struct {
         self.unbatched_objects.deinit();
         self.reusable_objects.deinit();
         self.objects_to_delete.deinit();
+
         // TODO: delete the allocated buffers
+        _ = gc;
+        // self.compacted_instance_buffer.deinit(gc.vma);
+        // self.clear_indirect_buffer.deinit(gc.vma);
+
+        // self.draw_indirect_buffer.deinit(gc.vma);
+        // self.clear_indirect_buffer.deinit(gc.vma);
     }
 
     pub fn get(self: MeshPass, handle: Handle(PassObject)) *PassObject {
-        return &self.objects[handle.handle];
+        return &self.objects.items[handle.handle];
     }
 };

@@ -440,6 +440,9 @@ pub const Engine = struct {
         try self.initOldPipelines();
         try self.initOldScene();
         try self.initScene();
+
+        try self.render_scene.buildBatches();
+        try self.render_scene.mergeMeshes();
     }
 
     pub fn run(self: *Self) !void {
@@ -955,6 +958,7 @@ pub const Engine = struct {
                     .draw_forward_pass = true,
                     .draw_shadow_pass = true,
                 };
+                tri.refreshRenderBounds();
                 _ = try self.render_scene.registerObject(tri);
             }
         }
@@ -1500,8 +1504,8 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
         std.mem.copy(Vertex, verts[0..mesh.vertices.items.len], mesh.vertices.items);
         gc.vma.unmapMemory(staging_buffer.allocation);
 
-        // create Mesh buffer
-        mesh.vert_buffer = try gc.vma.createUntypedBuffer(buffer_size, .{ .vertex_buffer_bit = true, .transfer_dst_bit = true }, .gpu_only, .{});
+        // create Mesh vert buffer. we need transfer_src_bit for when we copy into a merged buffer later
+        mesh.vert_buffer = try gc.vma.createUntypedBuffer(buffer_size, .{ .vertex_buffer_bit = true, .transfer_src_bit = true, .transfer_dst_bit = true }, .gpu_only, .{});
 
         // execute the copy command on the GPU
         const cmd_buf = try gc.beginOneTimeCommandBuffer();
@@ -1526,8 +1530,8 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
         std.mem.copy(u32, dst_indices[0..mesh.indices.len], mesh.indices);
         gc.vma.unmapMemory(staging_buffer.allocation);
 
-        // create Mesh buffer
-        mesh.index_buffer = try gc.vma.createUntypedBuffer(buffer_size, .{ .index_buffer_bit = true, .transfer_dst_bit = true }, .gpu_only, .{});
+        // create Mesh index buffer
+        mesh.index_buffer = try gc.vma.createUntypedBuffer(buffer_size, .{ .index_buffer_bit = true, .transfer_src_bit = true, .transfer_dst_bit = true }, .gpu_only, .{});
 
         // execute the copy command on the GPU
         const cmd_buf = try gc.beginOneTimeCommandBuffer();

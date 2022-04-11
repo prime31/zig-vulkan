@@ -1,4 +1,6 @@
 const std = @import("std");
+const Mat4 = @import("mat4.zig").Mat4;
+const Vec4 = @import("vec4.zig").Vec4;
 
 pub const Vec3 = extern struct {
     x: f32 = 0,
@@ -37,6 +39,15 @@ pub const Vec3 = extern struct {
         return result;
     }
 
+    /// multiplies all components from `a` with the components of `b`.
+    pub fn mul(a: Vec3, b: Vec3) Vec3 {
+        var result: Vec3 = undefined;
+        inline for (@typeInfo(Vec3).Struct.fields) |fld| {
+            @field(result, fld.name) = @field(a, fld.name) * @field(b, fld.name);
+        }
+        return result;
+    }
+
     pub fn cross(a: Vec3, b: Vec3) Vec3 {
         return Vec3{
             .x = a.y * b.z - a.z * b.y,
@@ -61,6 +72,29 @@ pub const Vec3 = extern struct {
         var result: Vec3 = undefined;
         inline for (@typeInfo(Vec3).Struct.fields) |fld| {
             @field(result, fld.name) = @field(a, fld.name) - @field(b, fld.name);
+        }
+        return result;
+    }
+
+    pub fn transform(self: Vec3, mat: Mat4) Vec3 {
+        var res = Vec4.new(self.x, self.y, self.z, 1).transform(mat);
+        return Vec3.new(res.x, res.y, res.z);
+    }
+
+    /// returns a new vector where each component is the minimum of the components of the input vectors.
+    pub fn componentMin(a: Vec3, b: Vec3) Vec3 {
+        var result: Vec3 = undefined;
+        inline for (@typeInfo(Vec3).Struct.fields) |fld| {
+            @field(result, fld.name) = std.math.min(@field(a, fld.name), @field(b, fld.name));
+        }
+        return result;
+    }
+
+    /// returns a new vector where each component is the maximum of the components of the input vectors.
+    pub fn componentMax(a: Vec3, b: Vec3) Vec3 {
+        var result: Vec3 = undefined;
+        inline for (@typeInfo(Vec3).Struct.fields) |fld| {
+            @field(result, fld.name) = std.math.max(@field(a, fld.name), @field(b, fld.name));
         }
         return result;
     }
