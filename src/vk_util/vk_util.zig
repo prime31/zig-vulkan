@@ -2,6 +2,7 @@ const std = @import("std");
 const vk = @import("vulkan");
 
 const Mat4 = @import("../chapters/mat4.zig").Mat4;
+const Vec3 = @import("../chapters/vec3.zig").Vec3;
 const Vec4 = @import("../chapters/vec4.zig").Vec4;
 
 pub const PushBuffer = @import("push_buffer.zig").PushBuffer;
@@ -29,6 +30,17 @@ pub const GpuSceneData = struct {
     ambient_color: Vec4 = Vec4.new(1, 0, 0, 1),
     sun_dir: Vec4 = Vec4.new(1, 0, 0, 1),
     sun_color: Vec4 = Vec4.new(1, 0, 0, 1),
+};
+
+pub const CullParams = struct {
+    viewmat: Mat4,
+    projmat: Mat4,
+    occlusion_cull: bool,
+    frustum_cull: bool,
+    draw_dist: f32,
+    aabb: bool,
+    aabbmin: Vec3 = Vec3.new(0, 0, 0),
+    aabbmax: Vec3 = Vec3.new(0, 0, 0),
 };
 
 pub const MeshPassType = enum(u8) {

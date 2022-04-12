@@ -41,7 +41,7 @@ pub const PushBuffer = struct {
         aligned_data.* = data;
 
         self.current_offset += @sizeOf(T);
-        self.current_offset += self.padUniformBufferSize(@sizeOf(T));
+        self.current_offset = self.padUniformBufferSize(self.current_offset);
 
         return offset;
     }
@@ -50,9 +50,9 @@ pub const PushBuffer = struct {
         self.current_offset = 0;
     }
 
-    fn padUniformBufferSize(self: PushBuffer, size: usize) u32 {
+    fn padUniformBufferSize(self: PushBuffer, original_size: usize) u32 {
         const min_ubo_alignment = self.alignment;
-        var aligned_size = size;
+        var aligned_size = original_size;
         if (min_ubo_alignment > 0)
             aligned_size = (aligned_size + min_ubo_alignment - 1) & ~(min_ubo_alignment - 1);
         return @intCast(u32, aligned_size);

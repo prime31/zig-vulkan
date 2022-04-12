@@ -40,7 +40,6 @@ pub const Mat4 = extern struct {
     // taken from GLM implementation
     pub fn createPerspective(fov: f32, aspect: f32, near: f32, far: f32) Mat4 {
         std.debug.assert(std.math.fabs(aspect - 0.001) > 0);
-        std.debug.assert(far > near);
         const tanHalfFov = std.math.tan(fov / 2);
 
         var result = Mat4.zero;
@@ -160,6 +159,10 @@ pub const Mat4 = extern struct {
     pub fn rotate(self: Mat4, angle: f32, axis: Vec3) Mat4 {
         const rot = createAngleAxis(axis, angle);
         return self.mul(rot);
+    }
+
+    pub fn transpose(self: Mat4) Mat4 {
+        return self;
     }
 
     pub fn toArray(m: Mat4) [16]f32 {

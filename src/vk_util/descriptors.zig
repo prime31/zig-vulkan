@@ -110,10 +110,10 @@ pub const DescriptorLayoutCache = struct {
     layout_cache: std.AutoHashMap(DescriptorLayoutInfo, vk.DescriptorSetLayout),
 
     const DescriptorLayoutInfo = struct {
-        bindings: std.BoundedArray(vk.DescriptorSetLayoutBinding, 5),
+        bindings: std.BoundedArray(vk.DescriptorSetLayoutBinding, 8),
 
         pub fn init() DescriptorLayoutInfo {
-            return .{ .bindings = std.BoundedArray(vk.DescriptorSetLayoutBinding, 5).init(0) catch unreachable };
+            return .{ .bindings = std.BoundedArray(vk.DescriptorSetLayoutBinding, 8).init(0) catch unreachable };
         }
     };
 

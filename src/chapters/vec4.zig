@@ -10,6 +10,18 @@ pub const Vec4 = extern struct {
         return .{ .x = x, .y = y, .z = z, .w = w };
     }
 
+    pub fn newFromArr(arr: [4]f32) Vec4 {
+        return .{ .x = arr[0], .y = arr[1], .z = arr[2], .w = arr[3] };
+    }
+
+    pub fn add(a: Vec4, b: Vec4) Vec4 {
+        var result: Vec4 = undefined;
+        inline for (@typeInfo(Vec4).Struct.fields) |fld| {
+            @field(result, fld.name) = @field(a, fld.name) + @field(b, fld.name);
+        }
+        return result;
+    }
+
     // https://github.com/kooparse/zalgebra/blob/main/src/mat4.zig#L114
     pub fn transform(self: Vec4, mat: Mat4) Vec4 {
         const x = (mat.fields[0][0] * self.x) + (mat.fields[1][0] * self.y) + (mat.fields[2][0] * self.z) + (mat.fields[3][0] * self.w);
