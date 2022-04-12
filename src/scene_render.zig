@@ -5,6 +5,8 @@ const vkutil = @import("vk_util/vk_util.zig");
 const vkinit = @import("vkinit.zig");
 
 const Mat4 = @import("chapters/mat4.zig").Mat4;
+const Vec3 = @import("chapters/vec3.zig").Vec3;
+const Vec4 = @import("chapters/vec4.zig").Vec4;
 
 const Engine = @import("engine.zig").Engine;
 const FrameData = @import("engine.zig").FrameData;
@@ -13,6 +15,71 @@ const Mesh = @import("mesh.zig").Mesh;
 const MeshPass = @import("render_scene.zig").MeshPass;
 const GpuInstance = @import("render_scene.zig").GpuInstance;
 const GpuIndirectObject = @import("render_scene.zig").GpuIndirectObject;
+
+const DrawCullData = struct {
+    viewmat: Mat4,
+    p00: f32, // symmetric projection parameters
+    p11: f32,
+    znear: f32,
+    zfar: f32,
+    frustum: [4]f32, // data for left/right/top/bottom frustum planes
+    lod_base: f32, // lod distance i = base * pow(step, i)
+    lod_step: f32,
+    pyramid_width: f32, // depth pyramid size in texels
+    pyramid_height: f32,
+
+    draw_count: u32,
+
+    culling_enabled: i32,
+    lod_enabled: i32,
+    occlusion_enabled: i32,
+    distance_check: i32,
+    aabb_check: i32,
+    aabbmin_x: f32,
+    aabbmin_y: f32,
+    aabbmin_z: f32,
+    aabbmax_x: f32,
+    aabbmax_y: f32,
+    aabbmax_z: f32,
+
+    fn normalizePlane(p: Vec4) Vec4 {
+        const p3 = Vec3.new(p.x, p.y, p.z);
+        const len = p3.length();
+        return Vec4.new(p.x / len, p.y / len, p.z / len, p.w / len);
+    }
+
+    pub fn init(params: vkutil.CullParams) DrawCullData {
+        const proj_t = params.projmat.transpose();
+
+        const frustum_x = normalizePlane(Vec4.newFromArr(proj_t.fields[3]).add(Vec4.newFromArr(proj_t.fields[0])));
+        const frustum_y = normalizePlane(Vec4.newFromArr(proj_t.fields[3]).add(Vec4.newFromArr(proj_t.fields[1])));
+
+        return .{
+            .viewmat = params.viewmat,
+            .p00 = params.projmat.fields[0][0],
+            .p11 = params.projmat.fields[1][1],
+            .znear = 0.1,
+            .zfar = params.draw_dist,
+            .frustum = [4]f32{ frustum_x.x, frustum_x.y, frustum_y.y, frustum_y.z },
+            .lod_base = undefined,
+            .lod_step = undefined,
+            .pyramid_width = undefined,
+            .pyramid_height = undefined,
+            .draw_count = undefined,
+            .culling_enabled = if (params.frustum_cull) 1 else 0,
+            .lod_enabled = 0,
+            .occlusion_enabled = if (params.occlusion_cull) 1 else 0,
+            .distance_check = if (params.draw_dist > 10000) 1 else 0,
+            .aabb_check = if (params.aabb) 1 else 0,
+            .aabbmin_x = undefined,
+            .aabbmin_y = undefined,
+            .aabbmin_z = undefined,
+            .aabbmax_x = undefined,
+            .aabbmax_y = undefined,
+            .aabbmax_z = undefined,
+        };
+    }
+};
 
 fn toRadians(deg: anytype) @TypeOf(deg) {
     return std.math.pi * deg / 180.0;
@@ -159,7 +226,7 @@ pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass)
     });
 
     var global_set: vk.DescriptorSet = undefined;
-    var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.descriptor_allocator, &self.descriptor_layout_cache);
+    var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.getCurrentFrameData().dynamic_descriptor_allocator, &self.descriptor_layout_cache);
     builder.bindBuffer(0, &cam_info, .uniform_buffer_dynamic, .{ .vertex_bit = true });
     builder.bindBuffer(1, &scene_info, .uniform_buffer_dynamic, .{ .vertex_bit = true, .fragment_bit = true });
     builder.bindImage(2, &shadow_image, .combined_image_sampler, .{ .fragment_bit = true });
@@ -167,7 +234,7 @@ pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass)
     builder.deinit();
 
     var object_data_set: vk.DescriptorSet = undefined;
-    builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.descriptor_allocator, &self.descriptor_layout_cache);
+    builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.getCurrentFrameData().dynamic_descriptor_allocator, &self.descriptor_layout_cache);
     builder.bindBuffer(0, &obj_buffer_data, .storage_buffer, .{ .vertex_bit = true });
     builder.bindBuffer(1, &instance_info, .storage_buffer, .{ .vertex_bit = true });
     _ = try builder.build(&object_data_set);
@@ -199,7 +266,7 @@ fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, ob
 
         if (new_pip != last_pip) {
             last_pip = new_pip;
-            self.gc.vkd.cmdBindPipeline(cmd, .graphics, new_pip);
+            self.gc.vkd.cmdBindPipeline(cmd, .graphics, last_pip);
             self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, new_layout, 1, 1, vkutil.ptrToMany(&obj_data_set), 0, undefined);
 
             // update dynamic binds
@@ -208,7 +275,7 @@ fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, ob
 
         if (new_material_set != last_material_set) {
             last_material_set = new_material_set;
-            self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, new_layout, 2, 1, vkutil.ptrToMany(&new_material_set), 0, undefined);
+            self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, new_layout, 2, 1, vkutil.ptrToMany(&last_material_set), 0, undefined);
         }
 
         if (self.render_scene.getMesh(instance_draw.mesh_id).is_merged) {
@@ -233,4 +300,53 @@ fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, ob
             self.gc.vkd.cmdDrawIndexedIndirect(cmd, pass.draw_indirect_buffer.buffer, multibatch.first * @sizeOf(GpuIndirectObject), multibatch.count, @sizeOf(GpuIndirectObject));
         }
     }
+}
+
+pub fn executeComputeCull(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, params: vkutil.CullParams) !void {
+    if (pass.batches.items.len == 0) return;
+
+    const obj_buffer_info = self.render_scene.object_data_buffer.getInfo(0);
+
+    var dynamic_info = self.getCurrentFrameData().dynamic_data.source.getInfo(0);
+    dynamic_info.range = @sizeOf(vkutil.GpuCameraData);
+
+    const instance_info = pass.pass_objects_buffer.getInfo(0);
+    const final_info = pass.compacted_instance_buffer.getInfo(0);
+    const indirect_info = pass.draw_indirect_buffer.getInfo(0);
+
+    // const depth_pyramid = vk.DescriptorImageInfo{
+    //     .sampler = self.depth_sampler,
+    //     .image_view = self.depth_pyramid.image.default_view,
+    //     .image_layout = .general,
+    // };
+
+    var comp_obj_data_set: vk.DescriptorSet = undefined;
+    var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.getCurrentFrameData().dynamic_descriptor_allocator, &self.descriptor_layout_cache);
+    builder.bindBuffer(0, &obj_buffer_info, .storage_buffer, .{ .compute_bit = true });
+    builder.bindBuffer(1, &indirect_info, .storage_buffer, .{ .compute_bit = true });
+    builder.bindBuffer(2, &instance_info, .storage_buffer, .{ .compute_bit = true });
+    builder.bindBuffer(3, &final_info, .storage_buffer, .{ .compute_bit = true });
+    // builder.bindImage(4, &depth_pyramid, .combined_image_sampler, .{ .compute_bit = true });
+    builder.bindBuffer(5, &dynamic_info, .uniform_buffer, .{ .compute_bit = true });
+    _ = try builder.build(&comp_obj_data_set);
+    builder.deinit();
+
+    var cull_data = DrawCullData.init(params);
+
+    self.gc.vkd.cmdBindPipeline(cmd, .compute, self.cull_pip_lay.pipeline);
+    self.gc.vkd.cmdPushConstants(cmd, self.cull_pip_lay.layout, .{ .compute_bit = true }, 0, @sizeOf(DrawCullData), &cull_data);
+    self.gc.vkd.cmdBindDescriptorSets(cmd, .compute, self.cull_pip_lay.layout, 0, 1, vkutil.ptrToMany(&comp_obj_data_set), 0, undefined);
+    self.gc.vkd.cmdDispatch(cmd, @intCast(u32, pass.flat_batches.items.len / 256) + 1, 1, 1);
+
+    // barrier the 2 buffers we just wrote for culling, the indirect draw one, and the instances one, so that they can be read well when rendering the pass
+    var barrier = vkinit.bufferBarrier(pass.compacted_instance_buffer.buffer, self.gc.graphics_queue.family);
+    barrier.src_access_mask = .{ .shader_write_bit = true };
+    barrier.dst_access_mask = .{ .indirect_command_read_bit = true };
+
+    var barrier2 = vkinit.bufferBarrier(pass.draw_indirect_buffer.buffer, self.gc.graphics_queue.family);
+    barrier.src_access_mask = .{ .shader_write_bit = true };
+    barrier.dst_access_mask = .{ .indirect_command_read_bit = true };
+
+    try self.post_cull_barriers.append(barrier);
+    try self.post_cull_barriers.append(barrier2);
 }

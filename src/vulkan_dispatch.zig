@@ -115,6 +115,7 @@ pub const DeviceDispatch = vk.DeviceWrapper(.{
     .cmdBindIndexBuffer = true,
     .cmdCopyBuffer = true,
     .cmdSetDepthBias = true,
+    .cmdDispatch = true,
     
     .resetCommandBuffer = true,
     .createDescriptorSetLayout = true,

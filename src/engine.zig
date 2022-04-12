@@ -950,14 +950,14 @@ pub const Engine = struct {
         _ = try self.material_system.buildMaterial("default", mat_info);
 
         var x: f32 = 0;
-        while (x < 1) : (x += 1) {
+        while (x < 10) : (x += 1) {
             var y: f32 = 0;
-            while (y < 2) : (y += 1) {
+            while (y < 10) : (y += 1) {
                 var tri = MeshObject{
                     .mesh = self.meshes.getPtr("triangle").?,
-                    .material = self.material_system.getMaterial("default").?,
+                    .material = self.material_system.getMaterial("textured").?,
                     .custom_sort_key = 0,
-                    .transform_matrix = Mat4.createTranslation(.{ .x = x, .y = 0, .z = y }),
+                    .transform_matrix = Mat4.createTranslation(.{ .x = x, .y = 0, .z = y }).mul(Mat4.createScale(.{ .x = 0.5, .y = 0.5, .z = 0.5 })),
                     .bounds = self.meshes.getPtr("triangle").?.bounds,
                     .draw_forward_pass = true,
                     .draw_shadow_pass = true,
@@ -989,8 +989,18 @@ pub const Engine = struct {
         try self.readyCullData(&self.render_scene.shadow_pass, frame.cmd_buffer);
         self.gc.vkd.cmdPipelineBarrier(frame.cmd_buffer, .{ .transfer_bit = true }, .{ .compute_shader_bit = true }, .{}, 0, undefined, @intCast(u32, self.cull_ready_barriers.items.len), self.cull_ready_barriers.items.ptr, 0, undefined);
 
-        // culling
-        // TODO
+        // culling TODO: finish this
+        const forward_cull = vkutil.CullParams{
+            .projmat = self.camera.getReversedProjMatrix(self.swapchain.extent),
+            .viewmat = self.camera.getViewMatrix(),
+            .frustum_cull = false,
+            .occlusion_cull = false,
+            .draw_dist = 666666,
+            .aabb = false,
+        };
+        try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.forward_pass, forward_cull);
+        // try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.transparent_forward_pass, 0);
+
 
         try self.forwardPass(frame.cmd_buffer);
         try self.copyRenderToSwapchain(frame.cmd_buffer);
