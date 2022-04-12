@@ -190,7 +190,7 @@ pub const DescriptorBuilder = struct {
         self.bindings.deinit();
     }
 
-    pub fn bindBuffer(self: *Self, binding: u32, buffer_info: *vk.DescriptorBufferInfo, desc_type: vk.DescriptorType, stage_flags: vk.ShaderStageFlags) void {
+    pub fn bindBuffer(self: *Self, binding: u32, buffer_info: *const vk.DescriptorBufferInfo, desc_type: vk.DescriptorType, stage_flags: vk.ShaderStageFlags) void {
         // create the descriptor binding for the layout
         self.bindings.append(.{
             .binding = binding,

@@ -20,7 +20,11 @@ const Vertex = @import("mesh.zig").Vertex;
 const Allocator = std.mem.Allocator;
 
 const MeshObject = @import("render_scene.zig").MeshObject;
+const MeshPass = @import("render_scene.zig").MeshPass;
+const GpuIndirectObject = @import("render_scene.zig").GpuIndirectObject;
 const FlyCamera = @import("chapters/FlyCamera.zig");
+const GpuCameraData = vkutil.GpuCameraData;
+const GpuSceneData = vkutil.GpuSceneData;
 
 const Mat4 = @import("chapters/mat4.zig").Mat4;
 const Vec3 = @import("chapters/vec3.zig").Vec3;
@@ -60,20 +64,6 @@ const DirectionalLight = struct {
     light_pos: Vec3,
     light_dir: Vec3,
     shadow_extent: Vec3,
-};
-
-const GpuCameraData = struct {
-    view: Mat4,
-    proj: Mat4,
-    view_proj: Mat4,
-};
-
-const GpuSceneData = struct {
-    fog_color: Vec4 = Vec4.new(1, 0, 0, 1),
-    fog_distance: Vec4 = Vec4.new(1, 0, 0, 1),
-    ambient_color: Vec4 = Vec4.new(1, 0, 0, 1),
-    sun_dir: Vec4 = Vec4.new(1, 0, 0, 1),
-    sun_color: Vec4 = Vec4.new(1, 0, 0, 1),
 };
 
 const MeshDrawCommands = struct {
@@ -320,7 +310,7 @@ pub const Engine = struct {
 
         // depth image and Swapchain framebuffers
         const depth_image = try createDepthImage(gc, .d32_sfloat, swapchain);
-        const framebuffers = try createSwapchainFramebuffers(gc, gpa, old_render_pass, swapchain, depth_image.view);
+        const framebuffers = try createSwapchainFramebuffers(gc, gpa, copy_pass, swapchain);
 
         // descriptors
         const descriptors = createOldDescriptors(gc);
@@ -464,7 +454,7 @@ pub const Engine = struct {
             };
 
             // grab frame and prepare it for rendering
-            var frame = &self.frames[self.swapchain.frame_index % self.swapchain.swap_images.len];
+            var frame = self.getCurrentFrameData();
             frame.dynamic_data.reset();
             frame.deletion_queue.flush();
             try frame.dynamic_descriptor_allocator.reset();
@@ -473,8 +463,8 @@ pub const Engine = struct {
             // now that we are sure that the commands finished executing, we can safely reset the command buffer to begin recording again
             try self.gc.vkd.resetCommandBuffer(frame.cmd_buffer, .{});
 
-            try self.draw(self.framebuffers[self.swapchain.image_index], frame);
-            try self.drawOld(self.framebuffers[self.swapchain.image_index], frame);
+            try self.draw(frame);
+            // try self.drawOld(self.framebuffers[self.swapchain.image_index], frame);
 
             try self.swapchain.present(frame.cmd_buffer);
 
@@ -492,12 +482,16 @@ pub const Engine = struct {
                 self.gc.destroy(self.depth_image.image.default_view);
                 self.depth_image.deinit(self.gc);
                 self.depth_image = try createDepthImage(self.gc, self.depth_format, self.swapchain);
-                self.framebuffers = try createSwapchainFramebuffers(self.gc, self.allocator, self.old_render_pass, self.swapchain, self.depth_image.view);
+                self.framebuffers = try createSwapchainFramebuffers(self.gc, self.allocator, self.old_render_pass, self.swapchain);
             }
 
             self.frame_num += 1;
             try glfw.pollEvents();
         }
+    }
+
+    pub fn getCurrentFrameData(self: *Self) *FrameData {
+        return &self.frames[self.swapchain.frame_index % self.swapchain.swap_images.len];
     }
 
     fn createFramebuffers(self: *Self) !void {
@@ -654,7 +648,7 @@ pub const Engine = struct {
 
         var shadow_sampler_info = vkinit.samplerCreateInfo(.linear, .clamp_to_border);
         shadow_sampler_info.border_color = .float_opaque_white;
-        shadow_sampler_info.compare_enable = vk.TRUE;
+        // shadow_sampler_info.compare_enable = vk.TRUE; // TODO: doesnt work with MoltenVK
         shadow_sampler_info.compare_op = .less;
         self.shadow_sampler = try self.gc.vkd.createSampler(self.gc.dev, &shadow_sampler_info, null);
         self.deletion_queue.append(self.shadow_sampler);
@@ -776,7 +770,7 @@ pub const Engine = struct {
             .allocator = null,
             .checkVkResultFn = null,
         });
-        _ = igvk.ImGui_ImplVulkan_Init(&info, self.old_render_pass);
+        _ = igvk.ImGui_ImplVulkan_Init(&info, self.copy_pass);
 
         // execute a gpu command to upload imgui font textures
         const cmd_buf = try self.gc.beginOneTimeCommandBuffer();
@@ -974,8 +968,13 @@ pub const Engine = struct {
         }
     }
 
-    fn draw(self: *Self, framebuffer: vk.Framebuffer, frame: *FrameData) !void {
-        _ = framebuffer;
+    fn draw(self: *Self, frame: *FrameData) !void {
+        ig.igRender();
+        if ((ig.igGetIO().*.ConfigFlags & ig.ImGuiConfigFlags_ViewportsEnable) != 0) {
+            ig.igUpdatePlatformWindows();
+            ig.igRenderPlatformWindowsDefault(null, null);
+        }
+
         self.post_cull_barriers.clearRetainingCapacity();
         self.cull_ready_barriers.clearRetainingCapacity();
 
@@ -983,8 +982,131 @@ pub const Engine = struct {
             .flags = .{ .one_time_submit_bit = true },
             .p_inheritance_info = null,
         });
+
         try self.readyMeshDraw(frame);
+        try self.readyCullData(&self.render_scene.forward_pass, frame.cmd_buffer);
+        try self.readyCullData(&self.render_scene.transparent_forward_pass, frame.cmd_buffer);
+        try self.readyCullData(&self.render_scene.shadow_pass, frame.cmd_buffer);
+        self.gc.vkd.cmdPipelineBarrier(frame.cmd_buffer, .{ .transfer_bit = true }, .{ .compute_shader_bit = true }, .{}, 0, undefined, @intCast(u32, self.cull_ready_barriers.items.len), self.cull_ready_barriers.items.ptr, 0, undefined);
+
+        // culling
+        // TODO
+
+        try self.forwardPass(frame.cmd_buffer);
+        try self.copyRenderToSwapchain(frame.cmd_buffer);
+
         try self.gc.vkd.endCommandBuffer(frame.cmd_buffer);
+    }
+
+    fn readyCullData(self: *Self, pass: *MeshPass, cmd: vk.CommandBuffer) !void {
+        if (pass.clear_indirect_buffer.buffer == .null_handle) return;
+
+        // copy from the cleared indirect buffer into the one we will use on rendering
+        const indirect_copy = vk.BufferCopy{
+            .src_offset = 0,
+            .dst_offset = 0,
+            .size = pass.batches.items.len * @sizeOf(GpuIndirectObject),
+        };
+        self.gc.vkd.cmdCopyBuffer(cmd, pass.clear_indirect_buffer.buffer, pass.draw_indirect_buffer.buffer, 1, vkutil.ptrToMany(&indirect_copy));
+
+        var barrier = vkinit.bufferBarrier(pass.draw_indirect_buffer.buffer, self.gc.graphics_queue.family);
+        barrier.dst_access_mask = .{ .shader_write_bit = true, .shader_read_bit = true };
+        barrier.src_access_mask = .{ .transfer_write_bit = true };
+        try self.cull_ready_barriers.append(barrier);
+    }
+
+    fn forwardPass(self: *Self, cmd: vk.CommandBuffer) !void {
+       const clear = vk.ClearValue{
+            .color = .{ .float_32 = .{ 0.6, 0.5, 0, 1 } },
+        };
+
+        const depth_clear = vk.ClearValue{
+            .depth_stencil = .{ .depth = 1, .stencil = 0 },
+        };
+
+        const clear_values = [_]vk.ClearValue{ clear, depth_clear };
+
+        // This needs to be a separate definition - see https://github.com/ziglang/zig/issues/7627.
+        const render_area = vk.Rect2D{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = self.swapchain.extent,
+        };
+
+        const viewport = vk.Viewport{
+            .x = 0,
+            .y = 0,
+            .width = @intToFloat(f32, self.swapchain.extent.width),
+            .height = @intToFloat(f32, self.swapchain.extent.height),
+            .min_depth = 0,
+            .max_depth = 1,
+        };
+
+        self.gc.vkd.cmdSetViewport(cmd, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
+        self.gc.vkd.cmdSetScissor(cmd, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
+        self.gc.vkd.cmdSetDepthBias(cmd, 0, 0, 0);
+
+        self.gc.vkd.cmdBeginRenderPass(cmd, &.{
+            .render_pass = self.render_pass,
+            .framebuffer = self.forward_framebuffer,
+            .render_area = render_area,
+            .clear_value_count = clear_values.len,
+            .p_clear_values = @ptrCast([*]const vk.ClearValue, &clear_values),
+        }, .@"inline");
+
+        try self.drawObjectsForward(cmd, &self.render_scene.forward_pass);
+        // try self.drawObjectsForward(cmd, &self.render_scene.transparent_forward_pass);
+
+        // igvk.ImGui_ImplVulkan_RenderDrawData(ig.igGetDrawData(), cmd, .null_handle);
+
+        self.gc.vkd.cmdEndRenderPass(cmd);
+    }
+
+    fn copyRenderToSwapchain(self: *Self, cmd: vk.CommandBuffer) !void {
+        const render_area = vk.Rect2D{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = self.swapchain.extent,
+        };
+
+        const viewport = vk.Viewport{
+            .x = 0,
+            .y = 0,
+            .width = @intToFloat(f32, self.swapchain.extent.width),
+            .height = @intToFloat(f32, self.swapchain.extent.height),
+            .min_depth = 0,
+            .max_depth = 1,
+        };
+
+        self.gc.vkd.cmdBeginRenderPass(cmd, &.{
+            .render_pass = self.copy_pass,
+            .framebuffer = self.framebuffers[self.swapchain.image_index],
+            .render_area = render_area,
+            .clear_value_count = 0,
+            .p_clear_values = undefined,
+        }, .@"inline");
+
+        self.gc.vkd.cmdSetViewport(cmd, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
+        self.gc.vkd.cmdSetScissor(cmd, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
+        self.gc.vkd.cmdSetDepthBias(cmd, 0, 0, 0);
+
+        self.gc.vkd.cmdBindPipeline(cmd, .graphics, self.blit_pipeline);
+
+        const source_image = vk.DescriptorImageInfo{
+            .sampler = self.smooth_sampler,
+            .image_view = self.raw_render_image.default_view,
+            .image_layout = .shader_read_only_optimal,
+        };
+
+        var blit_set: vk.DescriptorSet = undefined;
+        var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.descriptor_allocator, &self.descriptor_layout_cache);
+        builder.bindImage(0, &source_image, .combined_image_sampler, .{ .fragment_bit = true });
+        _ = try builder.build(&blit_set);
+        builder.deinit();
+
+        self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, self.blit_layout, 0, 1, vkutil.ptrToMany(&blit_set), 0, undefined);
+        self.gc.vkd.cmdDraw(cmd, 3, 1, 0, 0);
+        igvk.ImGui_ImplVulkan_RenderDrawData(ig.igGetDrawData(), cmd, .null_handle);
+        
+        self.gc.vkd.cmdEndRenderPass(cmd);
     }
 
     fn drawOld(self: *Self, framebuffer: vk.Framebuffer, frame: *FrameData) !void {
@@ -1221,7 +1343,7 @@ fn createForwardRenderPass(gc: *const GraphicsContext, depth_format: vk.Format) 
         .stencil_load_op = .dont_care,
         .stencil_store_op = .dont_care,
         .initial_layout = .@"undefined",
-        .final_layout = .present_src_khr,
+        .final_layout = .shader_read_only_optimal,
     };
 
     const color_attachment_ref = vk.AttachmentReference{
@@ -1304,7 +1426,7 @@ fn createCopyRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Re
         .flags = .{},
         .format = swapchain.surface_format.format,
         .samples = .{ .@"1_bit" = true },
-        .load_op = .clear,
+        .load_op = .dont_care,
         .store_op = .store,
         .stencil_load_op = .dont_care,
         .stencil_store_op = .dont_care,
@@ -1323,7 +1445,7 @@ fn createCopyRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Re
         .input_attachment_count = 0,
         .p_input_attachments = undefined,
         .color_attachment_count = 1,
-        .p_color_attachments = @ptrCast([*]const vk.AttachmentReference, &color_attachment_ref),
+        .p_color_attachments = vkutil.ptrToMany(&color_attachment_ref),
         .p_resolve_attachments = null,
         .p_depth_stencil_attachment = null,
         .preserve_attachment_count = 0,
@@ -1343,11 +1465,11 @@ fn createCopyRenderPass(gc: *const GraphicsContext, swapchain: Swapchain) !vk.Re
     return try gc.vkd.createRenderPass(gc.dev, &.{
         .flags = .{},
         .attachment_count = 1,
-        .p_attachments = @ptrCast([*]const vk.AttachmentDescription, &color_attachment),
+        .p_attachments = vkutil.ptrToMany(&color_attachment),
         .subpass_count = 1,
-        .p_subpasses = @ptrCast([*]const vk.SubpassDescription, &subpass),
+        .p_subpasses = vkutil.ptrToMany(&subpass),
         .dependency_count = 1,
-        .p_dependencies = @ptrCast([*]const vk.SubpassDependency, &dependency),
+        .p_dependencies = vkutil.ptrToMany(&dependency),
     }, null);
 }
 
@@ -1414,15 +1536,14 @@ fn createDepthImage(gc: *const GraphicsContext, depth_format: vk.Format, swapcha
     return Texture.init(depth_image);
 }
 
-fn createSwapchainFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, swapchain: Swapchain, depth_image_view: vk.ImageView) ![]vk.Framebuffer {
+fn createSwapchainFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, swapchain: Swapchain) ![]vk.Framebuffer {
     const framebuffers = try allocator.alloc(vk.Framebuffer, swapchain.swap_images.len);
     for (framebuffers) |*fb, i| {
-        var attachments = [2]vk.ImageView{ swapchain.swap_images[i].view, depth_image_view };
         fb.* = try gc.vkd.createFramebuffer(gc.dev, &.{
             .flags = .{},
             .render_pass = render_pass,
-            .attachment_count = 2,
-            .p_attachments = @ptrCast([*]const vk.ImageView, &attachments),
+            .attachment_count = 1,
+            .p_attachments = vkutil.ptrToMany(&swapchain.swap_images[i].view),
             .width = swapchain.extent.width,
             .height = swapchain.extent.height,
             .layers = 1,

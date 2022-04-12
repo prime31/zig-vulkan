@@ -11,10 +11,24 @@ pub usingnamespace @import("shaders.zig");
 pub usingnamespace @import("descriptors.zig");
 pub usingnamespace @import("material_system.zig");
 
+pub const GpuCameraData = struct {
+    view: Mat4,
+    proj: Mat4,
+    view_proj: Mat4,
+};
+
 pub const GpuObjectData = struct {
     model: Mat4,
     origin_rad: Vec4,
     extents: Vec4,
+};
+
+pub const GpuSceneData = struct {
+    fog_color: Vec4 = Vec4.new(1, 0, 0, 1),
+    fog_distance: Vec4 = Vec4.new(1, 0, 0, 1),
+    ambient_color: Vec4 = Vec4.new(1, 0, 0, 1),
+    sun_dir: Vec4 = Vec4.new(1, 0, 0, 1),
+    sun_color: Vec4 = Vec4.new(1, 0, 0, 1),
 };
 
 pub const MeshPassType = enum(u8) {

@@ -599,7 +599,7 @@ const PassObject = struct {
     material: PassMaterial,
     mesh_id: Handle(DrawMesh),
     original: Handle(RenderObject),
-    built_batch: i32 = -1,
+    built_batch: i32 = -1, // TODO: unused?
     custom_key: u32,
 };
 
