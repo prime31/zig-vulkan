@@ -24,4 +24,7 @@ void main() {
 
 	// outFragColor = vec4(color * lightColor, 1.0f);
 	outFragColor = vec4(inColor + sceneData.ambientColor.xyz,1.0f);
+
+	// TODO: dont do this
+	outFragColor = vec4(0.2, 0.8, 0.4, 1.0);
 }

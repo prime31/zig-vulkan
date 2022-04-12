@@ -13,7 +13,7 @@ layout (set = 0, binding = 1) uniform SceneData {
 	vec4 sunlightColor;
 } sceneData;
 
-layout(set = 0, binding = 2) uniform sampler2DShadow  shadowSampler;
+layout(set = 0, binding = 2) uniform sampler2DShadow shadowSampler;
 layout(set = 2, binding = 0) uniform sampler2D tex1;
 
 // TODO: fill in shader
@@ -23,5 +23,5 @@ void main() {
 	outFragColor = vec4(color, 1.0);
 
 	// TODO: dont do this
-	outFragColor = vec4(0.2, 0.8, 0.4, 1.0);
+	outFragColor = vec4(0.8, 0.8, 0.4, 1.0);
 }
