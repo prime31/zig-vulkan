@@ -950,9 +950,9 @@ pub const Engine = struct {
         _ = try self.material_system.buildMaterial("default", mat_info);
 
         var x: f32 = 0;
-        while (x < 5) : (x += 1) {
+        while (x < 1) : (x += 1) {
             var y: f32 = 0;
-            while (y < 4) : (y += 1) {
+            while (y < 2) : (y += 1) {
                 var tri = MeshObject{
                     .mesh = self.meshes.getPtr("triangle").?,
                     .material = self.material_system.getMaterial("default").?,
@@ -1104,7 +1104,7 @@ pub const Engine = struct {
 
         self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, self.blit_layout, 0, 1, vkutil.ptrToMany(&blit_set), 0, undefined);
         self.gc.vkd.cmdDraw(cmd, 3, 1, 0, 0);
-        igvk.ImGui_ImplVulkan_RenderDrawData(ig.igGetDrawData(), cmd, .null_handle);
+        // igvk.ImGui_ImplVulkan_RenderDrawData(ig.igGetDrawData(), cmd, .null_handle);
         
         self.gc.vkd.cmdEndRenderPass(cmd);
     }

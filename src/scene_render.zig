@@ -29,12 +29,12 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
 
         // if 80% of the objects are dirty, then just reupload the whole thing
         if (@intToFloat(f32, self.render_scene.dirty_objects.items.len) >= @intToFloat(f32, self.render_scene.renderables.items.len) * 0.8) {
-            const new_buffer = try self.gc.vma.createBuffer(GpuObjectData, copy_size, .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .cpu_to_gpu, .{});
+            const new_buffer = try self.gc.vma.createBuffer(GpuObjectData, copy_size, .{ .transfer_src_bit = true, .storage_buffer_bit = true }, .cpu_to_gpu, .{});
             const objectSSBO = try new_buffer.mapMemory(self.gc.vma);
             self.render_scene.fillObjectData(objectSSBO[0..self.render_scene.renderables.items.len]);
             new_buffer.unmapMemory(self.gc.vma);
 
-            frame.deletion_queue.append(new_buffer);
+            frame.deletion_queue.append(new_buffer.asUntypedBuffer());
 
             // copy from the uploaded cpu side instance buffer to the gpu one
             const indirect_copy = vk.BufferCopy{
@@ -227,7 +227,7 @@ fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, ob
             last_mesh = draw_mesh;
         };
 
-        if (draw_mesh.indices.len > 0) {
+        if (draw_mesh.indices.len == 0) {
             self.gc.vkd.cmdDraw(cmd, @intCast(u32, draw_mesh.vertices.items.len), instance_draw.count, 0, instance_draw.first);
         } else {
             self.gc.vkd.cmdDrawIndexedIndirect(cmd, pass.draw_indirect_buffer.buffer, multibatch.first * @sizeOf(GpuIndirectObject), multibatch.count, @sizeOf(GpuIndirectObject));

@@ -95,44 +95,45 @@ pub const RenderScene = struct {
                 try self.shadow_pass.unbatched_objects.append(handle);
         }
 
+        try self.updateObject(handle);
         return handle;
     }
 
-    pub fn registerObjectBatch(self: Self, objects: []MeshObject) !void {
+    pub fn registerObjectBatch(self: *Self, objects: []MeshObject) !void {
         try self.renderables.ensureUnusedCapacity(objects.len);
         for (objects) |obj| self.registerObject(obj);
     }
 
-    pub fn updateTransform(self: Self, object_id: Handle(RenderObject), local_to_world: Mat4) void {
+    pub fn updateTransform(self: *Self, object_id: Handle(RenderObject), local_to_world: Mat4) void {
         self.getObject(object_id).*.transform_matrix = local_to_world;
         self.updateObject(object_id);
     }
 
-    pub fn updateObject(self: Self, object_id: Handle(RenderObject)) !void {
+    pub fn updateObject(self: *Self, object_id: Handle(RenderObject)) !void {
         var pass_indices = &self.getObject(object_id).pass_indices;
         if (pass_indices.get(.forward) != -1) {
-            const obj = Handle(RenderObject).init(pass_indices.get(.forward));
+            const obj = Handle(PassObject).init(@intCast(u32, pass_indices.get(.forward)));
             try self.forward_pass.objects_to_delete.append(obj);
             try self.forward_pass.unbatched_objects.append(object_id);
             pass_indices.set(.forward, -1);
         }
 
         if (pass_indices.get(.directional_shadow) != -1) {
-            const obj = Handle(RenderObject).init(pass_indices.get(.directional_shadow));
+            const obj = Handle(PassObject).init(@intCast(u32, pass_indices.get(.directional_shadow)));
             try self.shadow_pass.objects_to_delete.append(obj);
             try self.shadow_pass.unbatched_objects.append(object_id);
             pass_indices.set(.directional_shadow, -1);
         }
 
         if (pass_indices.get(.transparency) != -1) {
-            const obj = Handle(RenderObject).init(pass_indices.get(.transparency));
+            const obj = Handle(PassObject).init(@intCast(u32, pass_indices.get(.transparency)));
             try self.transparent_forward_pass.objects_to_delete.append(obj);
             try self.transparent_forward_pass.unbatched_objects.append(object_id);
             pass_indices.set(.transparency, -1);
         }
 
         if (self.getObject(object_id).update_index == std.math.maxInt(u32)) {
-            self.getObject(object_id).update_index = self.dirty_objects.len;
+            self.getObject(object_id).update_index = @intCast(u32, self.dirty_objects.items.len);
             try self.dirty_objects.append(object_id);
         }
     }
@@ -201,6 +202,8 @@ pub const RenderScene = struct {
 
             total_indices += m.index_count;
             total_verts += m.vert_count;
+
+            m.is_merged = true;
         }
 
         self.merged_vert_buffer = try self.gc.vma.createBuffer(Vertex, total_verts * @sizeOf(Vertex), .{ .transfer_dst_bit = true, .vertex_buffer_bit = true }, .gpu_only, .{});
