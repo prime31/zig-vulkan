@@ -23,7 +23,6 @@ pub const AllocatedBufferUntyped = struct {
 };
 
 pub fn AllocatedBuffer(comptime T: type) type {
-    _ = T;
     return struct {
         const Self = @This();
 
@@ -41,6 +40,22 @@ pub fn AllocatedBuffer(comptime T: type) type {
                 .buffer = self.buffer,
                 .offset = offset,
                 .range = self.size,
+            };
+        }
+
+        pub fn mapMemory(self: Self, allocator: Allocator) ![*]T {
+            return allocator.mapMemory(T, self.allocation);
+        }
+
+        pub fn unmapMemory(self: Self, allocator: Allocator) void {
+            allocator.unmapMemory(self.allocation);
+        }
+
+        pub fn asUntypedBuffer(self: Self) AllocatedBufferUntyped {
+            return .{
+                .buffer = self.buffer,
+                .allocation = self.allocation,
+                .size = self.size,
             };
         }
     };

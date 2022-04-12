@@ -68,6 +68,8 @@ pub const DeletionQueue = struct {
     }
 
     pub fn flush(self: *DeletionQueue) void {
+        if (self.queue.items.len == 0) return;
+
         var iter = ReverseSliceIterator(VkObject).init(self.queue.items);
         while (iter.next()) |obj| {
             switch (obj.*) {
@@ -86,7 +88,6 @@ pub const DeletionQueue = struct {
                     self.gc.destroy(img.default_view);
                     img.deinit(self.gc.vma);
                 },
-                // else => unreachable,
             }
         }
 

@@ -8,6 +8,18 @@ pub fn commandPoolCreateInfo(queue_family_index: u32, flags: vk.CommandPoolCreat
     };
 }
 
+pub fn bufferBarrier(buffer: vk.Buffer, queue: u32) vk.BufferMemoryBarrier {
+    return .{
+        .src_access_mask = .{},
+        .dst_access_mask = .{},
+        .buffer = buffer,
+        .offset = 0,
+        .size = vk.WHOLE_SIZE,
+        .src_queue_family_index = queue,
+        .dst_queue_family_index = queue,
+    };
+}
+
 // VkFramebufferCreateInfo vkinit::framebuffer_create_info(VkRenderPass renderPass, VkExtent2D extent)
 // {
 // 	VkFramebufferCreateInfo info = {};

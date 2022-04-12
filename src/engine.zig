@@ -104,7 +104,7 @@ const OldMaterial = struct {
     }
 };
 
-const FrameData = struct {
+pub const FrameData = struct {
     deletion_queue: vkutil.DeletionQueue,
     cmd_pool: vk.CommandPool,
     cmd_buffer: vk.CommandBuffer,
@@ -463,8 +463,18 @@ pub const Engine = struct {
                 else => |narrow| return narrow,
             };
 
-            const frame = self.frames[self.swapchain.frame_index % self.swapchain.swap_images.len];
+            // grab frame and prepare it for rendering
+            var frame = &self.frames[self.swapchain.frame_index % self.swapchain.swap_images.len];
+            frame.dynamic_data.reset();
+            frame.deletion_queue.flush();
+            try frame.dynamic_descriptor_allocator.reset();
+            try self.render_scene.buildBatches();
+
+            // now that we are sure that the commands finished executing, we can safely reset the command buffer to begin recording again
+            try self.gc.vkd.resetCommandBuffer(frame.cmd_buffer, .{});
+
             try self.draw(self.framebuffers[self.swapchain.image_index], frame);
+            try self.drawOld(self.framebuffers[self.swapchain.image_index], frame);
 
             try self.swapchain.present(frame.cmd_buffer);
 
@@ -964,7 +974,20 @@ pub const Engine = struct {
         }
     }
 
-    fn draw(self: *Self, framebuffer: vk.Framebuffer, frame: FrameData) !void {
+    fn draw(self: *Self, framebuffer: vk.Framebuffer, frame: *FrameData) !void {
+        _ = framebuffer;
+        self.post_cull_barriers.clearRetainingCapacity();
+        self.cull_ready_barriers.clearRetainingCapacity();
+
+        try self.gc.vkd.beginCommandBuffer(frame.cmd_buffer, &.{
+            .flags = .{ .one_time_submit_bit = true },
+            .p_inheritance_info = null,
+        });
+        try self.readyMeshDraw(frame);
+        try self.gc.vkd.endCommandBuffer(frame.cmd_buffer);
+    }
+
+    fn drawOld(self: *Self, framebuffer: vk.Framebuffer, frame: *FrameData) !void {
         ig.igRender();
         if ((ig.igGetIO().*.ConfigFlags & ig.ImGuiConfigFlags_ViewportsEnable) != 0) {
             ig.igUpdatePlatformWindows();
@@ -997,7 +1020,6 @@ pub const Engine = struct {
             .max_depth = 1,
         };
 
-        try self.gc.vkd.resetCommandBuffer(cmdbuf, .{});
         try self.gc.vkd.beginCommandBuffer(cmdbuf, &.{
             .flags = .{ .one_time_submit_bit = true },
             .p_inheritance_info = null,
@@ -1021,7 +1043,7 @@ pub const Engine = struct {
         try self.gc.vkd.endCommandBuffer(cmdbuf);
     }
 
-    fn drawRenderObjects(self: *Self, frame: FrameData) !void {
+    fn drawRenderObjects(self: *Self, frame: *FrameData) !void {
         const cmdbuf = frame.cmd_buffer;
 
         var view = self.camera.getViewMatrix();

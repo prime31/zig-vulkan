@@ -117,6 +117,7 @@ pub const DeviceDispatch = vk.DeviceWrapper(.{
     .destroyDescriptorSetLayout = true,
     .createDescriptorPool = true,
     .destroyDescriptorPool = true,
+    .resetDescriptorPool = true,
     .allocateDescriptorSets = true,
     .freeDescriptorSets = true,
     .updateDescriptorSets = true,

@@ -27,7 +27,7 @@ pub const RenderScene = struct {
     renderables: ArrayList(RenderObject),
     meshes: ArrayList(DrawMesh),
     materials: ArrayList(Material),
-    dirty_objects: ArrayList(RenderObject),
+    dirty_objects: ArrayList(Handle(RenderObject)),
     forward_pass: MeshPass,
     transparent_forward_pass: MeshPass,
     shadow_pass: MeshPass,
@@ -43,7 +43,7 @@ pub const RenderScene = struct {
             .renderables = ArrayList(RenderObject).init(gc.gpa),
             .meshes = ArrayList(DrawMesh).init(gc.gpa),
             .materials = ArrayList(Material).init(gc.gpa),
-            .dirty_objects = ArrayList(RenderObject).init(gc.gpa),
+            .dirty_objects = ArrayList(Handle(RenderObject)).init(gc.gpa),
             .forward_pass = MeshPass.init(gc.gpa, .forward),
             .transparent_forward_pass = MeshPass.init(gc.gpa, .transparency),
             .shadow_pass = MeshPass.init(gc.gpa, .directional_shadow),
@@ -139,7 +139,7 @@ pub const RenderScene = struct {
 
     pub fn fillObjectData(self: Self, data: []GpuObjectData) void {
         for (self.renderables.items) |_, i| {
-            const h = Handle(RenderObject).init(i);
+            const h = Handle(RenderObject).init(@intCast(u32, i));
             self.writeObject(&data[i], h);
         }
     }
@@ -149,20 +149,20 @@ pub const RenderScene = struct {
             data[i].command.first_instance = batch.first;
             data[i].command.instance_count = 0;
             data[i].command.first_index = self.getMesh(batch.mesh_id).first_index;
-            data[i].command.vertex_offset = self.getMesh(batch.mesh_id).first_vert;
+            data[i].command.vertex_offset = @intCast(i32, self.getMesh(batch.mesh_id).first_vert);
             data[i].command.index_count = self.getMesh(batch.mesh_id).index_count;
             data[i].object_id = 0;
-            data[i].batch_id = i;
+            data[i].batch_id = @intCast(u32, i);
         }
     }
 
-    pub fn fillInstancesArray(data: []GpuInstance, pass: *MeshPass) void {
+    pub fn fillInstancesArray(_: Self, data: []GpuInstance, pass: *MeshPass) void {
         var data_index: usize = 0;
         for (pass.batches.items) |*batch, i| {
             var b: usize = 0;
             while (b < batch.count) : (b += 1) {
-                data[data_index].object_id = pass.get(pass.flat_batches[b + batch.first].obj).original.handle;
-                data[data_index].batch_id = i;
+                data[data_index].object_id = pass.get(pass.flat_batches.items[b + batch.first].object).original.handle;
+                data[data_index].batch_id = @intCast(u32, i);
                 data_index += 1;
             }
         }
@@ -177,7 +177,7 @@ pub const RenderScene = struct {
         };
     }
 
-    pub fn clearDirtyObjects(self: Self) void {
+    pub fn clearDirtyObjects(self: *Self) void {
         for (self.dirty_objects.items) |obj| {
             self.getObject(obj).update_index = std.math.maxInt(u32);
         }
@@ -226,8 +226,12 @@ pub const RenderScene = struct {
     }
 
     pub fn refreshPass(self: Self, pass: *MeshPass) !void {
-        pass.needs_indirect_flush = true;
-        pass.needs_instance_flush = true;
+        // early out for no changes
+        if (pass.objects_to_delete.items.len == 0 and pass.unbatched_objects.items.len == 0)
+            return;
+
+        pass.needs_indirect_refresh = true;
+        pass.needs_instance_refresh = true;
 
         var new_objects = std.ArrayList(u32).init(self.gc.scratch);
 
@@ -286,8 +290,8 @@ pub const RenderScene = struct {
             }
         }
 
-        {
-            // fill object list
+        // fill object list
+        if (pass.unbatched_objects.items.len > 0) {
             try new_objects.ensureUnusedCapacity(pass.unbatched_objects.items.len);
             for (pass.unbatched_objects.items) |o| {
                 const mt = self.getMaterial(self.getObject(o).material);
@@ -315,42 +319,37 @@ pub const RenderScene = struct {
                 try new_objects.append(handle);
                 self.getObject(o).pass_indices.set(pass.pass_type, @intCast(i32, handle));
             }
+
+            pass.unbatched_objects.clearRetainingCapacity();
         }
 
         var new_batches = std.ArrayList(RenderBatch).init(self.gc.scratch);
-        {
-            // fill draw list
-            for (new_objects.items) |obj_id| {
-                const obj = pass.objects.items[obj_id];
 
-                const pip_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.shader_pass.pip));
-                const set_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.material_set));
-                const mathash = @truncate(u32, pip_hash ^ set_hash);
-                const meshmat = @intCast(u64, mathash) ^ @intCast(u64, obj.mesh_id.handle);
+        // fill draw list
+        if (new_objects.items.len > 0) for (new_objects.items) |obj_id| {
+            const obj = pass.objects.items[obj_id];
 
-                // pack mesh id and material into 64 bits
-                try new_batches.append(.{
-                    .object = Handle(PassObject).init(obj_id),
-                    .sort_key = @intCast(u64, meshmat) | (@intCast(u64, obj.custom_key) << 32),
-                });
-            }
-        }
+            const pip_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.shader_pass.pip));
+            const set_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.material_set));
+            const mathash = @truncate(u32, pip_hash ^ set_hash);
+            const meshmat = @intCast(u64, mathash) ^ @intCast(u64, obj.mesh_id.handle);
 
-        {
-            // draw sort
+            // pack mesh id and material into 64 bits
+            try new_batches.append(.{
+                .object = Handle(PassObject).init(obj_id),
+                .sort_key = @intCast(u64, meshmat) | (@intCast(u64, obj.custom_key) << 32),
+            });
+        };
+
+        // draw sorted, merged batches. merge the new batches into the main batch array
+        if (new_batches.items.len > 0) {
             std.sort.sort(RenderBatch, new_batches.items, {}, sortRenderBatches);
-        }
+            try pass.flat_batches.ensureUnusedCapacity(pass.flat_batches.items.len + new_batches.items.len);
 
-        {
-            // draw merged batches. merge the new batches into the main batch array
-            if (new_batches.items.len > 0) {
-                try pass.flat_batches.ensureUnusedCapacity(pass.flat_batches.items.len + new_batches.items.len);
+            for (new_batches.items) |b|
+                pass.flat_batches.appendAssumeCapacity(b);
 
-                for (new_batches.items) |b|
-                    pass.flat_batches.appendAssumeCapacity(b);
-
-                std.sort.sort(RenderBatch, pass.flat_batches.items, {}, sortRenderBatches);
-            }
+            std.sort.sort(RenderBatch, pass.flat_batches.items, {}, sortRenderBatches);
         }
 
         {
@@ -556,7 +555,7 @@ pub const MeshObject = struct {
     }
 };
 
-const GpuIndirectObject = struct {
+pub const GpuIndirectObject = struct {
     command: vk.DrawIndexedIndirectCommand,
     object_id: u32,
     batch_id: u32,
@@ -581,7 +580,7 @@ pub const RenderObject = struct {
     bounds: RenderBounds,
 };
 
-const GpuInstance = struct {
+pub const GpuInstance = struct {
     object_id: u32,
     batch_id: u32,
 };
@@ -625,7 +624,7 @@ const Multibatch = struct {
     count: u32,
 };
 
-const MeshPass = struct {
+pub const MeshPass = struct {
     multibatches: ArrayList(Multibatch), // final draw-indirect segments
     batches: ArrayList(IndirectBatch), // draw indirect batches
     flat_batches: ArrayList(RenderBatch), // sorted list of objects in the pass
@@ -634,15 +633,14 @@ const MeshPass = struct {
     reusable_objects: ArrayList(Handle(PassObject)), // indicides for the objects array that can be reused
     objects_to_delete: ArrayList(Handle(PassObject)),
 
-    compacted_instance_buffer: vma.AllocatedBuffer(u32) = undefined,
-    pass_objects_buffer: vma.AllocatedBuffer(GpuInstance) = undefined,
-
-    draw_indirect_buffer: vma.AllocatedBuffer(GpuIndirectObject) = undefined,
-    clear_indirect_buffer: vma.AllocatedBuffer(GpuIndirectObject) = undefined,
+    compacted_instance_buffer: vma.AllocatedBuffer(u32) = .{},
+    pass_objects_buffer: vma.AllocatedBuffer(GpuInstance) = .{},
+    draw_indirect_buffer: vma.AllocatedBuffer(GpuIndirectObject) = .{},
+    clear_indirect_buffer: vma.AllocatedBuffer(GpuIndirectObject) = .{},
 
     pass_type: MeshPassType,
-    needs_indirect_flush: bool = true,
-    needs_instance_flush: bool = true,
+    needs_indirect_refresh: bool = true,
+    needs_instance_refresh: bool = true,
 
     pub fn init(gpa: std.mem.Allocator, pass_type: MeshPassType) MeshPass {
         return .{
@@ -666,13 +664,10 @@ const MeshPass = struct {
         self.reusable_objects.deinit();
         self.objects_to_delete.deinit();
 
-        // TODO: delete the allocated buffers
-        _ = gc;
-        // self.compacted_instance_buffer.deinit(gc.vma);
-        // self.clear_indirect_buffer.deinit(gc.vma);
-
-        // self.draw_indirect_buffer.deinit(gc.vma);
-        // self.clear_indirect_buffer.deinit(gc.vma);
+        self.compacted_instance_buffer.deinit(gc.vma);
+        self.pass_objects_buffer.deinit(gc.vma);
+        self.draw_indirect_buffer.deinit(gc.vma);
+        self.clear_indirect_buffer.deinit(gc.vma);
     }
 
     pub fn get(self: MeshPass, handle: Handle(PassObject)) *PassObject {

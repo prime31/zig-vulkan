@@ -94,7 +94,7 @@ pub const DescriptorAllocator = struct {
     }
 
     pub fn reset(self: *Self) !void {
-        for (self.used_pools) |pool| {
+        for (self.used_pools.items) |pool| {
             try self.gc.vkd.resetDescriptorPool(self.gc.dev, pool, .{});
             try self.free_pools.append(pool);
         }
