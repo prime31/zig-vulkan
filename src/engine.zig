@@ -431,8 +431,8 @@ pub const Engine = struct {
         try self.initOldScene();
         try self.initScene();
 
-        try self.render_scene.buildBatches();
         try self.render_scene.mergeMeshes();
+        try self.render_scene.buildBatches();
     }
 
     pub fn run(self: *Self) !void {
@@ -941,7 +941,7 @@ pub const Engine = struct {
 
     fn initScene(self: *Self) !void {
         var textured_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
-        try textured_data.addTexture(self.smooth_sampler, self.textures.get("white").?.view);
+        try textured_data.addTexture(self.smooth_sampler, self.textures.get("empire_diffuse").?.view);
         _ = try self.material_system.buildMaterial("textured", textured_data);
 
         var mat_info = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
@@ -952,13 +952,15 @@ pub const Engine = struct {
         while (x < 20) : (x += 1) {
             var y: f32 = 0;
             while (y < 20) : (y += 1) {
-                const odd = @mod(x, 2) == 0;
+                const mesh = if (@mod(x, 2) == 0) self.meshes.getPtr("triangle").? else self.meshes.getPtr("cube_thing").?;
+                const material = if (@mod(x, 2) == 0) self.material_system.getMaterial("default").? else self.material_system.getMaterial("textured").?;
+
                 var tri = MeshObject{
-                    .mesh = if (odd) self.meshes.getPtr("monkey").? else self.meshes.getPtr("cube_thing").?,
-                    .material = self.material_system.getMaterial("textured").?,
+                    .mesh = mesh,
+                    .material = material,
                     .custom_sort_key = 0,
                     .transform_matrix = Mat4.createTranslation(.{ .x = x, .y = 0, .z = y }).mul(Mat4.createScale(.{ .x = 0.3, .y = 0.3, .z = 0.3 })),
-                    .bounds = if (odd) self.meshes.getPtr("monkey").?.bounds else self.meshes.getPtr("cube_thing").?.bounds,
+                    .bounds = mesh.bounds,
                     .draw_forward_pass = true,
                     .draw_shadow_pass = false,
                 };
@@ -985,8 +987,9 @@ pub const Engine = struct {
 
         try self.readyMeshDraw(frame);
         try self.readyCullData(&self.render_scene.forward_pass, frame.cmd_buffer);
-        // try self.readyCullData(&self.render_scene.transparent_forward_pass, frame.cmd_buffer);
+        try self.readyCullData(&self.render_scene.transparent_forward_pass, frame.cmd_buffer);
         // try self.readyCullData(&self.render_scene.shadow_pass, frame.cmd_buffer);
+
         self.gc.vkd.cmdPipelineBarrier(frame.cmd_buffer, .{ .transfer_bit = true }, .{ .compute_shader_bit = true }, .{}, 0, undefined, @intCast(u32, self.cull_ready_barriers.items.len), self.cull_ready_barriers.items.ptr, 0, undefined);
 
         // culling TODO: finish this
@@ -999,10 +1002,26 @@ pub const Engine = struct {
             .aabb = false,
         };
         try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.forward_pass, forward_cull);
-        // try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.transparent_forward_pass, 0);
+        try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.transparent_forward_pass, forward_cull);
+
+        // TODO: create CullParams for shadow
+        // const shadow_cull = vkutil.CullParams{
+        //     .projmat = self.camera.getReversedProjMatrix(self.swapchain.extent),
+        //     .viewmat = self.camera.getViewMatrix(),
+        //     .frustum_cull = false,
+        //     .occlusion_cull = false,
+        //     .draw_dist = 666666,
+        //     .aabb = true,
+        // };
+        // try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.shadow_pass, shadow_cull);
+
+        self.gc.vkd.cmdPipelineBarrier(frame.cmd_buffer, .{ .compute_shader_bit = true }, .{ .draw_indirect_bit = true }, .{}, 0, undefined, @intCast(u32, self.post_cull_barriers.items.len), self.post_cull_barriers.items.ptr, 0, undefined);
 
 
+        // try self.shadowPass(frame.cmd_buffer);
         try self.forwardPass(frame.cmd_buffer);
+        // try self.reduceDepth(frame.cmd_buffer);
+
         try self.copyRenderToSwapchain(frame.cmd_buffer);
 
         try self.gc.vkd.endCommandBuffer(frame.cmd_buffer);
