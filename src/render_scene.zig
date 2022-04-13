@@ -384,7 +384,7 @@ pub const RenderScene = struct {
                 if (!same_mat or !compatible_batch) {
                     try pass.multibatches.append(new_batch);
                     new_batch.count = 1;
-                    new_batch.first = @intCast(u32, i);
+                    new_batch.first = @intCast(u32, i + 1);
                 } else {
                     new_batch.count += 1;
                 }
