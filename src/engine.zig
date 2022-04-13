@@ -32,19 +32,7 @@ const Vec4 = @import("chapters/vec4.zig").Vec4;
 
 const FRAME_OVERLAP: usize = 2;
 
-fn toRadians(deg: anytype) @TypeOf(deg) {
-    return std.math.pi * deg / 180.0;
-}
-
-fn toDegrees(rad: anytype) @TypeOf(rad) {
-    return 180.0 * rad / std.math.pi;
-}
-
-const GpuObjectData = struct {
-    model: Mat4,
-};
-
-pub const Texture = struct {
+const Texture = struct {
     image: vma.AllocatedImage,
     view: vk.ImageView,
 
@@ -61,37 +49,9 @@ pub const Texture = struct {
 };
 
 const DirectionalLight = struct {
-    light_pos: Vec3,
-    light_dir: Vec3,
-    shadow_extent: Vec3,
-};
-
-const MeshDrawCommands = struct {
-    const RenderBatch = struct {
-        object: MeshObject,
-        sort_key: u64,
-        object_index: u64,
-    };
-
-    batch: std.ArrayList(RenderBatch),
-};
-
-const OldMaterial = struct {
-    texture_set: ?vk.DescriptorSet = null,
-    pipeline: vk.Pipeline,
-    pipeline_layout: vk.PipelineLayout,
-
-    pub fn init(pipeline: vk.Pipeline, pipeline_layout: vk.PipelineLayout) OldMaterial {
-        return .{
-            .pipeline = pipeline,
-            .pipeline_layout = pipeline_layout,
-        };
-    }
-
-    pub fn deinit(self: OldMaterial, gc: *const GraphicsContext) void {
-        gc.destroy(self.pipeline);
-        gc.destroy(self.pipeline_layout);
-    }
+    light_pos: Vec3 = Vec3.new(0, 0, 0),
+    light_dir: Vec3 = Vec3.new(0.3, -1, 0.3),
+    shadow_extent: Vec3 = Vec3.new(100, 100, 100),
 };
 
 pub const FrameData = struct {
@@ -101,12 +61,7 @@ pub const FrameData = struct {
     dynamic_data: vkutil.PushBuffer,
     dynamic_descriptor_allocator: vkutil.DescriptorAllocator,
 
-    camera_buffer: vma.AllocatedBufferUntyped,
-    global_descriptor: vk.DescriptorSet,
-    object_buffer: vma.AllocatedBufferUntyped,
-    object_descriptor: vk.DescriptorSet,
-
-    pub fn init(gc: *GraphicsContext, descriptor_set_layout: vk.DescriptorSetLayout, descriptor_pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBufferUntyped, object_set_layout: vk.DescriptorSetLayout) !FrameData {
+    pub fn init(gc: *GraphicsContext) !FrameData {
         const cmd_pool = try gc.vkd.createCommandPool(gc.dev, &.{
             .flags = .{ .reset_command_buffer_bit = true },
             .queue_family_index = gc.graphics_queue.family,
@@ -122,64 +77,12 @@ pub const FrameData = struct {
         // 1 megabyte of dynamic data buffer
         const dynamic_data_buffer = try gc.vma.createUntypedBuffer(1000000, .{ .uniform_buffer_bit = true }, .cpu_only, .{});
 
-        // descriptor set setup
-        var camera_buffer = try gc.vma.createUntypedBuffer(@sizeOf(GpuCameraData), .{ .uniform_buffer_bit = true }, .cpu_to_gpu, .{});
-
-        const max_objects: usize = 10_000;
-        var object_buffer = try gc.vma.createUntypedBuffer(@sizeOf(GpuObjectData) * max_objects, .{ .storage_buffer_bit = true }, .cpu_to_gpu, .{});
-
-        var global_descriptor: vk.DescriptorSet = undefined;
-        try gc.vkd.allocateDescriptorSets(gc.dev, &.{
-            .descriptor_pool = descriptor_pool,
-            .descriptor_set_count = 1,
-            .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &descriptor_set_layout),
-        }, @ptrCast([*]vk.DescriptorSet, &global_descriptor));
-
-        // allocate the descriptor set that will point to object buffer
-        var object_descriptor: vk.DescriptorSet = undefined;
-        try gc.vkd.allocateDescriptorSets(gc.dev, &.{
-            .descriptor_pool = descriptor_pool,
-            .descriptor_set_count = 1,
-            .p_set_layouts = @ptrCast([*]const vk.DescriptorSetLayout, &object_set_layout),
-        }, @ptrCast([*]vk.DescriptorSet, &object_descriptor));
-
-        // information about the buffer we want to point at in the descriptor
-        const cam_info = vk.DescriptorBufferInfo{
-            .buffer = camera_buffer.buffer,
-            .offset = 0,
-            .range = @sizeOf(GpuCameraData),
-        };
-
-        const scene_info = vk.DescriptorBufferInfo{
-            .buffer = scene_param_buffer.buffer,
-            .offset = 0,
-            .range = @sizeOf(GpuSceneData),
-        };
-
-        const object_buffer_info = vk.DescriptorBufferInfo{
-            .buffer = object_buffer.buffer,
-            .offset = 0,
-            .range = @sizeOf(GpuObjectData) * max_objects,
-        };
-
-        const camera_write = vkinit.writeDescriptorBuffer(.uniform_buffer, global_descriptor, &cam_info, 0);
-        const scene_write = vkinit.writeDescriptorBuffer(.uniform_buffer_dynamic, global_descriptor, &scene_info, 1);
-        const object_write = vkinit.writeDescriptorBuffer(.storage_buffer, object_descriptor, &object_buffer_info, 0);
-
-        const set_writes = [_]vk.WriteDescriptorSet{ camera_write, scene_write, object_write };
-        gc.vkd.updateDescriptorSets(gc.dev, 3, &set_writes, 0, undefined);
-
         return FrameData{
             .deletion_queue = vkutil.DeletionQueue.init(gpa, gc),
             .cmd_pool = cmd_pool,
             .cmd_buffer = cmd_buffer,
             .dynamic_data = try vkutil.PushBuffer.init(gc, dynamic_data_buffer),
             .dynamic_descriptor_allocator = vkutil.DescriptorAllocator.init(gc),
-
-            .camera_buffer = camera_buffer,
-            .global_descriptor = global_descriptor,
-            .object_buffer = object_buffer,
-            .object_descriptor = object_descriptor,
         };
     }
 
@@ -189,16 +92,7 @@ pub const FrameData = struct {
         gc.destroy(self.cmd_pool);
         self.dynamic_data.deinit(gc.vma);
         self.dynamic_descriptor_allocator.deinit();
-
-        self.camera_buffer.deinit(gc.vma);
-        self.object_buffer.deinit(gc.vma);
     }
-};
-
-const OldRenderObject = struct {
-    mesh: *Mesh,
-    material: *OldMaterial,
-    transform_matrix: Mat4,
 };
 
 var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
@@ -214,7 +108,6 @@ pub const Engine = struct {
     framebuffers: []vk.Framebuffer,
     frames: []FrameData,
     deletion_queue: vkutil.DeletionQueue,
-    old_render_pass: vk.RenderPass,
     render_pass: vk.RenderPass,
     shadow_pass: vk.RenderPass,
     copy_pass: vk.RenderPass,
@@ -223,6 +116,7 @@ pub const Engine = struct {
     render_format: vk.Format = .r32g32b32a32_sfloat,
     raw_render_image: vma.AllocatedImage = undefined,
     smooth_sampler: vk.Sampler = undefined,
+    blocky_sampler: vk.Sampler = undefined,
     forward_framebuffer: vk.Framebuffer = undefined,
     shadow_framebuffer: vk.Framebuffer = undefined,
 
@@ -249,7 +143,7 @@ pub const Engine = struct {
     post_cull_barriers: std.ArrayList(vk.BufferMemoryBarrier) = undefined,
 
     camera: FlyCamera,
-    main_light: DirectionalLight = undefined,
+    main_light: DirectionalLight = .{},
     cull_pip_lay: vkutil.PipelineAndPipelineLayout = .{},
     depth_reduce_pip_lay: vkutil.PipelineAndPipelineLayout = .{},
     spares_upload_pip_lay: vkutil.PipelineAndPipelineLayout = .{},
@@ -259,7 +153,6 @@ pub const Engine = struct {
     depth_sampler: vk.Sampler = undefined,
     depth_pyramid_mips: [16]vk.ImageView = undefined,
 
-    current_commands: MeshDrawCommands = undefined,
     render_scene: RenderScene = undefined,
 
     frame_num: f32 = 0,
@@ -267,19 +160,10 @@ pub const Engine = struct {
     last_frame_time: f64 = 0.0,
 
     shader_cache: vkutil.ShaderCache,
-    renderables: std.ArrayList(OldRenderObject),
-    materials: std.StringHashMap(OldMaterial),
     meshes: std.StringHashMap(Mesh),
     textures: std.StringHashMap(Texture),
 
-    global_set_layout: vk.DescriptorSetLayout,
-    object_set_layout: vk.DescriptorSetLayout,
-    single_tex_layout: vk.DescriptorSetLayout = undefined,
-    descriptor_pool: vk.DescriptorPool,
     imgui_pool: vk.DescriptorPool = undefined,
-
-    scene_param_buffer: vma.AllocatedBufferUntyped,
-    blocky_sampler: vk.Sampler = undefined,
 
     pub usingnamespace @import("scene_render.zig");
 
@@ -298,12 +182,10 @@ pub const Engine = struct {
 
         // swapchain and RenderPasses
         var swapchain = try Swapchain.init(gc, gpa, extent, FRAME_OVERLAP);
-        const old_render_pass = try createOldForwardRenderPass(gc, .d32_sfloat, swapchain);
         const render_pass = try createForwardRenderPass(gc, .d32_sfloat);
         const copy_pass = try createCopyRenderPass(gc, swapchain);
         const shadow_pass = try createShadowRenderPass(gc, .d32_sfloat);
 
-        deletion_queue.append(old_render_pass);
         deletion_queue.append(render_pass);
         deletion_queue.append(copy_pass);
         deletion_queue.append(shadow_pass);
@@ -312,20 +194,16 @@ pub const Engine = struct {
         const depth_image = try createDepthImage(gc, .d32_sfloat, swapchain);
         const framebuffers = try createSwapchainFramebuffers(gc, gpa, copy_pass, swapchain);
 
-        // descriptors
-        const descriptors = createOldDescriptors(gc);
-
         // create our FrameDatas
         const frames = try gpa.alloc(FrameData, swapchain.swap_images.len);
         errdefer gpa.free(frames);
-        for (frames) |*f| f.* = try FrameData.init(gc, descriptors.layout, descriptors.pool, descriptors.scene_param_buffer, descriptors.object_set_layout);
+        for (frames) |*f| f.* = try FrameData.init(gc);
 
         return Self{
             .allocator = gpa,
             .window = window,
             .gc = gc,
             .swapchain = swapchain,
-            .old_render_pass = old_render_pass,
             .render_pass = render_pass,
             .copy_pass = copy_pass,
             .shadow_pass = shadow_pass,
@@ -334,10 +212,9 @@ pub const Engine = struct {
             .framebuffers = framebuffers,
             .frames = frames,
             .depth_image = depth_image,
+
             .render_scene = RenderScene.init(gc),
             .shader_cache = vkutil.ShaderCache.init(gc),
-            .renderables = std.ArrayList(OldRenderObject).init(gpa),
-            .materials = std.StringHashMap(OldMaterial).init(gpa),
             .meshes = std.StringHashMap(Mesh).init(gpa),
             .textures = std.StringHashMap(Texture).init(gpa),
 
@@ -346,11 +223,7 @@ pub const Engine = struct {
             .post_cull_barriers = std.ArrayList(vk.BufferMemoryBarrier).init(gpa),
 
             .camera = FlyCamera.init(window),
-            .global_set_layout = descriptors.layout,
-            .object_set_layout = descriptors.object_set_layout,
-            .descriptor_pool = descriptors.pool,
             .scene_params = .{},
-            .scene_param_buffer = descriptors.scene_param_buffer,
         };
     }
 
@@ -360,14 +233,6 @@ pub const Engine = struct {
         igvk.shutdown();
         ig.igDestroyContext(null);
         self.gc.destroy(self.imgui_pool);
-
-        self.gc.destroy(self.blocky_sampler);
-        self.gc.destroy(self.smooth_sampler);
-
-        self.scene_param_buffer.deinit(self.gc.vma);
-        self.gc.destroy(self.object_set_layout);
-        self.gc.destroy(self.global_set_layout);
-        self.gc.destroy(self.descriptor_pool);
 
         self.gc.destroy(self.depth_image.image.default_view);
         self.depth_image.deinit(self.gc);
@@ -401,10 +266,6 @@ pub const Engine = struct {
         for (self.framebuffers) |fb| self.gc.destroy(fb);
         self.allocator.free(self.framebuffers);
 
-        var mat_iter = self.materials.valueIterator();
-        while (mat_iter.next()) |mat| mat.deinit(self.gc);
-        self.materials.deinit();
-
         self.deletion_queue.deinit();
 
         self.swapchain.deinit();
@@ -414,7 +275,6 @@ pub const Engine = struct {
         self.window.destroy();
         glfw.terminate();
 
-        self.renderables.deinit();
         _ = general_purpose_allocator.deinit();
     }
 
@@ -427,8 +287,6 @@ pub const Engine = struct {
         try self.initImgui();
         try self.loadImages();
         try self.loadMeshes();
-        try self.initOldPipelines();
-        try self.initOldScene();
         try self.initScene();
 
         try self.render_scene.mergeMeshes();
@@ -464,7 +322,6 @@ pub const Engine = struct {
             try self.gc.vkd.resetCommandBuffer(frame.cmd_buffer, .{});
 
             try self.draw(frame);
-            // try self.drawOld(self.framebuffers[self.swapchain.image_index], frame);
 
             try self.swapchain.present(frame.cmd_buffer);
 
@@ -482,7 +339,9 @@ pub const Engine = struct {
                 self.gc.destroy(self.depth_image.image.default_view);
                 self.depth_image.deinit(self.gc);
                 self.depth_image = try createDepthImage(self.gc, self.depth_format, self.swapchain);
-                self.framebuffers = try createSwapchainFramebuffers(self.gc, self.allocator, self.old_render_pass, self.swapchain);
+                self.framebuffers = try createSwapchainFramebuffers(self.gc, self.allocator, self.copy_pass, self.swapchain);
+
+                // TODO: recreate all framebuffers. they shouldnt use the deletion queue because we need to deinit them on-the-fly
             }
 
             self.frame_num += 1;
@@ -646,6 +505,10 @@ pub const Engine = struct {
         self.smooth_sampler = try self.gc.vkd.createSampler(self.gc.dev, &sampler_info, null);
         self.deletion_queue.append(self.smooth_sampler);
 
+        const blocky_sampler_info = vkinit.samplerCreateInfo(.nearest, vk.SamplerAddressMode.repeat);
+        self.blocky_sampler = try self.gc.vkd.createSampler(self.gc.dev, &blocky_sampler_info, null);
+        self.deletion_queue.append(self.blocky_sampler);
+
         var shadow_sampler_info = vkinit.samplerCreateInfo(.linear, .clamp_to_border);
         shadow_sampler_info.border_color = .float_opaque_white;
         // shadow_sampler_info.compare_enable = vk.TRUE; // TODO: doesnt work with MoltenVK
@@ -657,13 +520,6 @@ pub const Engine = struct {
     fn createDescriptors(self: *Self) !void {
         self.descriptor_allocator = vkutil.DescriptorAllocator.init(self.gc);
         self.descriptor_layout_cache = vkutil.DescriptorLayoutCache.init(self.gc);
-
-        const texture_bind = vkinit.descriptorSetLayoutBinding(.combined_image_sampler, .{ .fragment_bit = true }, 0);
-        self.single_tex_layout = try self.descriptor_layout_cache.createDescriptorSetLayout(&.{
-            .flags = .{},
-            .binding_count = 1,
-            .p_bindings = vkutil.ptrToMany(&texture_bind),
-        });
     }
 
     fn createPipelines(self: *Self) !void {
@@ -815,128 +671,6 @@ pub const Engine = struct {
         try self.meshes.put("cube_thing", cube_thing_mesh);
         try self.meshes.put("cube", cube);
         try self.meshes.put("lost_empire", lost_empire);
-    }
-
-    fn initOldPipelines(self: *Self) !void {
-        // push-constant setup
-        var pip_layout_info = vkinit.pipelineLayoutCreateInfo();
-
-        // hook the global set layout and object set layout
-        const set_layouts = [_]vk.DescriptorSetLayout{ self.global_set_layout, self.object_set_layout };
-        pip_layout_info.set_layout_count = 2;
-        pip_layout_info.p_set_layouts = &set_layouts;
-
-        const pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
-        const pipeline = try createPipeline(self.gc, self.old_render_pass, pipeline_layout, resources.default_lit_old_frag);
-        const material = OldMaterial{
-            .pipeline = pipeline,
-            .pipeline_layout = pipeline_layout,
-        };
-        try self.materials.put("defaultmesh", material);
-
-        const pipeline_layout2 = try self.gc.vkd.createPipelineLayout(self.gc.dev, &pip_layout_info, null);
-        const pipeline2 = try createPipeline(self.gc, self.old_render_pass, pipeline_layout2, resources.default_lit_old_frag);
-        const material2 = OldMaterial{
-            .pipeline = pipeline2,
-            .pipeline_layout = pipeline_layout2,
-        };
-        try self.materials.put("redmesh", material2);
-
-        // create pipeline layout for the textured mesh, which has 3 descriptor sets
-        const textured_set_layouts = [_]vk.DescriptorSetLayout{ self.global_set_layout, self.object_set_layout, self.single_tex_layout };
-
-        var textured_pip_layout_info = vkinit.pipelineLayoutCreateInfo();
-        textured_pip_layout_info.set_layout_count = 4;
-        textured_pip_layout_info.p_set_layouts = &textured_set_layouts;
-
-        const textured_pipeline_layout = try self.gc.vkd.createPipelineLayout(self.gc.dev, &textured_pip_layout_info, null);
-        const textured_pipeline = try createPipeline(self.gc, self.old_render_pass, textured_pipeline_layout, resources.textured_lit_frag);
-        const textured_material = OldMaterial{
-            .pipeline = textured_pipeline,
-            .pipeline_layout = textured_pipeline_layout,
-        };
-        try self.materials.put("texturedmesh", textured_material);
-    }
-
-    fn initOldScene(self: *Self) !void {
-        // create a sampler for the texture
-        const sampler_info = vkinit.samplerCreateInfo(.nearest, vk.SamplerAddressMode.repeat);
-        self.blocky_sampler = try self.gc.vkd.createSampler(self.gc.dev, &sampler_info, null);
-
-        const smooth_sampler_info = vkinit.samplerCreateInfo(.linear, vk.SamplerAddressMode.repeat);
-        self.smooth_sampler = try self.gc.vkd.createSampler(self.gc.dev, &smooth_sampler_info, null);
-
-        const textured_mat = self.materials.getPtr("texturedmesh").?;
-
-        // allocate the descriptor set for single-texture to use on the material
-        const alloc_info = std.mem.zeroInit(vk.DescriptorSetAllocateInfo, .{
-            .descriptor_pool = self.descriptor_pool,
-            .descriptor_set_count = 1,
-            .p_set_layouts = vkutil.ptrToMany(&self.single_tex_layout),
-        });
-        var texture_set: vk.DescriptorSet = undefined;
-        try self.gc.vkd.allocateDescriptorSets(self.gc.dev, &alloc_info, vkutil.ptrToMany(&texture_set));
-        textured_mat.texture_set = texture_set;
-
-        // write to the descriptor set so that it points to our empire_diffuse texture
-        const image_buffer_info = vk.DescriptorImageInfo{
-            .sampler = self.blocky_sampler,
-            .image_view = self.textures.getPtr("empire_diffuse").?.view,
-            .image_layout = .shader_read_only_optimal,
-        };
-        const texture1 = vkinit.writeDescriptorImage(.combined_image_sampler, textured_mat.texture_set.?, &image_buffer_info, 0);
-        self.gc.vkd.updateDescriptorSets(self.gc.dev, 1, @ptrCast([*]const vk.WriteDescriptorSet, &texture1), 0, undefined);
-
-        // create some objects
-        var monkey = OldRenderObject{
-            .mesh = self.meshes.getPtr("monkey").?,
-            .material = self.materials.getPtr("defaultmesh").?,
-            .transform_matrix = Mat4.createTranslation(Vec3.new(0, 2, 0)),
-        };
-        try self.renderables.append(monkey);
-
-        var empire = OldRenderObject{
-            .mesh = self.meshes.getPtr("lost_empire").?,
-            .material = self.materials.getPtr("texturedmesh").?,
-            .transform_matrix = Mat4.createTranslation(Vec3.new(0, 5, 0)),
-        };
-        try self.renderables.append(empire);
-
-        var x: f32 = 0;
-        while (x < 20) : (x += 1) {
-            var y: f32 = 0;
-            while (y < 20) : (y += 1) {
-                var matrix = Mat4.createTranslation(.{ .x = x, .y = 0, .z = y });
-                var scale_matrix = Mat4.createScale(.{ .x = 0.4, .y = 0.4, .z = 0.4 });
-
-                const mesh_material = if (@mod(x, 2) == 0) self.materials.getPtr("texturedmesh").? else self.materials.getPtr("redmesh").?;
-                const mesh = if (@mod(x, 2) == 0 and @mod(x, 6) == 0) self.meshes.getPtr("cube_thing").? else self.meshes.getPtr("triangle").?;
-                var object = OldRenderObject{
-                    .mesh = mesh,
-                    .material = mesh_material,
-                    .transform_matrix = Mat4.mul(matrix, scale_matrix),
-                };
-                try self.renderables.append(object);
-
-                matrix = Mat4.createTranslation(.{ .x = x, .y = 0.8, .z = y });
-                scale_matrix = Mat4.createScale(.{ .x = 0.2, .y = 0.2, .z = 0.2 });
-
-                object = OldRenderObject{
-                    .mesh = mesh,
-                    .material = mesh_material,
-                    .transform_matrix = Mat4.mul(matrix, scale_matrix),
-                };
-                try self.renderables.append(object);
-
-                matrix = Mat4.createTranslation(.{ .x = x, .y = -0.8, .z = y });
-                object = OldRenderObject{
-                    .mesh = mesh,
-                    .material = mesh_material,
-                    .transform_matrix = Mat4.mul(matrix, scale_matrix),
-                };
-                try self.renderables.append(object);
-            }
-        }
     }
 
     fn initScene(self: *Self) !void {
@@ -1137,230 +871,8 @@ pub const Engine = struct {
         
         self.gc.vkd.cmdEndRenderPass(cmd);
     }
-
-    fn drawOld(self: *Self, framebuffer: vk.Framebuffer, frame: *FrameData) !void {
-        ig.igRender();
-        if ((ig.igGetIO().*.ConfigFlags & ig.ImGuiConfigFlags_ViewportsEnable) != 0) {
-            ig.igUpdatePlatformWindows();
-            ig.igRenderPlatformWindowsDefault(null, null);
-        }
-
-        const cmdbuf = frame.cmd_buffer;
-        const clear = vk.ClearValue{
-            .color = .{ .float_32 = .{ 0.6, 0.5, 0, 1 } },
-        };
-
-        const depth_clear = vk.ClearValue{
-            .depth_stencil = .{ .depth = 1, .stencil = 0 },
-        };
-
-        const clear_values = [_]vk.ClearValue{ clear, depth_clear };
-
-        // This needs to be a separate definition - see https://github.com/ziglang/zig/issues/7627.
-        const render_area = vk.Rect2D{
-            .offset = .{ .x = 0, .y = 0 },
-            .extent = self.swapchain.extent,
-        };
-
-        const viewport = vk.Viewport{
-            .x = 0,
-            .y = 0,
-            .width = @intToFloat(f32, self.swapchain.extent.width),
-            .height = @intToFloat(f32, self.swapchain.extent.height),
-            .min_depth = 0,
-            .max_depth = 1,
-        };
-
-        try self.gc.vkd.beginCommandBuffer(cmdbuf, &.{
-            .flags = .{ .one_time_submit_bit = true },
-            .p_inheritance_info = null,
-        });
-
-        self.gc.vkd.cmdSetViewport(cmdbuf, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
-        self.gc.vkd.cmdSetScissor(cmdbuf, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
-
-        self.gc.vkd.cmdBeginRenderPass(cmdbuf, &.{
-            .render_pass = self.old_render_pass,
-            .framebuffer = framebuffer,
-            .render_area = render_area,
-            .clear_value_count = clear_values.len,
-            .p_clear_values = @ptrCast([*]const vk.ClearValue, &clear_values),
-        }, .@"inline");
-
-        try self.drawRenderObjects(frame);
-
-        igvk.ImGui_ImplVulkan_RenderDrawData(ig.igGetDrawData(), cmdbuf, .null_handle);
-        self.gc.vkd.cmdEndRenderPass(cmdbuf);
-        try self.gc.vkd.endCommandBuffer(cmdbuf);
-    }
-
-    fn drawRenderObjects(self: *Self, frame: *FrameData) !void {
-        const cmdbuf = frame.cmd_buffer;
-
-        var view = self.camera.getViewMatrix();
-        var proj = Mat4.createPerspective(toRadians(70.0), @intToFloat(f32, self.swapchain.extent.width) / @intToFloat(f32, self.swapchain.extent.height), 0.1, 200);
-        proj.fields[1][1] *= -1;
-        var view_proj = Mat4.mul(proj, view);
-
-        // fill a GPU camera data struct
-        const cam_data = GpuCameraData{
-            .view = view,
-            .proj = proj,
-            .view_proj = view_proj,
-        };
-
-        // and copy it to the buffer
-        const cam_data_ptr = try self.gc.vma.mapMemory(GpuCameraData, frame.camera_buffer.allocation);
-        cam_data_ptr.* = cam_data;
-        self.gc.vma.unmapMemory(frame.camera_buffer.allocation);
-
-        // scene params
-        const framed = self.frame_num / 12;
-        self.scene_params.ambient_color = Vec4.new((std.math.sin(framed) + 1) * 0.5, 1, (std.math.cos(framed) + 1) * 0.5, 1);
-
-        const frame_index = @floatToInt(usize, self.frame_num) % FRAME_OVERLAP;
-        const data_offset = padUniformBufferSize(self.gc, @sizeOf(GpuSceneData)) * frame_index;
-        const scene_data_ptr = (try self.gc.vma.mapMemoryAtOffset(GpuSceneData, self.scene_param_buffer.allocation, data_offset));
-        scene_data_ptr.* = self.scene_params;
-        self.gc.vma.unmapMemory(self.scene_param_buffer.allocation);
-
-        // object SSBO
-        const object_data_ptr = try self.gc.vma.mapMemory(GpuObjectData, frame.object_buffer.allocation);
-        for (self.renderables.items) |*object, i| {
-            var rot = Mat4.createAngleAxis(.{ .y = 1 }, toRadians(25.0) * self.frame_num * 0.04 + @intToFloat(f32, i));
-            object_data_ptr[i].model = object.transform_matrix.mul(rot);
-        }
-        self.gc.vma.unmapMemory(frame.object_buffer.allocation);
-
-        var last_mesh: *Mesh = @intToPtr(*Mesh, @ptrToInt(&self));
-        var last_material: *OldMaterial = @intToPtr(*OldMaterial, @ptrToInt(&self));
-
-        for (self.renderables.items) |*object, i| {
-            // only bind the pipeline if it doesnt match with the already bound one
-            if (object.material != last_material) {
-                last_material = object.material;
-                self.gc.vkd.cmdBindPipeline(cmdbuf, .graphics, object.material.pipeline);
-
-                // offset for our scene buffer
-                const uniform_offset = padUniformBufferSize(self.gc, @sizeOf(GpuSceneData)) * frame_index;
-
-                // bind the descriptor set when changing pipeline
-                self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, object.material.pipeline_layout, 0, 1, @ptrCast([*]const vk.DescriptorSet, &frame.global_descriptor), 1, @ptrCast([*]const u32, &uniform_offset));
-
-                // bind the object data descriptor
-                self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, object.material.pipeline_layout, 1, 1, @ptrCast([*]const vk.DescriptorSet, &frame.object_descriptor), 0, undefined);
-
-                if (object.material.texture_set) |texture_set| {
-                    self.gc.vkd.cmdBindDescriptorSets(cmdbuf, .graphics, object.material.pipeline_layout, 2, 1, @ptrCast([*]const vk.DescriptorSet, &texture_set), 0, undefined);
-                }
-            }
-
-            var model = object.transform_matrix;
-            var rot = Mat4.createAngleAxis(.{ .y = 1 }, toRadians(25.0) * self.frame_num * 0.04);
-            model = model.mul(rot);
-
-            // only bind the mesh if its a different one from last bind
-            if (object.mesh != last_mesh) {
-                last_mesh = object.mesh;
-                // bind the mesh vertex buffer with offset 0
-                var offset: vk.DeviceSize = 0;
-                self.gc.vkd.cmdBindVertexBuffers(cmdbuf, 0, 1, @ptrCast([*]const vk.Buffer, &object.mesh.vert_buffer.buffer), @ptrCast([*]const vk.DeviceSize, &offset));
-                self.gc.vkd.cmdBindIndexBuffer(cmdbuf, object.mesh.index_buffer.buffer, 0, .uint32);
-            }
-
-            // self.gc.vkd.cmdDraw(cmdbuf, @intCast(u32, object.mesh.vertices.items.len), 1, 0, @intCast(u32, i));
-            self.gc.vkd.cmdDrawIndexed(cmdbuf, last_mesh.index_count, 1, 0, 0, @intCast(u32, i));
-        }
-    }
 };
 
-fn createOldForwardRenderPass(gc: *const GraphicsContext, depth_format: vk.Format, swapchain: Swapchain) !vk.RenderPass {
-    const color_attachment = vk.AttachmentDescription{
-        .flags = .{},
-        .format = swapchain.surface_format.format,
-        .samples = .{ .@"1_bit" = true },
-        .load_op = .clear,
-        .store_op = .store,
-        .stencil_load_op = .dont_care,
-        .stencil_store_op = .dont_care,
-        .initial_layout = .@"undefined",
-        .final_layout = .present_src_khr,
-    };
-
-    const color_attachment_ref = vk.AttachmentReference{
-        .attachment = 0,
-        .layout = .color_attachment_optimal,
-    };
-
-    const depth_attachment = vk.AttachmentDescription{
-        .flags = .{},
-        .format = depth_format,
-        .samples = .{ .@"1_bit" = true },
-        .load_op = .clear,
-        .store_op = .store,
-        .stencil_load_op = .clear,
-        .stencil_store_op = .dont_care,
-        .initial_layout = .@"undefined",
-        .final_layout = .depth_stencil_attachment_optimal,
-    };
-
-    const depth_attachment_ref = vk.AttachmentReference{
-        .attachment = 1,
-        .layout = .depth_stencil_attachment_optimal,
-    };
-
-    const subpass = vk.SubpassDescription{
-        .flags = .{},
-        .pipeline_bind_point = .graphics,
-        .input_attachment_count = 0,
-        .p_input_attachments = undefined,
-        .color_attachment_count = 1,
-        .p_color_attachments = @ptrCast([*]const vk.AttachmentReference, &color_attachment_ref),
-        .p_resolve_attachments = null,
-        .p_depth_stencil_attachment = &depth_attachment_ref,
-        .preserve_attachment_count = 0,
-        .p_preserve_attachments = undefined,
-    };
-
-    const dependency = vk.SubpassDependency{
-        .src_subpass = vk.SUBPASS_EXTERNAL,
-        .dst_subpass = 0,
-        .src_stage_mask = .{ .color_attachment_output_bit = true },
-        .src_access_mask = .{},
-        .dst_stage_mask = .{ .color_attachment_output_bit = true },
-        .dst_access_mask = .{ .color_attachment_write_bit = true },
-        .dependency_flags = .{},
-    };
-
-    const depth_dependency = vk.SubpassDependency{
-        .src_subpass = vk.SUBPASS_EXTERNAL,
-        .dst_subpass = 0,
-        .src_stage_mask = .{
-            .early_fragment_tests_bit = true,
-            .late_fragment_tests_bit = true,
-        },
-        .src_access_mask = .{},
-        .dst_stage_mask = .{
-            .early_fragment_tests_bit = true,
-            .late_fragment_tests_bit = true,
-        },
-        .dst_access_mask = .{ .depth_stencil_attachment_write_bit = true },
-        .dependency_flags = .{},
-    };
-
-    var attachments: [2]vk.AttachmentDescription = [_]vk.AttachmentDescription{ color_attachment, depth_attachment };
-    var dependencies: [2]vk.SubpassDependency = [_]vk.SubpassDependency{ dependency, depth_dependency };
-
-    return try gc.vkd.createRenderPass(gc.dev, &.{
-        .flags = .{},
-        .attachment_count = attachments.len,
-        .p_attachments = &attachments,
-        .subpass_count = 1,
-        .p_subpasses = @ptrCast([*]const vk.SubpassDescription, &subpass),
-        .dependency_count = dependencies.len,
-        .p_dependencies = &dependencies,
-    }, null);
-}
 
 fn createForwardRenderPass(gc: *const GraphicsContext, depth_format: vk.Format) !vk.RenderPass {
     const color_attachment = vk.AttachmentDescription{
@@ -1613,54 +1125,6 @@ fn padUniformBufferSize(gc: *const GraphicsContext, size: usize) usize {
     if (min_ubo_alignment > 0)
         aligned_size = (aligned_size + min_ubo_alignment - 1) & ~(min_ubo_alignment - 1);
     return aligned_size;
-}
-
-fn createOldDescriptors(gc: *const GraphicsContext) struct { layout: vk.DescriptorSetLayout, pool: vk.DescriptorPool, scene_param_buffer: vma.AllocatedBufferUntyped, object_set_layout: vk.DescriptorSetLayout } {
-    // binding for camera data at 0
-    const cam_bind = vkinit.descriptorSetLayoutBinding(.uniform_buffer, .{ .vertex_bit = true }, 0);
-
-    // binding for scene data at 1
-    const scene_bind = vkinit.descriptorSetLayoutBinding(.uniform_buffer_dynamic, .{ .vertex_bit = true, .fragment_bit = true }, 1);
-    const bindings = [_]vk.DescriptorSetLayoutBinding{ cam_bind, scene_bind };
-
-    const set_info = vk.DescriptorSetLayoutCreateInfo{
-        .flags = .{},
-        .binding_count = 2,
-        .p_bindings = &bindings,
-    };
-    const global_set_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &set_info, null) catch unreachable;
-
-    // binding for object data at 0
-    const object_bind = vkinit.descriptorSetLayoutBinding(.storage_buffer, .{ .vertex_bit = true }, 0);
-    const set_info_object = vk.DescriptorSetLayoutCreateInfo{
-        .flags = .{},
-        .binding_count = 1,
-        .p_bindings = @ptrCast([*]const vk.DescriptorSetLayoutBinding, &object_bind),
-    };
-    const object_set_layout = gc.vkd.createDescriptorSetLayout(gc.dev, &set_info_object, null) catch unreachable;
-
-    const sizes = [_]vk.DescriptorPoolSize{
-        .{ .@"type" = .uniform_buffer, .descriptor_count = 10 },
-        .{ .@"type" = .uniform_buffer_dynamic, .descriptor_count = 10 },
-        .{ .@"type" = .storage_buffer, .descriptor_count = 10 },
-        .{ .@"type" = .combined_image_sampler, .descriptor_count = 10 },
-    };
-    var descriptor_pool = gc.vkd.createDescriptorPool(gc.dev, &.{
-        .flags = .{},
-        .max_sets = 10,
-        .pool_size_count = 4,
-        .p_pool_sizes = &sizes,
-    }, null) catch unreachable;
-
-    const scene_param_buffer_size = FRAME_OVERLAP * padUniformBufferSize(gc, @sizeOf(GpuSceneData));
-    const scene_param_buffer = gc.vma.createUntypedBuffer(scene_param_buffer_size, .{ .uniform_buffer_bit = true }, .cpu_to_gpu, .{}) catch unreachable;
-
-    return .{
-        .layout = global_set_layout,
-        .pool = descriptor_pool,
-        .scene_param_buffer = scene_param_buffer,
-        .object_set_layout = object_set_layout,
-    };
 }
 
 fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
