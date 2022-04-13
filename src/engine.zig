@@ -952,12 +952,13 @@ pub const Engine = struct {
         while (x < 20) : (x += 1) {
             var y: f32 = 0;
             while (y < 20) : (y += 1) {
+                const odd = @mod(x, 2) == 0;
                 var tri = MeshObject{
-                    .mesh = self.meshes.getPtr("triangle").?,
+                    .mesh = if (odd) self.meshes.getPtr("monkey").? else self.meshes.getPtr("cube_thing").?,
                     .material = self.material_system.getMaterial("textured").?,
                     .custom_sort_key = 0,
                     .transform_matrix = Mat4.createTranslation(.{ .x = x, .y = 0, .z = y }).mul(Mat4.createScale(.{ .x = 0.3, .y = 0.3, .z = 0.3 })),
-                    .bounds = self.meshes.getPtr("triangle").?.bounds,
+                    .bounds = if (odd) self.meshes.getPtr("monkey").?.bounds else self.meshes.getPtr("cube_thing").?.bounds,
                     .draw_forward_pass = true,
                     .draw_shadow_pass = false,
                 };

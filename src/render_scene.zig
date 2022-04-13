@@ -320,6 +320,7 @@ pub const RenderScene = struct {
                 }
 
                 try new_objects.append(handle);
+
                 self.getObject(o).pass_indices.set(pass.pass_type, @intCast(i32, handle));
             }
 

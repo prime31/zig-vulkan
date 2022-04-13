@@ -45,7 +45,7 @@ pub const GraphicsContext = struct {
         var self: GraphicsContext = undefined;
         self.gpa = gpa;
 
-        scratch_allocator = ScratchAllocator.init(gpa, 2);
+        scratch_allocator = ScratchAllocator.init(gpa, 20);
         self.scratch = scratch_allocator.allocator();
 
         const vk_proc = @ptrCast(fn (instance: vk.Instance, procname: [*:0]const u8) callconv(.C) vk.PfnVoidFunction, glfw.getInstanceProcAddress);
