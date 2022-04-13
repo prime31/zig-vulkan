@@ -51,6 +51,16 @@ pub fn AllocatedBuffer(comptime T: type) type {
             allocator.unmapMemory(self.allocation);
         }
 
+        pub fn flushAllocation(self: Self, allocator: Allocator, offset: vk.DeviceSize, size: vk.DeviceSize) !void {
+            const res = vmaFlushAllocation(allocator.allocator, self.allocation, offset, size);
+            switch (res) {
+                .success => {},
+                .error_out_of_host_memory => return error.OutOfHostMemory,
+                .error_out_of_device_memory => return error.OutOfDeviceMemory,
+                else => return error.Unknown,
+            }
+        }
+
         pub fn asUntypedBuffer(self: Self) AllocatedBufferUntyped {
             return .{
                 .buffer = self.buffer,
