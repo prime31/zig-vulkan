@@ -32,7 +32,7 @@ struct DrawCullData {
 };
 
 layout (push_constant) uniform constants {
-   DrawCullData cullData;
+    DrawCullData cullData;
 };
 
 // TODO: temporarily turn off culling
@@ -50,11 +50,11 @@ layout (std140,set = 0, binding = 0) readonly buffer ObjectBuffer {
 } objectBuffer;
 
 struct DrawCommand {
-	uint    indexCount;
-	uint    instanceCount;
-	uint    firstIndex;
-	int     vertexOffset;
-	uint    firstInstance;
+	uint indexCount;
+	uint instanceCount;
+	uint firstIndex;
+	int  vertexOffset;
+	uint firstInstance;
 	uint objectID;
 	uint batchID;
 };
@@ -162,9 +162,9 @@ bool IsVisibleAABB(uint objectIndex) {
 	vec3 aabbmin = vec3(cullData.aabbmin_x,cullData.aabbmin_y,cullData.aabbmin_z) + vec3(radius);
 	vec3 aabbmax = vec3(cullData.aabbmax_x,cullData.aabbmax_y,cullData.aabbmax_z) - vec3(radius);
 
-	visible =visible&& (center.x > aabbmin.x) && (center.x < aabbmax.x);
-	visible =visible&& (center.y > aabbmin.y) && (center.y < aabbmax.y);
-	visible =visible&& (center.z > aabbmin.z) && (center.z < aabbmax.z);
+	visible = visible && (center.x > aabbmin.x) && (center.x < aabbmax.x);
+	visible = visible && (center.y > aabbmin.y) && (center.y < aabbmax.y);
+	visible = visible && (center.z > aabbmin.z) && (center.z < aabbmax.z);
 
 	return visible;
 }
@@ -182,7 +182,7 @@ void main() {
 
 		if (visible) {
 			uint batchIndex = compactInstanceBuffer.Instances[gID].batchID;
-			uint countIndex = atomicAdd(drawBuffer.Draws[batchIndex].instanceCount,1);
+			uint countIndex = atomicAdd(drawBuffer.Draws[batchIndex].instanceCount, 1);
 
 			uint instanceIndex = drawBuffer.Draws[batchIndex].firstInstance + countIndex;
 			finalInstanceBuffer.IDs[instanceIndex] = objectID;

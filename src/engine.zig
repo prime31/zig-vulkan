@@ -677,7 +677,6 @@ pub const Engine = struct {
 
         // defaults are triangle_list, polygon fill, no culling, no blending
         var pip_builder = vkutil.PipelineBuilder.init();
-        pip_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .greater_or_equal);
         try pip_builder.setShaders(&blit_effect);
 
         // blit pipeline uses hardcoded triangle so no need for vertex input
@@ -957,7 +956,7 @@ pub const Engine = struct {
                     .mesh = self.meshes.getPtr("triangle").?,
                     .material = self.material_system.getMaterial("textured").?,
                     .custom_sort_key = 0,
-                    .transform_matrix = Mat4.createTranslation(.{ .x = x, .y = 0, .z = y }).mul(Mat4.createScale(.{ .x = 0.5, .y = 0.5, .z = 0.5 })),
+                    .transform_matrix = Mat4.createTranslation(.{ .x = x, .y = 0, .z = y }).mul(Mat4.createScale(.{ .x = 0.3, .y = 0.3, .z = 0.3 })),
                     .bounds = self.meshes.getPtr("triangle").?.bounds,
                     .draw_forward_pass = true,
                     .draw_shadow_pass = true,
