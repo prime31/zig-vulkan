@@ -1,7 +1,6 @@
 const std = @import("std");
 const Vec3 = @import("vec3.zig").Vec3;
 
-// sourced from https://github.com/jeffkdev/sokol-zig-examples
 pub const Mat4 = extern struct {
     fields: [4][4]f32 = undefined, // [col][row]
 
@@ -151,6 +150,18 @@ pub const Mat4 = extern struct {
         return result;
     }
 
+    // https://github.com/g-truc/glm/blob/master/glm/ext/matrix_clip_space.inl#L16
+    pub fn createOrthographicLH_Z0(left: f32, right: f32, bottom: f32, top: f32, near: f32, far: f32) Mat4 {
+        var result = Mat4.identity;
+        result.fields[0][0] = 2 / (right - left);
+        result.fields[1][1] = 2 / (top - bottom);
+        result.fields[2][2] = 1 / (far - near);
+        result.fields[3][0] = -(right + left) / (right - left);
+        result.fields[3][1] = -(top + bottom) / (top - bottom);
+        result.fields[3][2] = -near / (far - near);
+        return result;
+    }
+
     pub fn createRotate(angle: f32, axis: Vec3) Mat4 {
         const rot = createAngleAxis(axis, angle);
         return identity.mul(rot);
@@ -161,8 +172,14 @@ pub const Mat4 = extern struct {
         return self.mul(rot);
     }
 
-    pub fn transpose(self: Mat4) Mat4 {
-        return self;
+    pub fn transpose(a: Mat4) Mat4 {
+        var result: Mat4 = undefined;
+        inline for ([_]comptime_int{ 0, 1, 2, 3 }) |row| {
+            inline for ([_]comptime_int{ 0, 1, 2, 3 }) |col| {
+                result.fields[row][col] = a.fields[col][row];
+            }
+        }
+        return result;
     }
 
     pub fn toArray(m: Mat4) [16]f32 {

@@ -175,10 +175,10 @@ void main() {
 		uint objectID = compactInstanceBuffer.Instances[gID].objectID;
 
 		bool visible = false;
-		if(cullData.AABBcheck == 0)
-			visible = IsVisible(objectID);
-		else
+		if(cullData.AABBcheck == 1)
 			visible = IsVisibleAABB(objectID);
+		else
+			visible = IsVisible(objectID);
 
 		if (visible) {
 			uint batchIndex = compactInstanceBuffer.Instances[gID].batchID;

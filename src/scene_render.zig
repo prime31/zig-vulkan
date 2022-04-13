@@ -60,7 +60,7 @@ const DrawCullData = struct {
             .p11 = params.projmat.fields[1][1],
             .znear = 0.1,
             .zfar = params.draw_dist,
-            .frustum = [4]f32{ frustum_x.x, frustum_x.y, frustum_y.y, frustum_y.z },
+            .frustum = [4]f32{ frustum_x.x, frustum_x.z, frustum_y.y, frustum_y.z },
             .lod_base = undefined,
             .lod_step = undefined,
             .pyramid_width = undefined,
@@ -194,6 +194,8 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
 }
 
 pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass) !void {
+    const frame = self.getCurrentFrameData();
+
     var view = self.camera.getViewMatrix();
     var proj = Mat4.createPerspective(toRadians(70.0), @intToFloat(f32, self.swapchain.extent.width) / @intToFloat(f32, self.swapchain.extent.height), 0.1, 200);
     proj.fields[1][1] *= -1;
@@ -210,14 +212,14 @@ pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass)
     const framed = self.frame_num / 120;
     self.scene_params.ambient_color = Vec4.new((std.math.sin(framed) + 1) * 0.5, 1, (std.math.cos(framed) + 1) * 0.5, 1);
 
-    const scene_data_offset = self.getCurrentFrameData().dynamic_data.push(@TypeOf(self.scene_params), self.scene_params);
-    const camera_data_offset = self.getCurrentFrameData().dynamic_data.push(vkutil.GpuCameraData, cam_data);
+    const scene_data_offset = frame.dynamic_data.push(@TypeOf(self.scene_params), self.scene_params);
+    const camera_data_offset = frame.dynamic_data.push(vkutil.GpuCameraData, cam_data);
 
     const obj_buffer_data = self.render_scene.object_data_buffer.getInfo(0);
-    var scene_info = self.getCurrentFrameData().dynamic_data.source.getInfo(0);
+    var scene_info = frame.dynamic_data.source.getInfo(0);
     scene_info.range = @sizeOf(vkutil.GpuSceneData);
 
-    var cam_info = self.getCurrentFrameData().dynamic_data.source.getInfo(0);
+    var cam_info = frame.dynamic_data.source.getInfo(0);
     cam_info.range = @sizeOf(vkutil.GpuCameraData);
 
     const instance_info = pass.compacted_instance_buffer.getInfo(0);
@@ -229,7 +231,7 @@ pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass)
     });
 
     var global_set: vk.DescriptorSet = undefined;
-    var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.getCurrentFrameData().dynamic_descriptor_allocator, &self.descriptor_layout_cache);
+    var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &frame.dynamic_descriptor_allocator, &self.descriptor_layout_cache);
     builder.bindBuffer(0, &cam_info, .uniform_buffer_dynamic, .{ .vertex_bit = true });
     builder.bindBuffer(1, &scene_info, .uniform_buffer_dynamic, .{ .vertex_bit = true, .fragment_bit = true });
     builder.bindImage(2, &shadow_image, .combined_image_sampler, .{ .fragment_bit = true });
@@ -237,7 +239,7 @@ pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass)
     builder.deinit();
 
     var object_data_set: vk.DescriptorSet = undefined;
-    builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.getCurrentFrameData().dynamic_descriptor_allocator, &self.descriptor_layout_cache);
+    builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &frame.dynamic_descriptor_allocator, &self.descriptor_layout_cache);
     builder.bindBuffer(0, &obj_buffer_data, .storage_buffer, .{ .vertex_bit = true });
     builder.bindBuffer(1, &instance_info, .storage_buffer, .{ .vertex_bit = true });
     _ = try builder.build(&object_data_set);
@@ -245,6 +247,26 @@ pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass)
 
     const dynamic_offsets = [2]u32{ camera_data_offset, scene_data_offset };
     try executeDrawCommands(self, cmd, pass, object_data_set, dynamic_offsets, global_set);
+}
+
+pub fn drawObjectsShadow(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass) !void {
+    _ = cmd;
+    _ = pass;
+    const frame = self.getCurrentFrameData();
+    const view = self.main_light.getViewMatrix();
+    const proj = self.main_light.getProjMatrix();
+
+    const cam_data = vkutil.GpuCameraData{
+        .view = view,
+        .proj = proj,
+        .view_proj = proj.mul(view),
+    };
+
+    // push data to dynmem
+    const cam_data_offset = frame.dynamic_data.push(vkutil.GpuCameraData, cam_data);
+    _ = cam_data_offset;
+
+    // TODO: keep filling this in
 }
 
 fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, obj_data_set: vk.DescriptorSet, dyn_offsets: [2]u32, global_set: vk.DescriptorSet) !void {

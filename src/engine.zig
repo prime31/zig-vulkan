@@ -52,6 +52,15 @@ const DirectionalLight = struct {
     light_pos: Vec3 = Vec3.new(0, 0, 0),
     light_dir: Vec3 = Vec3.new(0.3, -1, 0.3),
     shadow_extent: Vec3 = Vec3.new(100, 100, 100),
+
+    pub fn getViewMatrix(self: DirectionalLight) Mat4 {
+        return Mat4.createLookAt(self.light_pos, self.light_pos.add(self.light_dir), Vec3.new(1, 0, 0));
+    }
+
+    pub fn getProjMatrix(self: DirectionalLight) Mat4 {
+        const se = self.shadow_extent;
+        return Mat4.createOrthographicLH_Z0(-se.x, se.x, -se.y, se.y, -se.z, se.z);
+    }
 };
 
 pub const FrameData = struct {
@@ -101,7 +110,7 @@ const gpa = general_purpose_allocator.allocator();
 pub const Engine = struct {
     const Self = @This();
 
-    allocator: Allocator,
+    gpa: Allocator,
     window: glfw.Window,
     gc: *GraphicsContext,
     swapchain: Swapchain,
@@ -131,11 +140,10 @@ pub const Engine = struct {
     depth_pyramid_levels: u32 = 0,
     depth_format: vk.Format = .d32_sfloat,
 
-    descriptor_allocator: vkutil.DescriptorAllocator = undefined,
-    descriptor_layout_cache: vkutil.DescriptorLayoutCache = undefined,
+    descriptor_allocator: vkutil.DescriptorAllocator,
+    descriptor_layout_cache: vkutil.DescriptorLayoutCache,
     material_system: vkutil.MaterialSystem = undefined,
 
-    single_texture_set_layout: vk.DescriptorSetLayout = undefined,
     scene_params: GpuSceneData,
 
     upload_barriers: std.ArrayList(vk.BufferMemoryBarrier) = undefined,
@@ -192,7 +200,7 @@ pub const Engine = struct {
 
         // depth image and Swapchain framebuffers
         const depth_image = try createDepthImage(gc, .d32_sfloat, swapchain);
-        const framebuffers = try createSwapchainFramebuffers(gc, gpa, copy_pass, swapchain);
+        const framebuffers = try createSwapchainFramebuffers(gc, copy_pass, swapchain);
 
         // create our FrameDatas
         const frames = try gpa.alloc(FrameData, swapchain.swap_images.len);
@@ -200,7 +208,7 @@ pub const Engine = struct {
         for (frames) |*f| f.* = try FrameData.init(gc);
 
         return Self{
-            .allocator = gpa,
+            .gpa = gpa,
             .window = window,
             .gc = gc,
             .swapchain = swapchain,
@@ -217,6 +225,9 @@ pub const Engine = struct {
             .shader_cache = vkutil.ShaderCache.init(gc),
             .meshes = std.StringHashMap(Mesh).init(gpa),
             .textures = std.StringHashMap(Texture).init(gpa),
+
+            .descriptor_allocator = vkutil.DescriptorAllocator.init(gc),
+            .descriptor_layout_cache = vkutil.DescriptorLayoutCache.init(gc),
 
             .upload_barriers = std.ArrayList(vk.BufferMemoryBarrier).init(gpa),
             .cull_ready_barriers = std.ArrayList(vk.BufferMemoryBarrier).init(gpa),
@@ -261,16 +272,16 @@ pub const Engine = struct {
         self.post_cull_barriers.deinit();
 
         for (self.frames) |*frame| frame.deinit(self.gc);
-        self.allocator.free(self.frames);
+        self.gpa.free(self.frames);
 
         for (self.framebuffers) |fb| self.gc.destroy(fb);
-        self.allocator.free(self.framebuffers);
+        self.gpa.free(self.framebuffers);
 
         self.deletion_queue.deinit();
 
         self.swapchain.deinit();
         self.gc.deinit();
-        self.allocator.destroy(self.gc);
+        self.gpa.destroy(self.gc);
 
         self.window.destroy();
         glfw.terminate();
@@ -281,7 +292,6 @@ pub const Engine = struct {
     pub fn loadContent(self: *Self) !void {
         try self.createFramebuffers();
         try self.createDepthSetup();
-        try self.createDescriptors();
         try self.createPipelines();
 
         try self.initImgui();
@@ -334,12 +344,12 @@ pub const Engine = struct {
                 try self.swapchain.recreate(extent);
 
                 for (self.framebuffers) |fb| self.gc.destroy(fb);
-                self.allocator.free(self.framebuffers);
+                self.gpa.free(self.framebuffers);
 
                 self.gc.destroy(self.depth_image.image.default_view);
                 self.depth_image.deinit(self.gc);
                 self.depth_image = try createDepthImage(self.gc, self.depth_format, self.swapchain);
-                self.framebuffers = try createSwapchainFramebuffers(self.gc, self.allocator, self.copy_pass, self.swapchain);
+                self.framebuffers = try createSwapchainFramebuffers(self.gc, self.copy_pass, self.swapchain);
 
                 // TODO: recreate all framebuffers. they shouldnt use the deletion queue because we need to deinit them on-the-fly
             }
@@ -517,11 +527,6 @@ pub const Engine = struct {
         self.deletion_queue.append(self.shadow_sampler);
     }
 
-    fn createDescriptors(self: *Self) !void {
-        self.descriptor_allocator = vkutil.DescriptorAllocator.init(self.gc);
-        self.descriptor_layout_cache = vkutil.DescriptorLayoutCache.init(self.gc);
-    }
-
     fn createPipelines(self: *Self) !void {
         self.material_system = try vkutil.MaterialSystem.init(self);
 
@@ -638,11 +643,11 @@ pub const Engine = struct {
 
     fn loadImages(self: *Self) !void {
         // const lost_empire_tex = try loadTextureFromAsset(self.gc, "/Users/desaro/zig-vulkan/zig-cache/baked_assets/lost_empire-RGBA.tx");
-        const lost_empire_tex = try loadTextureFromFile(self.gc, self.allocator, "src/chapters/lost_empire-RGBA.png");
+        const lost_empire_tex = try loadTextureFromFile(self.gc, "src/chapters/lost_empire-RGBA.png");
         self.deletion_queue.append(lost_empire_tex.image.default_view);
         try self.textures.put("empire_diffuse", lost_empire_tex);
 
-        const white_tex = try loadTextureFromFile(self.gc, self.allocator, "src/chapters/white.jpg");
+        const white_tex = try loadTextureFromFile(self.gc, "src/chapters/white.jpg");
         self.deletion_queue.append(white_tex.image.default_view);
         try self.textures.put("white", white_tex);
     }
@@ -686,7 +691,7 @@ pub const Engine = struct {
         while (x < 20) : (x += 1) {
             var y: f32 = 0;
             while (y < 20) : (y += 1) {
-                const mesh = if (@mod(x, 2) == 0) self.meshes.getPtr("triangle").? else self.meshes.getPtr("cube_thing").?;
+                const mesh = if (@mod(x, 2) == 0) self.meshes.getPtr("triangle").? else self.meshes.getPtr("monkey").?;
                 const material = if (@mod(x, 2) == 0) self.material_system.getMaterial("default").? else self.material_system.getMaterial("textured").?;
 
                 var tri = MeshObject{
@@ -722,37 +727,41 @@ pub const Engine = struct {
         try self.readyMeshDraw(frame);
         try self.readyCullData(&self.render_scene.forward_pass, frame.cmd_buffer);
         try self.readyCullData(&self.render_scene.transparent_forward_pass, frame.cmd_buffer);
-        // try self.readyCullData(&self.render_scene.shadow_pass, frame.cmd_buffer);
+        try self.readyCullData(&self.render_scene.shadow_pass, frame.cmd_buffer);
 
         self.gc.vkd.cmdPipelineBarrier(frame.cmd_buffer, .{ .transfer_bit = true }, .{ .compute_shader_bit = true }, .{}, 0, undefined, @intCast(u32, self.cull_ready_barriers.items.len), self.cull_ready_barriers.items.ptr, 0, undefined);
 
-        // culling TODO: finish this
         const forward_cull = vkutil.CullParams{
             .projmat = self.camera.getReversedProjMatrix(self.swapchain.extent),
             .viewmat = self.camera.getViewMatrix(),
-            .frustum_cull = false,
-            .occlusion_cull = false,
-            .draw_dist = 666666,
+            .frustum_cull = true,
+            .occlusion_cull = false, // TODO: enable once depth reduce is done
+            .draw_dist = 5000,
             .aabb = false,
         };
         try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.forward_pass, forward_cull);
         try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.transparent_forward_pass, forward_cull);
 
-        // TODO: create CullParams for shadow
-        // const shadow_cull = vkutil.CullParams{
-        //     .projmat = self.camera.getReversedProjMatrix(self.swapchain.extent),
-        //     .viewmat = self.camera.getViewMatrix(),
-        //     .frustum_cull = false,
-        //     .occlusion_cull = false,
-        //     .draw_dist = 666666,
-        //     .aabb = true,
-        // };
-        // try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.shadow_pass, shadow_cull);
+        // CullParams for shadow pass
+        const aabb_center = self.main_light.light_pos;
+        const aabb_extent = self.main_light.shadow_extent.scale(1.5);
+
+        const shadow_cull = vkutil.CullParams{
+            .projmat = self.camera.getProjMatrix(self.swapchain.extent),
+            .viewmat = self.camera.getViewMatrix(),
+            .frustum_cull = true,
+            .occlusion_cull = false,
+            .draw_dist = 9999999,
+            .aabb = true,
+            .aabbmax = aabb_center.add(aabb_extent),
+            .aabbmin = aabb_center.sub(aabb_extent),
+        };
+
+        try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.shadow_pass, shadow_cull);
 
         self.gc.vkd.cmdPipelineBarrier(frame.cmd_buffer, .{ .compute_shader_bit = true }, .{ .draw_indirect_bit = true }, .{}, 0, undefined, @intCast(u32, self.post_cull_barriers.items.len), self.post_cull_barriers.items.ptr, 0, undefined);
 
-
-        // try self.shadowPass(frame.cmd_buffer);
+        try self.shadowPass(frame.cmd_buffer);
         try self.forwardPass(frame.cmd_buffer);
         // try self.reduceDepth(frame.cmd_buffer);
 
@@ -779,7 +788,7 @@ pub const Engine = struct {
     }
 
     fn forwardPass(self: *Self, cmd: vk.CommandBuffer) !void {
-       const clear = vk.ClearValue{
+        const clear = vk.ClearValue{
             .color = .{ .float_32 = .{ 0.6, 0.5, 0, 1 } },
         };
 
@@ -820,6 +829,42 @@ pub const Engine = struct {
         // try self.drawObjectsForward(cmd, &self.render_scene.transparent_forward_pass);
 
         // igvk.ImGui_ImplVulkan_RenderDrawData(ig.igGetDrawData(), cmd, .null_handle);
+
+        self.gc.vkd.cmdEndRenderPass(cmd);
+    }
+
+    fn shadowPass(self: *Self, cmd: vk.CommandBuffer) !void {
+        const depth_clear = vk.ClearValue{
+            .depth_stencil = .{ .depth = 1, .stencil = 0 },
+        };
+
+        // This needs to be a separate definition - see https://github.com/ziglang/zig/issues/7627.
+        const render_area = vk.Rect2D{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = self.shadow_extent,
+        };
+
+        const viewport = vk.Viewport{
+            .x = 0,
+            .y = 0,
+            .width = @intToFloat(f32, self.shadow_extent.width),
+            .height = @intToFloat(f32, self.shadow_extent.height),
+            .min_depth = 0,
+            .max_depth = 1,
+        };
+
+        self.gc.vkd.cmdSetViewport(cmd, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
+        self.gc.vkd.cmdSetScissor(cmd, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
+
+        self.gc.vkd.cmdBeginRenderPass(cmd, &.{
+            .render_pass = self.shadow_pass,
+            .framebuffer = self.shadow_framebuffer,
+            .render_area = render_area,
+            .clear_value_count = 1,
+            .p_clear_values = vkutil.ptrToMany(&depth_clear),
+        }, .@"inline");
+
+        try self.drawObjectsShadow(cmd, &self.render_scene.shadow_pass);
 
         self.gc.vkd.cmdEndRenderPass(cmd);
     }
@@ -868,11 +913,10 @@ pub const Engine = struct {
         self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, self.blit_layout, 0, 1, vkutil.ptrToMany(&blit_set), 0, undefined);
         self.gc.vkd.cmdDraw(cmd, 3, 1, 0, 0);
         // igvk.ImGui_ImplVulkan_RenderDrawData(ig.igGetDrawData(), cmd, .null_handle);
-        
+
         self.gc.vkd.cmdEndRenderPass(cmd);
     }
 };
-
 
 fn createForwardRenderPass(gc: *const GraphicsContext, depth_format: vk.Format) !vk.RenderPass {
     const color_attachment = vk.AttachmentDescription{
@@ -1077,8 +1121,8 @@ fn createDepthImage(gc: *const GraphicsContext, depth_format: vk.Format, swapcha
     return Texture.init(depth_image);
 }
 
-fn createSwapchainFramebuffers(gc: *const GraphicsContext, allocator: Allocator, render_pass: vk.RenderPass, swapchain: Swapchain) ![]vk.Framebuffer {
-    const framebuffers = try allocator.alloc(vk.Framebuffer, swapchain.swap_images.len);
+fn createSwapchainFramebuffers(gc: *const GraphicsContext, render_pass: vk.RenderPass, swapchain: Swapchain) ![]vk.Framebuffer {
+    const framebuffers = try gc.gpa.alloc(vk.Framebuffer, swapchain.swap_images.len);
     for (framebuffers) |*fb, i| {
         fb.* = try gc.vkd.createFramebuffer(gc.dev, &.{
             .flags = .{},
@@ -1148,8 +1192,8 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
     }
 }
 
-fn loadTextureFromFile(gc: *const GraphicsContext, allocator: Allocator, file: []const u8) !Texture {
-    const img = try stb.loadFromFile(allocator, file);
+fn loadTextureFromFile(gc: *const GraphicsContext, file: []const u8) !Texture {
+    const img = try stb.loadFromFile(gc.gpa, file);
     defer img.deinit();
 
     // allocate temporary buffer for holding texture data to upload and copy image data to it
