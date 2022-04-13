@@ -390,9 +390,9 @@ pub const RenderScene = struct {
             };
             try pass.multibatches.append(new_batch);
 
-            // no multi batch
-            for (pass.batches.items) |_, i|
-                try pass.multibatches.append(.{ .count = 1, .first = @intCast(u32, i) });
+            // alternative to entire section above skipping multibatch
+            // for (pass.batches.items) |_, i|
+            //     try pass.multibatches.append(.{ .count = 1, .first = @intCast(u32, i) });
         }
     }
 
