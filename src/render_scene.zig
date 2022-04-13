@@ -558,7 +558,7 @@ pub const MeshObject = struct {
     }
 };
 
-pub const GpuIndirectObject = struct {
+pub const GpuIndirectObject = extern struct {
     command: vk.DrawIndexedIndirectCommand,
     object_id: u32,
     batch_id: u32,
@@ -583,7 +583,7 @@ pub const RenderObject = struct {
     bounds: RenderBounds,
 };
 
-pub const GpuInstance = struct {
+pub const GpuInstance = extern struct {
     object_id: u32,
     batch_id: u32,
 };

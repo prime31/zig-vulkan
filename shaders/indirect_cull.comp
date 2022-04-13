@@ -60,7 +60,7 @@ struct DrawCommand {
 };
 
 // draw indirect buffer
-layout(set = 0, binding = 1) buffer InstanceBuffer {
+layout (set = 0, binding = 1) buffer InstanceBuffer {
 	DrawCommand Draws[];
 } drawBuffer;
 
@@ -70,12 +70,12 @@ struct GPUInstance {
 };
 
 // draw indirect buffer
-layout(set = 0, binding = 2) readonly buffer InstanceBuffer2 {
+layout (set = 0, binding = 2) readonly buffer InstanceBuffer2 {
 	GPUInstance Instances[];
 } compactInstanceBuffer;
 
 // draw indirect buffer
-layout(set = 0, binding = 3)  buffer InstanceBuffer3 {
+layout (set = 0, binding = 3) buffer InstanceBuffer3 {
 	uint IDs[];
 } finalInstanceBuffer;
 

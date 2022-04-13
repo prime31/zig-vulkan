@@ -949,9 +949,9 @@ pub const Engine = struct {
         _ = try self.material_system.buildMaterial("default", mat_info);
 
         var x: f32 = 0;
-        while (x < 10) : (x += 1) {
+        while (x < 20) : (x += 1) {
             var y: f32 = 0;
-            while (y < 10) : (y += 1) {
+            while (y < 20) : (y += 1) {
                 var tri = MeshObject{
                     .mesh = self.meshes.getPtr("triangle").?,
                     .material = self.material_system.getMaterial("textured").?,
@@ -959,7 +959,7 @@ pub const Engine = struct {
                     .transform_matrix = Mat4.createTranslation(.{ .x = x, .y = 0, .z = y }).mul(Mat4.createScale(.{ .x = 0.3, .y = 0.3, .z = 0.3 })),
                     .bounds = self.meshes.getPtr("triangle").?.bounds,
                     .draw_forward_pass = true,
-                    .draw_shadow_pass = true,
+                    .draw_shadow_pass = false,
                 };
                 tri.refreshRenderBounds();
                 _ = try self.render_scene.registerObject(tri);
@@ -984,8 +984,8 @@ pub const Engine = struct {
 
         try self.readyMeshDraw(frame);
         try self.readyCullData(&self.render_scene.forward_pass, frame.cmd_buffer);
-        try self.readyCullData(&self.render_scene.transparent_forward_pass, frame.cmd_buffer);
-        try self.readyCullData(&self.render_scene.shadow_pass, frame.cmd_buffer);
+        // try self.readyCullData(&self.render_scene.transparent_forward_pass, frame.cmd_buffer);
+        // try self.readyCullData(&self.render_scene.shadow_pass, frame.cmd_buffer);
         self.gc.vkd.cmdPipelineBarrier(frame.cmd_buffer, .{ .transfer_bit = true }, .{ .compute_shader_bit = true }, .{}, 0, undefined, @intCast(u32, self.cull_ready_barriers.items.len), self.cull_ready_barriers.items.ptr, 0, undefined);
 
         // culling TODO: finish this
@@ -1019,8 +1019,8 @@ pub const Engine = struct {
         self.gc.vkd.cmdCopyBuffer(cmd, pass.clear_indirect_buffer.buffer, pass.draw_indirect_buffer.buffer, 1, vkutil.ptrToMany(&indirect_copy));
 
         var barrier = vkinit.bufferBarrier(pass.draw_indirect_buffer.buffer, self.gc.graphics_queue.family);
-        barrier.dst_access_mask = .{ .shader_write_bit = true, .shader_read_bit = true };
         barrier.src_access_mask = .{ .transfer_write_bit = true };
+        barrier.dst_access_mask = .{ .shader_write_bit = true, .shader_read_bit = true };
         try self.cull_ready_barriers.append(barrier);
     }
 

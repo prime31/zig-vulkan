@@ -91,12 +91,12 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
         const copy_size = self.render_scene.renderables.items.len * @sizeOf(GpuObjectData);
         if (self.render_scene.object_data_buffer.size < copy_size) {
             self.render_scene.object_data_buffer.deinit(self.gc.vma);
-            self.render_scene.object_data_buffer = try self.gc.vma.createBuffer(GpuObjectData, copy_size, .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .cpu_to_gpu, .{});
+            self.render_scene.object_data_buffer = try self.gc.vma.createBuffer(GpuObjectData, copy_size, .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .auto_prefer_host, .{});
         }
 
         // if 80% of the objects are dirty, then just reupload the whole thing
         if (@intToFloat(f32, self.render_scene.dirty_objects.items.len) >= @intToFloat(f32, self.render_scene.renderables.items.len) * 0.8) {
-            const new_buffer = try self.gc.vma.createBuffer(GpuObjectData, copy_size, .{ .transfer_src_bit = true, .storage_buffer_bit = true }, .cpu_to_gpu, .{});
+            const new_buffer = try self.gc.vma.createBuffer(GpuObjectData, copy_size, .{ .transfer_src_bit = true, .storage_buffer_bit = true }, .auto_prefer_host, .{});
             const objectSSBO = try new_buffer.mapMemory(self.gc.vma);
             self.render_scene.fillObjectData(objectSSBO[0..self.render_scene.renderables.items.len]);
             new_buffer.unmapMemory(self.gc.vma);
@@ -119,8 +119,8 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
         }
 
         var barrier = vkinit.bufferBarrier(self.render_scene.object_data_buffer.buffer, self.gc.graphics_queue.family);
-        barrier.dst_access_mask = .{ .shader_write_bit = true, .shader_read_bit = true };
         barrier.src_access_mask = .{ .transfer_write_bit = true };
+        barrier.dst_access_mask = .{ .shader_write_bit = true, .shader_read_bit = true };
 
         try self.upload_barriers.append(barrier);
         self.render_scene.clearDirtyObjects();
@@ -131,17 +131,17 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
         // reallocate the gpu side buffers if needed
         if (pass.draw_indirect_buffer.size < pass.batches.items.len * @sizeOf(GpuIndirectObject)) {
             pass.draw_indirect_buffer.deinit(self.gc.vma);
-            pass.draw_indirect_buffer = try self.gc.vma.createBuffer(GpuIndirectObject, pass.batches.items.len * @sizeOf(GpuIndirectObject), .{ .transfer_dst_bit = true, .storage_buffer_bit = true, .indirect_buffer_bit = true }, .gpu_only, .{});
+            pass.draw_indirect_buffer = try self.gc.vma.createBuffer(GpuIndirectObject, pass.batches.items.len * @sizeOf(GpuIndirectObject), .{ .transfer_dst_bit = true, .storage_buffer_bit = true, .indirect_buffer_bit = true }, .auto_prefer_device, .{});
         }
 
         if (pass.compacted_instance_buffer.size < pass.flat_batches.items.len * @sizeOf(u32)) {
             pass.compacted_instance_buffer.deinit(self.gc.vma);
-            pass.compacted_instance_buffer = try self.gc.vma.createBuffer(u32, pass.flat_batches.items.len * @sizeOf(u32), .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .gpu_only, .{});
+            pass.compacted_instance_buffer = try self.gc.vma.createBuffer(u32, pass.flat_batches.items.len * @sizeOf(u32), .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .auto_prefer_device, .{});
         }
 
         if (pass.pass_objects_buffer.size < pass.flat_batches.items.len * @sizeOf(GpuInstance)) {
             pass.pass_objects_buffer.deinit(self.gc.vma);
-            pass.pass_objects_buffer = try self.gc.vma.createBuffer(GpuInstance, pass.flat_batches.items.len * @sizeOf(GpuInstance), .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .gpu_only, .{});
+            pass.pass_objects_buffer = try self.gc.vma.createBuffer(GpuInstance, pass.flat_batches.items.len * @sizeOf(GpuInstance), .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .auto_prefer_device, .{});
         }
     }
 
@@ -149,7 +149,7 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
     for (passes) |pass| {
         // if the pass has changed the batches, need to reupload them
         if (pass.needs_indirect_refresh and pass.batches.items.len > 0) {
-            const new_buffer = try self.gc.vma.createBuffer(GpuIndirectObject, pass.batches.items.len * @sizeOf(GpuIndirectObject), .{ .transfer_src_bit = true, .storage_buffer_bit = true, .indirect_buffer_bit = true }, .cpu_to_gpu, .{});
+            const new_buffer = try self.gc.vma.createBuffer(GpuIndirectObject, pass.batches.items.len * @sizeOf(GpuIndirectObject), .{ .transfer_src_bit = true, .storage_buffer_bit = true, .indirect_buffer_bit = true }, .auto_prefer_host, .{});
             const indirect = try new_buffer.mapMemory(self.gc.vma);
             self.render_scene.fillIndirectArray(indirect[0..pass.batches.items.len], pass);
             new_buffer.unmapMemory(self.gc.vma);
@@ -164,23 +164,23 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
         }
 
         if (pass.needs_instance_refresh and pass.flat_batches.items.len > 0) {
-            const new_buffer = try self.gc.vma.createBuffer(GpuInstance, pass.flat_batches.items.len * @sizeOf(GpuInstance), .{ .transfer_src_bit = true, .storage_buffer_bit = true }, .cpu_to_gpu, .{});
+            const new_buffer = try self.gc.vma.createBuffer(GpuInstance, pass.flat_batches.items.len * @sizeOf(GpuInstance), .{ .transfer_src_bit = true, .storage_buffer_bit = true }, .auto_prefer_host, .{});
             const instance_data = try new_buffer.mapMemory(self.gc.vma);
             self.render_scene.fillInstancesArray(instance_data[0..pass.flat_batches.items.len], pass);
             new_buffer.unmapMemory(self.gc.vma);
 
             frame.deletion_queue.append(new_buffer.asUntypedBuffer());
 
-            const indirect_copy = vk.BufferCopy{
+            const instance_copy = vk.BufferCopy{
                 .src_offset = 0,
                 .dst_offset = 0,
                 .size = pass.flat_batches.items.len * @sizeOf(GpuInstance),
             };
-            self.gc.vkd.cmdCopyBuffer(frame.cmd_buffer, new_buffer.buffer, pass.pass_objects_buffer.buffer, 1, vkutil.ptrToMany(&indirect_copy));
+            self.gc.vkd.cmdCopyBuffer(frame.cmd_buffer, new_buffer.buffer, pass.pass_objects_buffer.buffer, 1, vkutil.ptrToMany(&instance_copy));
 
             var barrier = vkinit.bufferBarrier(pass.pass_objects_buffer.buffer, self.gc.graphics_queue.family);
-            barrier.dst_access_mask = .{ .shader_write_bit = true, .shader_read_bit = true };
             barrier.src_access_mask = .{ .transfer_write_bit = true };
+            barrier.dst_access_mask = .{ .shader_write_bit = true, .shader_read_bit = true };
 
             try self.upload_barriers.append(barrier);
             pass.needs_instance_refresh = false;
@@ -308,14 +308,13 @@ fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, ob
 pub fn executeComputeCull(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, params: vkutil.CullParams) !void {
     if (pass.batches.items.len == 0) return;
 
-    const obj_buffer_info = self.render_scene.object_data_buffer.getInfo(0);
-
     var dynamic_info = self.getCurrentFrameData().dynamic_data.source.getInfo(0);
     dynamic_info.range = @sizeOf(vkutil.GpuCameraData);
 
+    const obj_buffer_info = self.render_scene.object_data_buffer.getInfo(0);
+    const indirect_info = pass.draw_indirect_buffer.getInfo(0);
     const instance_info = pass.pass_objects_buffer.getInfo(0);
     const final_info = pass.compacted_instance_buffer.getInfo(0);
-    const indirect_info = pass.draw_indirect_buffer.getInfo(0);
 
     // const depth_pyramid = vk.DescriptorImageInfo{
     //     .sampler = self.depth_sampler,
