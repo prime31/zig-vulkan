@@ -1094,39 +1094,6 @@ fn createSwapchainFramebuffers(gc: *const GraphicsContext, allocator: Allocator,
     return framebuffers;
 }
 
-fn createShaderModule(gc: *const GraphicsContext, data: [*]const u32, len: usize) !vk.ShaderModule {
-    return try gc.vkd.createShaderModule(gc.dev, &.{
-        .flags = .{},
-        .code_size = len,
-        .p_code = data,
-    }, null);
-}
-
-fn createPipeline(gc: *const GraphicsContext, render_pass: vk.RenderPass, pipeline_layout: vk.PipelineLayout, frag_shader_bytes: [:0]const u8) !vk.Pipeline {
-    const vert = try createShaderModule(gc, @ptrCast([*]const u32, resources.tri_mesh_descriptors_vert), resources.tri_mesh_descriptors_vert.len);
-    const frag = try createShaderModule(gc, @ptrCast([*]const u32, @alignCast(@alignOf(u32), std.mem.bytesAsSlice(u32, frag_shader_bytes))), frag_shader_bytes.len);
-
-    defer gc.destroy(vert);
-    defer gc.destroy(frag);
-
-    var builder = PipelineBuilder.init();
-    builder.pipeline_layout = pipeline_layout;
-    builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less_or_equal);
-    builder.vertex_description = Vertex.vertex_description;
-
-    try builder.addShaderStage(vkinit.pipelineShaderStageCreateInfo(vert, .{ .vertex_bit = true }));
-    try builder.addShaderStage(vkinit.pipelineShaderStageCreateInfo(frag, .{ .fragment_bit = true }));
-    return try builder.build(gc, render_pass);
-}
-
-fn padUniformBufferSize(gc: *const GraphicsContext, size: usize) usize {
-    const min_ubo_alignment = gc.gpu_props.limits.min_uniform_buffer_offset_alignment;
-    var aligned_size = size;
-    if (min_ubo_alignment > 0)
-        aligned_size = (aligned_size + min_ubo_alignment - 1) & ~(min_ubo_alignment - 1);
-    return aligned_size;
-}
-
 fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
     // vert buffer
     {
