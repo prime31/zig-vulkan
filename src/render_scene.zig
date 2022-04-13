@@ -212,16 +212,16 @@ pub const RenderScene = struct {
         const cmd_buf = try self.gc.beginOneTimeCommandBuffer();
         for (self.meshes.items) |m| {
             const vertex_copy = vk.BufferCopy{
+                .src_offset = 0,
                 .dst_offset = m.first_vert * @sizeOf(Vertex),
                 .size = m.vert_count * @sizeOf(Vertex),
-                .src_offset = 0,
             };
             self.gc.vkd.cmdCopyBuffer(cmd_buf, m.original.vert_buffer.buffer, self.merged_vert_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &vertex_copy));
 
             const index_copy = vk.BufferCopy{
+                .src_offset = 0,
                 .dst_offset = m.first_index * @sizeOf(u32),
                 .size = m.index_count * @sizeOf(u32),
-                .src_offset = 0,
             };
             self.gc.vkd.cmdCopyBuffer(cmd_buf, m.original.index_buffer.buffer, self.merged_index_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &index_copy));
         }

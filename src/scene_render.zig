@@ -207,6 +207,9 @@ pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass)
     };
 
     // push data to dynmem
+    const framed = self.frame_num / 120;
+    self.scene_params.ambient_color = Vec4.new((std.math.sin(framed) + 1) * 0.5, 1, (std.math.cos(framed) + 1) * 0.5, 1);
+
     const scene_data_offset = self.getCurrentFrameData().dynamic_data.push(@TypeOf(self.scene_params), self.scene_params);
     const camera_data_offset = self.getCurrentFrameData().dynamic_data.push(vkutil.GpuCameraData, cam_data);
 

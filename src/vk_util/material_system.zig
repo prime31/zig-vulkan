@@ -66,13 +66,13 @@ pub const MaterialSystem = struct {
     fn fillBuilders(self: *MaterialSystem) !void {
         // forward builder
         self.forward_builder.vertex_description = Vertex.vertex_description;
-        self.forward_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .greater_or_equal);
+        self.forward_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less);
 
         // shadow builder
         self.shadow_builder.vertex_description = Vertex.vertex_description;
         self.shadow_builder.rasterizer.cull_mode = .{ .front_bit = true };
         self.shadow_builder.rasterizer.depth_bias_enable = vk.TRUE;
-        self.shadow_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less);
+        self.shadow_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .greater_or_equal);
     }
 
     fn buildDefaultTemplates(self: *MaterialSystem) !void {
