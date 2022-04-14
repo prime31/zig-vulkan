@@ -22,9 +22,8 @@ void main() {
 	float lightAngle = clamp(dot(inNormal, sceneData.sunlightDirection.xyz), 0.f, 1.f);
 	vec3 lightColor = sceneData.sunlightColor.xyz * lightAngle;
 
-	// outFragColor = vec4(color * lightColor, 1.0f);
 	outFragColor = vec4(inColor + sceneData.ambientColor.xyz,1.0f);
 
 	// TODO: dont do this
-	outFragColor = vec4(1.0, 0.8, 0.4, 1.0);
+	// outFragColor = vec4(1.0, 0.8, 0.4, 1.0);
 }

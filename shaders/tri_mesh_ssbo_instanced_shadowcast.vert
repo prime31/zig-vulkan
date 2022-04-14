@@ -10,7 +10,6 @@ layout (set = 0, binding = 0) uniform CameraBuffer {
     mat4 view;
     mat4 proj;
 	mat4 viewproj;
-
 } cameraData;
 
 struct ObjectData {
@@ -20,7 +19,7 @@ struct ObjectData {
 };
 
 // all object matrices
-layout (std140,set = 1, binding = 0) readonly buffer ObjectBuffer {
+layout (std140, set = 1, binding = 0) readonly buffer ObjectBuffer {
 	ObjectData objects[];
 } objectBuffer;
 

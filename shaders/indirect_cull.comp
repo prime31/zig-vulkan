@@ -154,7 +154,7 @@ bool IsVisibleAABB(uint objectIndex) {
 	vec4 sphereBounds = objectBuffer.objects[index].spherebounds;
 
 	vec3 center = sphereBounds.xyz;
-	//center = (cullData.view * vec4(center,1.f)).xyz;
+	center = (cullData.view * vec4(center, 1.f)).xyz;
 	float radius = sphereBounds.w;
 
 	bool visible = true;

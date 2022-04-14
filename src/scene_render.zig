@@ -211,6 +211,9 @@ pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass)
     // push data to dynmem
     const framed = self.frame_num / 120;
     self.scene_params.ambient_color = Vec4.new((std.math.sin(framed) + 1) * 0.5, 1, (std.math.cos(framed) + 1) * 0.5, 1);
+    self.scene_params.sun_shadow_mat = self.main_light.getProjMatrix().mul(self.main_light.getViewMatrix());
+    self.scene_params.sun_dir = Vec4.fromVec3(self.main_light.light_dir, 1);
+    self.scene_params.sun_color = Vec4.new(1, 1, 1, 1);
 
     const scene_data_offset = frame.dynamic_data.push(@TypeOf(self.scene_params), self.scene_params);
     const camera_data_offset = frame.dynamic_data.push(vkutil.GpuCameraData, cam_data);
@@ -246,12 +249,12 @@ pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass)
     builder.deinit();
 
     const dynamic_offsets = [2]u32{ camera_data_offset, scene_data_offset };
-    try executeDrawCommands(self, cmd, pass, object_data_set, dynamic_offsets, global_set);
+    try executeDrawCommands(self, cmd, pass, object_data_set, dynamic_offsets[0..], global_set);
 }
 
 pub fn drawObjectsShadow(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass) !void {
-    _ = cmd;
-    _ = pass;
+    if (pass.batches.items.len == 0) return;
+
     const frame = self.getCurrentFrameData();
     const view = self.main_light.getViewMatrix();
     const proj = self.main_light.getProjMatrix();
@@ -263,13 +266,31 @@ pub fn drawObjectsShadow(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass) 
     };
 
     // push data to dynmem
-    const cam_data_offset = frame.dynamic_data.push(vkutil.GpuCameraData, cam_data);
-    _ = cam_data_offset;
+    const camera_data_offset = frame.dynamic_data.push(vkutil.GpuCameraData, cam_data);
 
-    // TODO: keep filling this in
+    var cam_info = frame.dynamic_data.source.getInfo(0);
+    cam_info.range = @sizeOf(vkutil.GpuCameraData);
+
+    const obj_buffer_data = self.render_scene.object_data_buffer.getInfo(0);
+    const instance_info = pass.compacted_instance_buffer.getInfo(0);
+
+    var global_set: vk.DescriptorSet = undefined;
+    var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &frame.dynamic_descriptor_allocator, &self.descriptor_layout_cache);
+    builder.bindBuffer(0, &cam_info, .uniform_buffer_dynamic, .{ .vertex_bit = true });
+    _ = try builder.build(&global_set);
+
+    var object_data_set: vk.DescriptorSet = undefined;
+    builder.clear();
+    builder.bindBuffer(0, &obj_buffer_data, .storage_buffer, .{ .vertex_bit = true });
+    builder.bindBuffer(1, &instance_info, .storage_buffer, .{ .vertex_bit = true });
+    _ = try builder.build(&object_data_set);
+    builder.deinit();
+
+    const dynamic_offsets = [1]u32{ camera_data_offset };
+    try executeDrawCommands(self, cmd, pass, object_data_set, dynamic_offsets[0..], global_set);
 }
 
-fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, obj_data_set: vk.DescriptorSet, dyn_offsets: [2]u32, global_set: vk.DescriptorSet) !void {
+fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, obj_data_set: vk.DescriptorSet, dyn_offsets: []const u32, global_set: vk.DescriptorSet) !void {
     if (pass.batches.items.len == 0) return;
 
     var last_mesh: ?*Mesh = null;
@@ -295,7 +316,7 @@ fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, ob
             self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, new_layout, 1, 1, vkutil.ptrToMany(&obj_data_set), 0, undefined);
 
             // update dynamic binds
-            self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, new_layout, 0, 1, vkutil.ptrToMany(&global_set), 2, &dyn_offsets);
+            self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, new_layout, 0, 1, vkutil.ptrToMany(&global_set), @intCast(u32, dyn_offsets.len), dyn_offsets.ptr);
         }
 
         if (new_material_set != last_material_set) {

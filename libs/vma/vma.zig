@@ -5,7 +5,7 @@ const vk = @import("vulkan");
 // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/index.html
 
 pub const AllocatedBufferUntyped = struct {
-    buffer: vk.Buffer,
+    buffer: vk.Buffer = .null_handle,
     allocation: VmaAllocation,
     size: vk.DeviceSize = 0,
 
@@ -14,6 +14,7 @@ pub const AllocatedBufferUntyped = struct {
     }
 
     pub fn getInfo(self: AllocatedBufferUntyped, offset: vk.DeviceSize) vk.DescriptorBufferInfo {
+        std.debug.assert(self.buffer != .null_handle);
         return .{
             .buffer = self.buffer,
             .offset = offset,
@@ -36,6 +37,7 @@ pub fn AllocatedBuffer(comptime T: type) type {
         }
 
         pub fn getInfo(self: Self, offset: vk.DeviceSize) vk.DescriptorBufferInfo {
+            std.debug.assert(self.buffer != .null_handle);
             return .{
                 .buffer = self.buffer,
                 .offset = offset,

@@ -29,7 +29,8 @@ pub const GpuSceneData = extern struct {
     fog_distance: Vec4 = Vec4.new(1, 0, 0, 1),
     ambient_color: Vec4 = Vec4.new(1, 0, 0, 1),
     sun_dir: Vec4 = Vec4.new(1, 0, 0, 1),
-    sun_color: Vec4 = Vec4.new(1, 0, 0, 1),
+    sun_color: Vec4 = Vec4.new(0, 0, 1, 1),
+    sun_shadow_mat: Mat4 = undefined,
 };
 
 pub const CullParams = extern struct {

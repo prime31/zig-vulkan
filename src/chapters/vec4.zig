@@ -1,4 +1,5 @@
 const Mat4 = @import("mat4.zig").Mat4;
+const Vec3 = @import("vec3.zig").Vec3;
 
 pub const Vec4 = extern struct {
     x: f32 = 0,
@@ -12,6 +13,15 @@ pub const Vec4 = extern struct {
 
     pub fn newFromArr(arr: [4]f32) Vec4 {
         return .{ .x = arr[0], .y = arr[1], .z = arr[2], .w = arr[3] };
+    }
+
+    pub fn fromVec3(value: Vec3, w: f32) Vec4 {
+        return .{
+            .x = value.x,
+            .y = value.y,
+            .z = value.z,
+            .w = w,
+        };
     }
 
     pub fn add(a: Vec4, b: Vec4) Vec4 {

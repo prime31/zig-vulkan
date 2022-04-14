@@ -701,12 +701,28 @@ pub const Engine = struct {
                     .transform_matrix = Mat4.createTranslation(.{ .x = x, .y = 0, .z = y }).mul(Mat4.createScale(.{ .x = 0.3, .y = 0.3, .z = 0.3 })),
                     .bounds = mesh.bounds,
                     .draw_forward_pass = true,
-                    .draw_shadow_pass = false,
+                    .draw_shadow_pass = true,
                 };
                 tri.refreshRenderBounds();
                 _ = try self.render_scene.registerObject(tri);
             }
         }
+
+        var mat = Mat4.createTranslation(.{ .x = 10, .y = -0.5, .z = 10 });
+        mat = mat.mul(Mat4.createScale(.{ .x = 20, .y = 20, .z = 20 }));
+        mat = mat.mul(Mat4.createRotate(1.5708, Vec3.new(1, 0, 0)));
+
+        var tri_ground = MeshObject{
+            .mesh = self.meshes.getPtr("triangle").?,
+            .material = self.material_system.getMaterial("default").?,
+            .custom_sort_key = 0,
+            .transform_matrix = mat,
+            .bounds = self.meshes.getPtr("triangle").?.bounds,
+            .draw_forward_pass = true,
+            .draw_shadow_pass = true,
+        };
+        tri_ground.refreshRenderBounds();
+        _ = try self.render_scene.registerObject(tri_ground);
     }
 
     fn draw(self: *Self, frame: *FrameData) !void {
@@ -726,7 +742,7 @@ pub const Engine = struct {
 
         try self.readyMeshDraw(frame);
         try self.readyCullData(&self.render_scene.forward_pass, frame.cmd_buffer);
-        try self.readyCullData(&self.render_scene.transparent_forward_pass, frame.cmd_buffer);
+        // try self.readyCullData(&self.render_scene.transparent_forward_pass, frame.cmd_buffer);
         try self.readyCullData(&self.render_scene.shadow_pass, frame.cmd_buffer);
 
         self.gc.vkd.cmdPipelineBarrier(frame.cmd_buffer, .{ .transfer_bit = true }, .{ .compute_shader_bit = true }, .{}, 0, undefined, @intCast(u32, self.cull_ready_barriers.items.len), self.cull_ready_barriers.items.ptr, 0, undefined);
@@ -740,15 +756,15 @@ pub const Engine = struct {
             .aabb = false,
         };
         try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.forward_pass, forward_cull);
-        try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.transparent_forward_pass, forward_cull);
+        // try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.transparent_forward_pass, forward_cull);
 
         // CullParams for shadow pass
         const aabb_center = self.main_light.light_pos;
         const aabb_extent = self.main_light.shadow_extent.scale(1.5);
 
         const shadow_cull = vkutil.CullParams{
-            .projmat = self.camera.getProjMatrix(self.swapchain.extent),
-            .viewmat = self.camera.getViewMatrix(),
+            .projmat = self.main_light.getProjMatrix(),
+            .viewmat = self.main_light.getViewMatrix(),
             .frustum_cull = true,
             .occlusion_cull = false,
             .draw_dist = 9999999,
@@ -855,6 +871,7 @@ pub const Engine = struct {
 
         self.gc.vkd.cmdSetViewport(cmd, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
         self.gc.vkd.cmdSetScissor(cmd, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
+        self.gc.vkd.cmdSetDepthBias(cmd, 0, 0, 0);
 
         self.gc.vkd.cmdBeginRenderPass(cmd, &.{
             .render_pass = self.shadow_pass,
