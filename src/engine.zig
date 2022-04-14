@@ -9,6 +9,7 @@ const igvk = @import("imgui_vk");
 const assets = @import("assetlib/assets.zig");
 const vkinit = @import("vkinit.zig");
 const vkutil = @import("vk_util/vk_util.zig");
+const options = @import("utils/options.zig");
 
 const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 const RenderScene = @import("render_scene.zig").RenderScene;
@@ -176,6 +177,7 @@ pub const Engine = struct {
     pub usingnamespace @import("scene_render.zig");
 
     pub fn init(app_name: [*:0]const u8) !Self {
+        options.init();
         try glfw.init(.{});
 
         var extent = vk.Extent2D{ .width = 800, .height = 600 };
@@ -314,6 +316,7 @@ pub const Engine = struct {
             igvk.newFrame();
             ig.igNewFrame();
             @import("chapters/autogui.zig").inspect(FlyCamera, &self.camera);
+            options.drawImGuiEditor();
 
             // wait for the last frame to complete before filling our CommandBuffer
             const state = self.swapchain.waitForFrame() catch |err| switch (err) {
@@ -929,7 +932,8 @@ pub const Engine = struct {
 
         self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, self.blit_layout, 0, 1, vkutil.ptrToMany(&blit_set), 0, undefined);
         self.gc.vkd.cmdDraw(cmd, 3, 1, 0, 0);
-        // igvk.ImGui_ImplVulkan_RenderDrawData(ig.igGetDrawData(), cmd, .null_handle);
+
+        igvk.ImGui_ImplVulkan_RenderDrawData(ig.igGetDrawData(), cmd, .null_handle);
 
         self.gc.vkd.cmdEndRenderPass(cmd);
     }

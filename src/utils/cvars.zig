@@ -1,4 +1,5 @@
 const std = @import("std");
+const ig = @import("imgui");
 
 fn hashStringFnv(comptime ReturnType: type, comptime str: []const u8) ReturnType {
     std.debug.assert(ReturnType == u32 or ReturnType == u64);
@@ -11,16 +12,15 @@ fn hashStringFnv(comptime ReturnType: type, comptime str: []const u8) ReturnType
     return value;
 }
 
-
 const max_cvar_size: usize = 10;
 
-pub const CVarFlags = packed struct {
+pub const CVarFlags = struct {
     noedit: bool = false,
-    edit_read_only: bool = false,
-    advanced: bool = false,
+    readonly: bool = false,
 
-    edit_checkbox: bool = false,
-    edit_float_drag: bool = false,
+    float_drag: bool = true,
+    float_min: f32 = std.math.f32_min,
+    float_max: f32 = std.math.f32_max,
 
     pub fn as(self: CVarFlags, T: type) T {
         return @bitCast(T, self);
@@ -34,6 +34,7 @@ const CVarType = enum {
     int64,
     float,
     string,
+    bool,
 
     pub fn fromType(comptime T: type) CVarType {
         return switch (T) {
@@ -43,6 +44,7 @@ const CVarType = enum {
             i32 => .int32,
             i64 => .int64,
             []const u8 => .string,
+            bool => .bool,
             else => unreachable,
         };
     }
@@ -50,35 +52,41 @@ const CVarType = enum {
 
 const CVarParameter = struct {
     arr_index: usize = std.math.maxInt(u64),
-    cvar_type: CVarType = .int32,
+    cvar_type: CVarType,
     flags: CVarFlags = .{},
-    name: []const u8,
-    desc: []const u8,
+    name: [:0]const u8,
+    desc: [:0]const u8,
 };
 
 fn CVarStorage(comptime T: type) type {
-    return struct{
+    return struct {
         current: T,
-        parameter: *CVarParameter,
+        parameter: CVarParameter,
     };
 }
 
 fn CVarArray(comptime T: type) type {
-    return struct{
+    return struct {
         const Self = @This();
 
         cvars: std.BoundedArray(CVarStorage(T), max_cvar_size) = .{},
-        last_index: usize = 0,
 
-        pub fn add(self: *Self, param: *CVarParameter, current: T) void {
-            param.arr_index = self.cvars.len;
+        pub fn add(self: *Self, comptime name: [:0]const u8, desc: [:0]const u8, current: T) usize {
+            const arr_index = self.cvars.len;
             self.cvars.append(.{
                 .current = current,
-                .parameter = param,
+                .parameter = .{
+                    .arr_index = arr_index,
+                    .cvar_type = CVarType.fromType(T),
+                    .name = name,
+                    .desc = desc,
+                },
             }) catch unreachable;
+
+            return arr_index;
         }
 
-        pub fn getPtr(self: *Self, index: usize) *CVarStorage(T) {
+        pub fn getStoragePtr(self: *Self, index: usize) *CVarStorage(T) {
             return &self.cvars.buffer[index];
         }
 
@@ -97,16 +105,23 @@ fn CVarArray(comptime T: type) type {
 }
 
 pub fn AutoCVar(comptime T: type) type {
-    return struct{
+    return struct {
         const Self = @This();
 
         index: usize,
 
-        pub fn init(comptime name: []const u8, desc: []const u8, current: T) Self {
-            var param = CVar.system().create(T, name, desc, current).?;
+        pub fn init(comptime name: [:0]const u8, desc: [:0]const u8, current: T) Self {
             return .{
-                .index = param.arr_index,
+                .index = CVar.system().create(T, name, desc, current).?,
             };
+        }
+
+        pub fn initWithFlags(comptime name: [:0]const u8, desc: [:0]const u8, current: T, flags: CVarFlags) Self {
+            const cvar = Self{
+                .index = CVar.system().create(T, name, desc, current).?,
+            };
+            cvar.setEditFlags(flags);
+            return cvar;
         }
 
         pub fn get(self: Self) T {
@@ -120,6 +135,10 @@ pub fn AutoCVar(comptime T: type) type {
         pub fn set(self: Self, current: T) void {
             CVar.system().getArray(T).setCurrent(current, self.index);
         }
+
+        pub fn setEditFlags(self: Self, flags: CVarFlags) void {
+            CVar.system().getArray(T).getStoragePtr(self.index).parameter.flags = flags;
+        }
     };
 }
 
@@ -128,14 +147,14 @@ pub const CVar = struct {
     var instance: ?Self = null;
 
     array_map: std.AutoHashMap(u32, usize),
-    cvars: std.AutoHashMap(u32, CVarParameter),
+    cvars: std.AutoHashMap(u32, usize), // maps from hashed-name to index in CVarArray
 
     pub fn system() *Self {
         if (instance) |*i| return i;
 
         instance = Self{
             .array_map = std.AutoHashMap(u32, usize).init(std.heap.c_allocator),
-            .cvars = std.AutoHashMap(u32, CVarParameter).init(std.heap.c_allocator),
+            .cvars = std.AutoHashMap(u32, usize).init(std.heap.c_allocator),
         };
         return &instance.?;
     }
@@ -154,50 +173,78 @@ pub const CVar = struct {
         return arr;
     }
 
-    fn createParameter(self: *Self, comptime name: []const u8, desc: []const u8) ?*CVarParameter {
+    fn getArrayOpt(self: *Self, comptime T: type) ?*CVarArray(T) {
+        const type_id = hashStringFnv(u32, @typeName(T));
+        if (self.array_map.getEntry(type_id)) |kv| {
+            return @intToPtr(*CVarArray(T), kv.value_ptr.*);
+        }
+        return null;
+    }
+
+    pub fn create(self: *Self, comptime T: type, comptime name: [:0]const u8, desc: [:0]const u8, current: T) ?usize {
         const name_hash = hashStringFnv(u32, name);
         if (self.cvars.contains(name_hash)) return null;
-        
-        self.cvars.put(name_hash, .{
-            .name = name,
-            .desc = desc,
-        }) catch unreachable;
-        return self.cvars.getPtr(name_hash).?;
+
+        var arr = self.getArray(T);
+        const arr_index = arr.add(name, desc, current);
+        self.cvars.put(name_hash, arr_index) catch unreachable;
+        return arr.getStoragePtr(arr_index).parameter.arr_index;
     }
 
-    pub fn create(self: *Self, comptime T: type, comptime name: []const u8, desc: []const u8, current: T) ?*CVarParameter {
-        if (self.createParameter(name, desc)) |param| {
-            param.cvar_type = CVarType.fromType(T);
-
-            var arr = self.getArray(T);
-            arr.add(param, current);
-            return param;
-        }
-        return null;
-    }
-
-    fn getStoragePtr(self: *Self, comptime T: type, comptime name: []const u8) ?*CVarStorage(T) {
+    fn getStoragePtr(self: *Self, comptime T: type, comptime name: [:0]const u8) ?*CVarStorage(T) {
         const name_hash = hashStringFnv(u32, name);
-        if (self.cvars.getPtr(name_hash)) |param| {
-            return self.getArray(T).getPtr(param.arr_index);
+        if (self.cvars.get(name_hash)) |arr_index| {
+            return self.getArray(T).getStoragePtr(arr_index);
         }
         return null;
     }
 
-    pub fn setCurrent(self: *Self, comptime T: type, comptime name: []const u8, current: T) CVarParameter {
-        if (self.getStoragePtr(name)) |storage| {
+    pub fn setCurrent(self: *Self, comptime T: type, comptime name: [:0]const u8, current: T) void {
+        if (self.getStoragePtr(T, name)) |storage| {
             storage.current = current;
         }
     }
 
-    pub fn getCurrent(self: *Self, comptime T: type, comptime name: []const u8) ?T {
+    pub fn getCurrent(self: *Self, comptime T: type, comptime name: [:0]const u8) ?T {
         if (self.getStoragePtr(T, name)) |storage| {
             return storage.current;
         }
         return null;
     }
-};
 
+    pub fn drawImGuiEditor(self: *Self) void {
+        if (ig.igCollapsingHeader_BoolPtr("CVars", null, ig.ImGuiTreeNodeFlags_None)) {
+            ig.igIndent(10);
+            defer ig.igUnindent(10);
+
+            // TODO: loop through CVarTypes here instead of hardcoding this
+            if (self.getArrayOpt(bool)) |arr| drawImGuiArray(bool, arr);
+            if (self.getArrayOpt(f32)) |arr| drawImGuiArray(f32, arr);
+        }
+    }
+
+    fn drawImGuiArray(comptime T: type, arr: *CVarArray(T)) void {
+        for (arr.cvars.slice()) |_, i| {
+            var storage = arr.getStoragePtr(i);
+            const flags = storage.parameter.flags;
+
+            if (flags.readonly)
+                ig.igBeginDisabled(true);
+
+            switch (T) {
+                bool => _ = ig.igCheckbox(storage.parameter.name, &storage.current),
+                f32 => _ = ig.igDragFloat(storage.parameter.name, &storage.current, 0.1, flags.float_min, flags.float_max, null, ig.ImGuiSliderFlags_None),
+                else => {},
+            }
+
+            if (flags.readonly)
+                ig.igEndDisabled();
+
+            if (ig.igIsItemHovered(ig.ImGuiHoveredFlags_None))
+                ig.igSetTooltip("%s", storage.parameter.desc.ptr);
+        }
+    }
+};
 
 test "cvars" {
     const auto_float = AutoCVar(f32).init("float.poop", "whatever man", 66.66);
