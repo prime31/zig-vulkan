@@ -871,7 +871,7 @@ pub const Engine = struct {
 
         self.gc.vkd.cmdSetViewport(cmd, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
         self.gc.vkd.cmdSetScissor(cmd, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
-        self.gc.vkd.cmdSetDepthBias(cmd, 0, 0, 0);
+        self.gc.vkd.cmdSetDepthBias(cmd, 5.25, 0, 4.75);
 
         self.gc.vkd.cmdBeginRenderPass(cmd, &.{
             .render_pass = self.shadow_pass,
