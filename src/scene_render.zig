@@ -3,6 +3,7 @@ const vk = @import("vulkan");
 const vma = @import("vma");
 const vkutil = @import("vk_util/vk_util.zig");
 const vkinit = @import("vkinit.zig");
+const config = @import("utils/config.zig");
 
 const Mat4 = @import("chapters/mat4.zig").Mat4;
 const Vec3 = @import("chapters/vec3.zig").Vec3;
@@ -30,11 +31,12 @@ const DrawCullData = struct {
 
     draw_count: u32,
 
-    culling_enabled: i32,
+    culling_enabled: i32 = 1,
+    frustum_culling_enabled: i32,
     lod_enabled: i32,
     occlusion_enabled: i32,
     distance_check: i32,
-    aabb_check: i32,
+    aabb_check: i32, // if on, frustum culling is disabled. used for ortho projection
     aabbmin_x: f32,
     aabbmin_y: f32,
     aabbmin_z: f32,
@@ -66,7 +68,7 @@ const DrawCullData = struct {
             .pyramid_width = undefined,
             .pyramid_height = undefined,
             .draw_count = undefined,
-            .culling_enabled = if (params.frustum_cull) 1 else 0,
+            .frustum_culling_enabled = if (params.frustum_cull) 1 else 0,
             .lod_enabled = 0,
             .occlusion_enabled = if (params.occlusion_cull) 1 else 0,
             .distance_check = if (params.draw_dist > 10000) 1 else 0,
@@ -214,6 +216,7 @@ pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass)
     self.scene_params.sun_shadow_mat = self.main_light.getProjMatrix().mul(self.main_light.getViewMatrix());
     self.scene_params.sun_dir = Vec4.fromVec3(self.main_light.light_dir, 1);
     self.scene_params.sun_color = Vec4.new(1, 1, 1, 1);
+    self.scene_params.sun_color.w = if (config.shadowcast.get()) 0 else 1;
 
     const scene_data_offset = frame.dynamic_data.push(@TypeOf(self.scene_params), self.scene_params);
     const camera_data_offset = frame.dynamic_data.push(vkutil.GpuCameraData, cam_data);
@@ -349,6 +352,7 @@ fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, ob
 }
 
 pub fn executeComputeCull(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, params: vkutil.CullParams) !void {
+    if (config.freeze_cull.get()) return;
     if (pass.batches.items.len == 0) return;
 
     var dynamic_info = self.getCurrentFrameData().dynamic_data.source.getInfo(0);
@@ -378,6 +382,8 @@ pub fn executeComputeCull(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass,
 
     var cull_data = DrawCullData.init(params);
     cull_data.draw_count = @intCast(u32, pass.flat_batches.items.len);
+
+    if (config.disable_cull.get()) cull_data.culling_enabled = 0;
 
     self.gc.vkd.cmdBindPipeline(cmd, .compute, self.cull_pip_lay.pipeline);
     self.gc.vkd.cmdPushConstants(cmd, self.cull_pip_lay.layout, .{ .compute_bit = true }, 0, @sizeOf(DrawCullData), &cull_data);

@@ -9,7 +9,7 @@ const igvk = @import("imgui_vk");
 const assets = @import("assetlib/assets.zig");
 const vkinit = @import("vkinit.zig");
 const vkutil = @import("vk_util/vk_util.zig");
-const options = @import("utils/options.zig");
+const config = @import("utils/config.zig");
 
 const GraphicsContext = @import("graphics_context.zig").GraphicsContext;
 const RenderScene = @import("render_scene.zig").RenderScene;
@@ -177,7 +177,7 @@ pub const Engine = struct {
     pub usingnamespace @import("scene_render.zig");
 
     pub fn init(app_name: [*:0]const u8) !Self {
-        options.init();
+        config.init();
         try glfw.init(.{});
 
         var extent = vk.Extent2D{ .width = 800, .height = 600 };
@@ -316,7 +316,7 @@ pub const Engine = struct {
             igvk.newFrame();
             ig.igNewFrame();
             @import("chapters/autogui.zig").inspect(FlyCamera, &self.camera);
-            options.drawImGuiEditor();
+            config.drawImGuiEditor();
 
             // wait for the last frame to complete before filling our CommandBuffer
             const state = self.swapchain.waitForFrame() catch |err| switch (err) {
@@ -755,7 +755,7 @@ pub const Engine = struct {
             .viewmat = self.camera.getViewMatrix(),
             .frustum_cull = true,
             .occlusion_cull = false, // TODO: enable once depth reduce is done
-            .draw_dist = 5000,
+            .draw_dist = config.draw_distance.get(),
             .aabb = false,
         };
         try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.forward_pass, forward_cull);
@@ -776,7 +776,8 @@ pub const Engine = struct {
             .aabbmin = aabb_center.sub(aabb_extent),
         };
 
-        try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.shadow_pass, shadow_cull);
+        if (config.shadowcast.get())
+            try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.shadow_pass, shadow_cull);
 
         self.gc.vkd.cmdPipelineBarrier(frame.cmd_buffer, .{ .compute_shader_bit = true }, .{ .draw_indirect_bit = true }, .{}, 0, undefined, @intCast(u32, self.post_cull_barriers.items.len), self.post_cull_barriers.items.ptr, 0, undefined);
 
@@ -790,6 +791,8 @@ pub const Engine = struct {
     }
 
     fn readyCullData(self: *Self, pass: *MeshPass, cmd: vk.CommandBuffer) !void {
+        // if cull is frozen we want to make sure not to overwrite our draw_indirect_buffer with the clear_indirect_buffer
+        if (config.freeze_cull.get()) return;
         if (pass.clear_indirect_buffer.buffer == .null_handle) return;
 
         // copy from the cleared indirect buffer into the one we will use on rendering
@@ -853,6 +856,9 @@ pub const Engine = struct {
     }
 
     fn shadowPass(self: *Self, cmd: vk.CommandBuffer) !void {
+        if (!config.shadowcast.get()) return;
+        if (config.freeze_shadows.get()) return;
+
         const depth_clear = vk.ClearValue{
             .depth_stencil = .{ .depth = 1, .stencil = 0 },
         };
@@ -874,7 +880,7 @@ pub const Engine = struct {
 
         self.gc.vkd.cmdSetViewport(cmd, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
         self.gc.vkd.cmdSetScissor(cmd, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
-        self.gc.vkd.cmdSetDepthBias(cmd, 5.25, 0, 4.75);
+        self.gc.vkd.cmdSetDepthBias(cmd, config.shadow_bias.get(), 0, config.shadow_slope_bias.get());
 
         self.gc.vkd.cmdBeginRenderPass(cmd, &.{
             .render_pass = self.shadow_pass,
@@ -918,11 +924,14 @@ pub const Engine = struct {
 
         self.gc.vkd.cmdBindPipeline(cmd, .graphics, self.blit_pipeline);
 
-        const source_image = vk.DescriptorImageInfo{
+        var source_image = vk.DescriptorImageInfo{
             .sampler = self.smooth_sampler,
             .image_view = self.raw_render_image.default_view,
             .image_layout = .shader_read_only_optimal,
         };
+
+        if (config.blit_shadow_buffer.get())
+            source_image.image_view = self.shadow_image.default_view;
 
         var blit_set: vk.DescriptorSet = undefined;
         var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.descriptor_allocator, &self.descriptor_layout_cache);

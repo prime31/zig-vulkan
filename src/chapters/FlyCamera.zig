@@ -1,6 +1,7 @@
 const std = @import("std");
 const vk = @import("vulkan");
 const glfw = @import("glfw");
+const config = @import("../utils/config.zig");
 
 const Mat4 = @import("mat4.zig").Mat4;
 const Vec3 = @import("vec3.zig").Vec3;
@@ -29,25 +30,27 @@ pub fn init(window: glfw.Window) Self {
 }
 
 pub fn update(self: *Self, dt: f64) void {
-    var cursor_pos = self.window.getCursorPos() catch unreachable;
-    var x_offset = @floatCast(f32, cursor_pos.xpos) - self.last_mouse_x;
-    var y_offset = self.last_mouse_y - @floatCast(f32, cursor_pos.ypos); // reversed since y-coordinates range from bottom to top
-    self.last_mouse_x = @floatCast(f32, cursor_pos.xpos);
-    self.last_mouse_y = @floatCast(f32, cursor_pos.ypos);
+    if (!config.cam_lock.get()) {
+        var cursor_pos = self.window.getCursorPos() catch unreachable;
+        var x_offset = @floatCast(f32, cursor_pos.xpos) - self.last_mouse_x;
+        var y_offset = self.last_mouse_y - @floatCast(f32, cursor_pos.ypos); // reversed since y-coordinates range from bottom to top
+        self.last_mouse_x = @floatCast(f32, cursor_pos.xpos);
+        self.last_mouse_y = @floatCast(f32, cursor_pos.ypos);
 
-    var sensitivity: f32 = 0.2;
-    x_offset *= sensitivity * 1.5; // bit more sensitivity for x
-    y_offset *= sensitivity;
+        var sensitivity: f32 = 0.2;
+        x_offset *= sensitivity * 1.5; // bit more sensitivity for x
+        y_offset *= sensitivity;
 
-    self.yaw += x_offset;
-    self.pitch += y_offset;
-    self.pitch = std.math.clamp(self.pitch, -90, 90);
+        self.yaw += x_offset;
+        self.pitch += y_offset;
+        self.pitch = std.math.clamp(self.pitch, -90, 90);
 
-    var direction = Vec3.new(0, 0, 0);
-    direction.x = std.math.cos(toRadians(self.yaw)) * std.math.cos(toRadians(self.pitch));
-    direction.y = std.math.sin(toRadians(self.pitch));
-    direction.z = std.math.sin(toRadians(self.yaw)) * std.math.cos(toRadians(self.pitch));
-    self.front = direction.normalize();
+        var direction = Vec3.new(0, 0, 0);
+        direction.x = std.math.cos(toRadians(self.yaw)) * std.math.cos(toRadians(self.pitch));
+        direction.y = std.math.sin(toRadians(self.pitch));
+        direction.z = std.math.sin(toRadians(self.yaw)) * std.math.cos(toRadians(self.pitch));
+        self.front = direction.normalize();
+    }
 
     // wasd
     var spd = self.speed * @floatCast(f32, dt);
