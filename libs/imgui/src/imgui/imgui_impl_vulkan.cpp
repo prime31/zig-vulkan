@@ -1535,7 +1535,7 @@ void ImGui_ImplVulkanH_CreateWindowSwapChain(VkPhysicalDevice physical_device, V
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &color_attachment;
-        subpass.pDepthStencilAttachment = &depth_attachment_ref;
+        // subpass.pDepthStencilAttachment = &depth_attachment_ref;
 		
         VkSubpassDependency dependency = {};
         dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -1558,11 +1558,11 @@ void ImGui_ImplVulkanH_CreateWindowSwapChain(VkPhysicalDevice physical_device, V
 		
         VkRenderPassCreateInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
-        info.attachmentCount = 2;
+        info.attachmentCount = 1;
         info.pAttachments = &attachments[0];
         info.subpassCount = 1;
         info.pSubpasses = &subpass;
-        info.dependencyCount = 2;
+        info.dependencyCount = 1;
         info.pDependencies = &dependencies[0];
         err = vkCreateRenderPass(device, &info, allocator, &wd->RenderPass);
         check_vk_result(err);
@@ -1649,12 +1649,12 @@ void ImGui_ImplVulkanH_CreateWindowSwapChain(VkPhysicalDevice physical_device, V
     // Create Framebuffer
     {
         VkImageView attachments[2];
-        attachments[1] = bd->DepthImageView;
+        // attachments[1] = bd->DepthImageView;
 
         VkFramebufferCreateInfo info = {};
         info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
         info.renderPass = wd->RenderPass;
-        info.attachmentCount = 2;
+        info.attachmentCount = 1;
         info.pAttachments = &attachments[0];
         info.width = wd->Width;
         info.height = wd->Height;

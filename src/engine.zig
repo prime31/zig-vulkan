@@ -850,8 +850,6 @@ pub const Engine = struct {
         try self.drawObjectsForward(cmd, &self.render_scene.forward_pass);
         // try self.drawObjectsForward(cmd, &self.render_scene.transparent_forward_pass);
 
-        // igvk.ImGui_ImplVulkan_RenderDrawData(ig.igGetDrawData(), cmd, .null_handle);
-
         self.gc.vkd.cmdEndRenderPass(cmd);
     }
 
