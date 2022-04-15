@@ -263,6 +263,9 @@ pub const ShaderCache = struct {
     }
 
     pub fn getShader(self: *ShaderCache, comptime res_path: []const u8) *ShaderModule {
+        // TODO: Huge HACK! fix pointer stability issue!
+        if (self.module_cache.capacity() == 0) self.module_cache.ensureTotalCapacity(15) catch unreachable;
+
         if (!self.module_cache.contains(res_path)) {
             self.module_cache.put(res_path, ShaderModule.init(self.gc, res_path) catch unreachable) catch unreachable;
         }

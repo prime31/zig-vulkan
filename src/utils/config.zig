@@ -26,7 +26,7 @@ pub fn init(window: glfw.Window) void {
     shadowcast = AutoCVar(bool).init("gpu.shadowcast", "Use shadowcasting", true);
     shadow_bias = AutoCVar(f32).initWithFlags("gpu.shadow_bias", "Shadow bias", 5.25, .{ .float_min = 0, .float_max = 20 });
     shadow_slope_bias = AutoCVar(f32).initWithFlags("gpu.slope_bias", "Slope bias", 4.75, .{ .float_min = 0, .float_max = 20 });
-    blit_shadow_buffer = AutoCVar(bool).init("gpu.blit_shadow_buffer (v)", "Makes the final blit display the shadow buffer", false);
+    blit_shadow_buffer = AutoCVar(bool).init("gpu.blit_shadow_buffer (v)", "Makes the final blit display the shadow buffer", true);
 
     window.setKeyCallback(onKeyPress);
 }

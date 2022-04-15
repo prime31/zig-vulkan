@@ -7,6 +7,7 @@ layout (location = 0) out vec4 outFragColor;
 
 
 void main() {
-	outFragColor = texture(tex, inUV);
+	float depthValue = texture(tex, inUV).r;
+    outFragColor = vec4(vec3(depthValue), 1.0);
 }
 

@@ -70,8 +70,8 @@ const DirectionalLight = struct {
             ig.igIndent(10);
             defer ig.igUnindent(10);
 
-            _ = ig.igDragFloat3("light_pos", &self.light_pos.x, 0.1, -100, 100, null, ig.ImGuiSliderFlags_None);
-            _ = ig.igDragFloat3("light_dir", &self.light_dir.x, 0.1, -10, 10, null, ig.ImGuiSliderFlags_None);
+            _ = ig.igDragFloat3("light_pos", &self.light_pos.x, 0.1, -360, 360, null, ig.ImGuiSliderFlags_None);
+            _ = ig.igDragFloat3("light_dir", &self.light_dir.x, 0.1, -360, 360, null, ig.ImGuiSliderFlags_None);
             if (ig.igDragFloat("shadow_extent", &self.shadow_extent.x, 1, 0, 1000, null, ig.ImGuiSliderFlags_None)) {
                 self.shadow_extent.y = self.shadow_extent.x;
                 self.shadow_extent.z = self.shadow_extent.x;
@@ -174,6 +174,8 @@ pub const Engine = struct {
     spares_upload_pip_lay: vkutil.PipelineAndPipelineLayout = .{},
     blit_pipeline: vk.Pipeline = undefined,
     blit_layout: vk.PipelineLayout = undefined,
+    depth_blit_pipeline: vk.Pipeline = undefined,
+    depth_blit_layout: vk.PipelineLayout = undefined,
 
     depth_sampler: vk.Sampler = undefined,
     depth_pyramid_mips: [16]vk.ImageView = undefined,
@@ -568,6 +570,24 @@ pub const Engine = struct {
         self.deletion_queue.append(blit_effect);
         self.deletion_queue.append(self.blit_pipeline);
 
+        // fullscreen triangle pipeline for depth map blits
+        var depth_blit_effect = vkutil.ShaderEffect.init(gpa);
+        try depth_blit_effect.addStage(self.shader_cache.getShader("fullscreen_vert"), .{ .vertex_bit = true });
+        try depth_blit_effect.addStage(self.shader_cache.getShader("blit_depth_frag"), .{ .fragment_bit = true });
+        try depth_blit_effect.reflectLayout(self.gc, null);
+
+        var depth_pip_builder = vkutil.PipelineBuilder.init();
+        try depth_pip_builder.setShaders(&depth_blit_effect);
+
+        // blit pipeline uses hardcoded triangle so no need for vertex input
+        depth_pip_builder.clearVertexInput();
+        depth_pip_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(false, false, .always);
+        self.depth_blit_pipeline = try depth_pip_builder.build(self.gc, self.copy_pass);
+        self.depth_blit_layout = depth_blit_effect.built_layout;
+
+        self.deletion_queue.append(depth_blit_effect);
+        self.deletion_queue.append(self.depth_blit_pipeline);
+
         // load the compute shaders
         self.cull_pip_lay = try self.loadComputeShader("indirect_cull_comp");
         self.depth_reduce_pip_lay = try self.loadComputeShader("depth_reduce_comp");
@@ -804,6 +824,8 @@ pub const Engine = struct {
         // try self.reduceDepth(frame.cmd_buffer);
 
         try self.copyRenderToSwapchain(frame.cmd_buffer);
+        if (config.blit_shadow_buffer.get())
+            try self.copyShadowMapToSwapchain(frame.cmd_buffer);
 
         try self.gc.vkd.endCommandBuffer(frame.cmd_buffer);
     }
@@ -946,9 +968,6 @@ pub const Engine = struct {
             .image_layout = .shader_read_only_optimal,
         };
 
-        if (config.blit_shadow_buffer.get())
-            source_image.image_view = self.shadow_image.default_view;
-
         var blit_set: vk.DescriptorSet = undefined;
         var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.descriptor_allocator, &self.descriptor_layout_cache);
         builder.bindImage(0, &source_image, .combined_image_sampler, .{ .fragment_bit = true });
@@ -959,6 +978,61 @@ pub const Engine = struct {
         self.gc.vkd.cmdDraw(cmd, 3, 1, 0, 0);
 
         igvk.ImGui_ImplVulkan_RenderDrawData(ig.igGetDrawData(), cmd, .null_handle);
+
+        self.gc.vkd.cmdEndRenderPass(cmd);
+    }
+
+    fn copyShadowMapToSwapchain(self: *Self, cmd: vk.CommandBuffer) !void {
+        const rect = vk.Extent2D{
+            .width = @intCast(u32, self.swapchain.extent.width / 3),
+            .height = @intCast(u32, self.swapchain.extent.height / 3),
+        };
+
+        const render_area = vk.Rect2D{
+            .offset = .{
+                .x = @intCast(i32, self.swapchain.extent.width - rect.width),
+                .y = 0,
+            },
+            .extent = rect,
+        };
+
+        const viewport = vk.Viewport{
+            .x = @intToFloat(f32, self.swapchain.extent.width - rect.width),
+            .y = 0,
+            .width = @intToFloat(f32, rect.width),
+            .height = @intToFloat(f32, rect.height),
+            .min_depth = 0,
+            .max_depth = 1,
+        };
+
+        self.gc.vkd.cmdBeginRenderPass(cmd, &.{
+            .render_pass = self.copy_pass,
+            .framebuffer = self.framebuffers[self.swapchain.image_index],
+            .render_area = render_area,
+            .clear_value_count = 0,
+            .p_clear_values = undefined,
+        }, .@"inline");
+
+        self.gc.vkd.cmdSetViewport(cmd, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
+        self.gc.vkd.cmdSetScissor(cmd, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
+        self.gc.vkd.cmdSetDepthBias(cmd, 0, 0, 0);
+
+        self.gc.vkd.cmdBindPipeline(cmd, .graphics, self.depth_blit_pipeline);
+
+        var source_image = vk.DescriptorImageInfo{
+            .sampler = self.smooth_sampler,
+            .image_view = self.shadow_image.default_view,
+            .image_layout = .shader_read_only_optimal,
+        };
+
+        var blit_set: vk.DescriptorSet = undefined;
+        var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.descriptor_allocator, &self.descriptor_layout_cache);
+        builder.bindImage(0, &source_image, .combined_image_sampler, .{ .fragment_bit = true });
+        _ = try builder.build(&blit_set);
+        builder.deinit();
+
+        self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, self.depth_blit_layout, 0, 1, vkutil.ptrToMany(&blit_set), 0, undefined);
+        self.gc.vkd.cmdDraw(cmd, 3, 1, 0, 0);
 
         self.gc.vkd.cmdEndRenderPass(cmd);
     }
