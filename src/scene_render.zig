@@ -382,7 +382,6 @@ pub fn executeComputeCull(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass,
 
     var cull_data = DrawCullData.init(params);
     cull_data.draw_count = @intCast(u32, pass.flat_batches.items.len);
-
     if (config.disable_cull.get()) cull_data.culling_enabled = 0;
 
     self.gc.vkd.cmdBindPipeline(cmd, .compute, self.cull_pip_lay.pipeline);
