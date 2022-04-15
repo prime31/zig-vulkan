@@ -36,7 +36,7 @@ layout (push_constant) uniform constants {
     DrawCullData cullData;
 };
 
-// TODO: temporarily turn off culling
+// TODO: temporarily turn off occlusion culling
 // layout (set = 0, binding = 4) uniform sampler2D depthPyramid;
 
 struct ObjectData {
@@ -108,7 +108,7 @@ bool IsVisible(uint objectIndex) {
 	vec4 sphereBounds = objectBuffer.objects[index].spherebounds;
 
 	vec3 center = sphereBounds.xyz;
-	center = (cullData.view * vec4(center,1.f)).xyz;
+	center = (cullData.view * vec4(center, 1.f)).xyz;
 	float radius = sphereBounds.w;
 
 	bool visible = true;
@@ -117,7 +117,7 @@ bool IsVisible(uint objectIndex) {
 	visible = visible && center.z * cullData.frustum[1] - abs(center.x) * cullData.frustum[0] > -radius;
 	visible = visible && center.z * cullData.frustum[3] - abs(center.y) * cullData.frustum[2] > -radius;
 
-	if(cullData.distCull != 0) {
+	if (cullData.distCull != 0) {
 		// the near/far plane culling uses camera space Z directly
 		visible = visible && center.z + radius > cullData.znear && center.z - radius < cullData.zfar;
 	}
@@ -151,7 +151,6 @@ bool IsVisible(uint objectIndex) {
 
 bool IsVisibleAABB(uint objectIndex) {
 	uint index = objectIndex;
-
 	vec4 sphereBounds = objectBuffer.objects[index].spherebounds;
 
 	vec3 center = sphereBounds.xyz;

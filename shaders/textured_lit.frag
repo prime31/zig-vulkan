@@ -96,5 +96,9 @@ void main() {
 	vec3 ambient = color * sceneData.ambientColor.xyz;
 	vec3 diffuse = lightColor * color * shadow;
 
+	// TODO: should ambient be multipled by some small value to tone it down?
+	// from learn opengl
+	// ambient = 0.15 * lightColor
+	// (ambient + (1.0 - shadow) * (diffuse + specular)) * color;
 	outFragColor = vec4(diffuse + ambient, texture(tex1, texCoord).a);
 }

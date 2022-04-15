@@ -60,7 +60,23 @@ const DirectionalLight = struct {
 
     pub fn getProjMatrix(self: DirectionalLight) Mat4 {
         const se = self.shadow_extent;
-        return Mat4.createOrthographicLH_Z0(-se.x, se.x, -se.y, se.y, -se.z, se.z);
+        var proj = Mat4.createOrthographicLH_Z0(-se.x, se.x, -se.y, se.y, -se.z, se.z);
+        // proj.fields[1][1] *= -1;
+        return proj;
+    }
+
+    pub fn drawImGuiEditor(self: *DirectionalLight) void {
+        if (ig.igCollapsingHeader_BoolPtr("Directional Light", null, ig.ImGuiTreeNodeFlags_None)) {
+            ig.igIndent(10);
+            defer ig.igUnindent(10);
+
+            _ = ig.igDragFloat3("light_pos", &self.light_pos.x, 0.1, -100, 100, null, ig.ImGuiSliderFlags_None);
+            _ = ig.igDragFloat3("light_dir", &self.light_dir.x, 0.1, -10, 10, null, ig.ImGuiSliderFlags_None);
+            if (ig.igDragFloat("shadow_extent", &self.shadow_extent.x, 1, 0, 1000, null, ig.ImGuiSliderFlags_None)) {
+                self.shadow_extent.y = self.shadow_extent.x;
+                self.shadow_extent.z = self.shadow_extent.x;
+            }
+        }
     }
 };
 
@@ -177,13 +193,13 @@ pub const Engine = struct {
     pub usingnamespace @import("scene_render.zig");
 
     pub fn init(app_name: [*:0]const u8) !Self {
-        config.init();
         try glfw.init(.{});
 
         var extent = vk.Extent2D{ .width = 800, .height = 600 };
         const window = try glfw.Window.create(extent.width, extent.height, app_name, null, null, .{
             .client_api = .no_api,
         });
+        config.init(window);
 
         var gc = try gpa.create(GraphicsContext);
         gc.* = try GraphicsContext.init(gpa, app_name, window);
@@ -713,7 +729,7 @@ pub const Engine = struct {
 
         var mat = Mat4.createTranslation(.{ .x = 10, .y = -0.5, .z = 10 });
         mat = mat.mul(Mat4.createScale(.{ .x = 20, .y = 20, .z = 20 }));
-        mat = mat.mul(Mat4.createRotate(1.5708, Vec3.new(1, 0, 0)));
+        mat = mat.mul(Mat4.createRotate(-1.5708, Vec3.new(1, 0, 0)));
 
         var tri_ground = MeshObject{
             .mesh = self.meshes.getPtr("triangle").?,
@@ -729,6 +745,8 @@ pub const Engine = struct {
     }
 
     fn draw(self: *Self, frame: *FrameData) !void {
+        self.main_light.drawImGuiEditor();
+
         ig.igRender();
         if ((ig.igGetIO().*.ConfigFlags & ig.ImGuiConfigFlags_ViewportsEnable) != 0) {
             ig.igUpdatePlatformWindows();
