@@ -55,13 +55,13 @@ const DirectionalLight = struct {
     shadow_extent: Vec3 = Vec3.new(100, 100, 100),
 
     pub fn getViewMatrix(self: DirectionalLight) Mat4 {
-        return Mat4.createLookAt(self.light_pos, self.light_pos.add(self.light_dir), Vec3.new(1, 0, 0));
+        return Mat4.createLookAt(self.light_pos, self.light_pos.add(self.light_dir), Vec3.new(0, 1, 0));
     }
 
     pub fn getProjMatrix(self: DirectionalLight) Mat4 {
         const se = self.shadow_extent;
         var proj = Mat4.createOrthographicLH_Z0(-se.x, se.x, -se.y, se.y, -se.z, se.z);
-        // proj.fields[1][1] *= -1;
+        proj.fields[1][1] *= -1;
         return proj;
     }
 
@@ -334,7 +334,7 @@ pub const Engine = struct {
             igvk.newFrame();
             ig.igNewFrame();
             @import("chapters/autogui.zig").inspect(FlyCamera, &self.camera);
-            config.drawImGuiEditor();
+            config.drawImGuiEditor(self);
 
             // wait for the last frame to complete before filling our CommandBuffer
             const state = self.swapchain.waitForFrame() catch |err| switch (err) {

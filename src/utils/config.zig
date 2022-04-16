@@ -1,7 +1,9 @@
 const std = @import("std");
+const ig = @import("imgui");
 const glfw = @import("glfw");
 const cvars = @import("cvars.zig");
 const AutoCVar = cvars.AutoCVar;
+const Engine = @import("../engine.zig").Engine;
 
 pub var disable_cull: AutoCVar(bool) = undefined;
 pub var freeze_cull: AutoCVar(bool) = undefined;
@@ -14,6 +16,8 @@ pub var shadowcast: AutoCVar(bool) = undefined;
 pub var shadow_bias: AutoCVar(f32) = undefined;
 pub var shadow_slope_bias: AutoCVar(f32) = undefined;
 pub var blit_shadow_buffer: AutoCVar(bool) = undefined;
+
+pub var lock_dir_light_to_camera = false;
 
 pub fn init(window: glfw.Window) void {
     disable_cull = AutoCVar(bool).init("culling.disable (h)", "Full disables culling", false);
@@ -37,8 +41,17 @@ fn onKeyPress(_: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action,
     if (key == glfw.Key.c and action == .release) cam_lock.set(!cam_lock.get());
     if (key == glfw.Key.v and action == .release) blit_shadow_buffer.set(!blit_shadow_buffer.get());
     if (key == glfw.Key.h and action == .release) freeze_cull.set(!freeze_cull.get());
+    if (key == glfw.Key.l and action == .release) lock_dir_light_to_camera = !lock_dir_light_to_camera;
 }
 
-pub fn drawImGuiEditor() void {
+pub fn drawImGuiEditor(engine: *Engine) void {
     cvars.CVar.system().drawImGuiEditor();
+
+    _ = ig.igCheckbox("Lock directional light to camera (l)", &lock_dir_light_to_camera);
+
+    if (lock_dir_light_to_camera) {
+        engine.main_light.light_pos = engine.camera.pos;
+        engine.main_light.light_dir = engine.camera.front;
+        // engine.main_light.light_dir.z = -engine.main_light.light_dir.z;
+    }
 }

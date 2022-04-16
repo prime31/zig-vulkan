@@ -150,8 +150,7 @@ bool IsVisible(uint objectIndex) {
 }
 
 bool IsVisibleAABB(uint objectIndex) {
-	uint index = objectIndex;
-	vec4 sphereBounds = objectBuffer.objects[index].spherebounds;
+	vec4 sphereBounds = objectBuffer.objects[objectIndex].spherebounds;
 
 	vec3 center = sphereBounds.xyz;
 	center = (cullData.view * vec4(center, 1.f)).xyz;
