@@ -94,10 +94,11 @@ pub const DeviceDispatch = vk.DeviceWrapper(.{
     .destroyPipeline = true,
     .createFramebuffer = true,
     .destroyFramebuffer = true,
+    .getBufferMemoryRequirements = true,
+    .setDebugUtilsObjectNameEXT = true,
+
     .beginCommandBuffer = true,
     .endCommandBuffer = true,
-    .getBufferMemoryRequirements = true,
-
     .cmdBeginRenderPass = true,
     .cmdEndRenderPass = true,
     .cmdPushConstants = true,
@@ -116,6 +117,7 @@ pub const DeviceDispatch = vk.DeviceWrapper(.{
     .cmdCopyBuffer = true,
     .cmdSetDepthBias = true,
     .cmdDispatch = true,
+    .cmdInsertDebugUtilsLabelEXT = true,
     
     .resetCommandBuffer = true,
     .createDescriptorSetLayout = true,

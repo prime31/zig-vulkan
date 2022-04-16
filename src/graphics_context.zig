@@ -186,6 +186,23 @@ pub const GraphicsContext = struct {
         try self.upload_context.endOneTimeCommandBuffer(self);
     }
 
+    pub fn markCommandBuffer(self: *const GraphicsContext, cmd: vk.CommandBuffer, label: [*:0]const u8) void {
+        if (!enableValidationLayers) return;
+        self.vkd.cmdInsertDebugUtilsLabelEXT(cmd, &.{
+            .p_label_name = label,
+            .color = [4]f32{1, 0, 0, 0},
+        });
+    }
+
+    pub fn markHandle(self: *const GraphicsContext, handle: anytype, obj_type: vk.ObjectType, label: [*:0]const u8) !void {
+        if (!enableValidationLayers) return;
+        try self.vkd.setDebugUtilsObjectNameEXT(self.dev, &.{
+            .object_type = obj_type,
+            .object_handle = @enumToInt(handle),
+            .p_object_name = label,
+        });
+    }
+
     pub fn destroy(self: GraphicsContext, resource: anytype) void {
         dispatch.destroy(self.vkd, self.dev, resource);
     }
