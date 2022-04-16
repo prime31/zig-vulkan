@@ -61,7 +61,7 @@ const DirectionalLight = struct {
     pub fn getProjMatrix(self: DirectionalLight) Mat4 {
         const se = self.shadow_extent;
         var proj = Mat4.createOrthographicLH_Z0(-se.x, se.x, -se.y, se.y, -se.z, se.z);
-        proj.fields[1][1] *= -1;
+        // proj.fields[1][1] *= -1;
         return proj;
     }
 
@@ -506,10 +506,16 @@ pub const Engine = struct {
         while (i < self.depth_pyramid_levels) : (i += 1) {
             var level_info = vkinit.imageViewCreateInfo(.r32_sfloat, self.depth_pyramid.image.image, .{ .color_bit = true });
             level_info.subresource_range.level_count = 1;
-            level_info.subresource_range.base_mip_level = 1;
+            level_info.subresource_range.base_mip_level = @intCast(u32, i);
 
             self.depth_pyramid_mips[i] = try self.gc.vkd.createImageView(self.gc.dev, &level_info, null);
         }
+
+        // transition depth pyramid to .general before first use
+        const cmd = try self.gc.beginOneTimeCommandBuffer();
+        const transition_barrier = vkinit.imageBarrier(self.depth_pyramid.image.image, .{}, .{ .transfer_write_bit = true }, .@"undefined", .general, .{ .color_bit = true });
+        self.gc.vkd.cmdPipelineBarrier(cmd, .{ .top_of_pipe_bit = true }, .{ .transfer_bit = true }, .{ .by_region_bit = true }, 0, undefined, 0, undefined, 1, vkutil.ptrToMany(&transition_barrier));
+        try self.gc.endOneTimeCommandBuffer();
 
         const reduction_mode: vk.SamplerReductionMode = .min;
         const create_info = std.mem.zeroInit(vk.SamplerCreateInfo, .{
@@ -792,7 +798,7 @@ pub const Engine = struct {
             .projmat = self.camera.getReversedProjMatrix(self.swapchain.extent),
             .viewmat = self.camera.getViewMatrix(),
             .frustum_cull = true,
-            .occlusion_cull = false, // TODO: enable once depth reduce is done
+            .occlusion_cull = true,
             .draw_dist = config.draw_distance.get(),
             .aabb = false,
         };
@@ -821,7 +827,7 @@ pub const Engine = struct {
 
         try self.shadowPass(frame.cmd_buffer);
         try self.forwardPass(frame.cmd_buffer);
-        // try self.reduceDepth(frame.cmd_buffer);
+        try self.reduceDepth(frame.cmd_buffer);
 
         try self.copyRenderToSwapchain(frame.cmd_buffer);
         if (config.blit_shadow_buffer.get())
@@ -847,6 +853,46 @@ pub const Engine = struct {
         barrier.src_access_mask = .{ .transfer_write_bit = true };
         barrier.dst_access_mask = .{ .shader_write_bit = true, .shader_read_bit = true };
         try self.cull_ready_barriers.append(barrier);
+    }
+
+    fn shadowPass(self: *Self, cmd: vk.CommandBuffer) !void {
+        if (!config.shadowcast.get()) return;
+        if (config.freeze_shadows.get()) return;
+
+        const depth_clear = vk.ClearValue{
+            .depth_stencil = .{ .depth = 1, .stencil = 0 },
+        };
+
+        // This needs to be a separate definition - see https://github.com/ziglang/zig/issues/7627.
+        const render_area = vk.Rect2D{
+            .offset = .{ .x = 0, .y = 0 },
+            .extent = self.shadow_extent,
+        };
+
+        const viewport = vk.Viewport{
+            .x = 0,
+            .y = 0,
+            .width = @intToFloat(f32, self.shadow_extent.width),
+            .height = @intToFloat(f32, self.shadow_extent.height),
+            .min_depth = 0,
+            .max_depth = 1,
+        };
+
+        self.gc.vkd.cmdSetViewport(cmd, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
+        self.gc.vkd.cmdSetScissor(cmd, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
+        self.gc.vkd.cmdSetDepthBias(cmd, config.shadow_bias.get(), 0, config.shadow_slope_bias.get());
+
+        self.gc.vkd.cmdBeginRenderPass(cmd, &.{
+            .render_pass = self.shadow_pass,
+            .framebuffer = self.shadow_framebuffer,
+            .render_area = render_area,
+            .clear_value_count = 1,
+            .p_clear_values = vkutil.ptrToMany(&depth_clear),
+        }, .@"inline");
+
+        try self.drawObjectsShadow(cmd, &self.render_scene.shadow_pass);
+
+        self.gc.vkd.cmdEndRenderPass(cmd);
     }
 
     fn forwardPass(self: *Self, cmd: vk.CommandBuffer) !void {
@@ -889,46 +935,6 @@ pub const Engine = struct {
 
         try self.drawObjectsForward(cmd, &self.render_scene.forward_pass);
         // try self.drawObjectsForward(cmd, &self.render_scene.transparent_forward_pass);
-
-        self.gc.vkd.cmdEndRenderPass(cmd);
-    }
-
-    fn shadowPass(self: *Self, cmd: vk.CommandBuffer) !void {
-        if (!config.shadowcast.get()) return;
-        if (config.freeze_shadows.get()) return;
-
-        const depth_clear = vk.ClearValue{
-            .depth_stencil = .{ .depth = 1, .stencil = 0 },
-        };
-
-        // This needs to be a separate definition - see https://github.com/ziglang/zig/issues/7627.
-        const render_area = vk.Rect2D{
-            .offset = .{ .x = 0, .y = 0 },
-            .extent = self.shadow_extent,
-        };
-
-        const viewport = vk.Viewport{
-            .x = 0,
-            .y = 0,
-            .width = @intToFloat(f32, self.shadow_extent.width),
-            .height = @intToFloat(f32, self.shadow_extent.height),
-            .min_depth = 0,
-            .max_depth = 1,
-        };
-
-        self.gc.vkd.cmdSetViewport(cmd, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
-        self.gc.vkd.cmdSetScissor(cmd, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
-        self.gc.vkd.cmdSetDepthBias(cmd, config.shadow_bias.get(), 0, config.shadow_slope_bias.get());
-
-        self.gc.vkd.cmdBeginRenderPass(cmd, &.{
-            .render_pass = self.shadow_pass,
-            .framebuffer = self.shadow_framebuffer,
-            .render_area = render_area,
-            .clear_value_count = 1,
-            .p_clear_values = vkutil.ptrToMany(&depth_clear),
-        }, .@"inline");
-
-        try self.drawObjectsShadow(cmd, &self.render_scene.shadow_pass);
 
         self.gc.vkd.cmdEndRenderPass(cmd);
     }
@@ -1225,7 +1231,7 @@ fn createShadowRenderPass(gc: *const GraphicsContext, depth_format: vk.Format) !
 
 fn createDepthImage(gc: *const GraphicsContext, depth_format: vk.Format, swapchain: Swapchain) !Texture {
     const depth_extent = vk.Extent3D{ .width = swapchain.extent.width, .height = swapchain.extent.height, .depth = 1 };
-    const dimg_info = vkinit.imageCreateInfo(depth_format, depth_extent, .{ .depth_stencil_attachment_bit = true });
+    const dimg_info = vkinit.imageCreateInfo(depth_format, depth_extent, .{ .depth_stencil_attachment_bit = true, .sampled_bit = true });
 
     // we want to allocate it from GPU local memory
     var malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{

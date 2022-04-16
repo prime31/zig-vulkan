@@ -20,19 +20,42 @@ pub fn bufferBarrier(buffer: vk.Buffer, queue: u32) vk.BufferMemoryBarrier {
     };
 }
 
-// VkFramebufferCreateInfo vkinit::framebuffer_create_info(VkRenderPass renderPass, VkExtent2D extent)
+pub fn imageBarrier(image: vk.Image, src_access_mask: vk.AccessFlags, dst_access_mask: vk.AccessFlags, old_layout: vk.ImageLayout, new_layout: vk.ImageLayout, aspect_mask: vk.ImageAspectFlags) vk.ImageMemoryBarrier {
+    return .{
+        .src_access_mask = src_access_mask,
+        .dst_access_mask = dst_access_mask,
+        .old_layout = old_layout,
+        .new_layout = new_layout,
+        .src_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .dst_queue_family_index = vk.QUEUE_FAMILY_IGNORED,
+        .image = image,
+        .subresource_range = .{
+            .aspect_mask = aspect_mask,
+            .base_mip_level = 0,
+            .level_count = vk.REMAINING_MIP_LEVELS,
+            .base_array_layer = 0,
+            .layer_count = vk.REMAINING_ARRAY_LAYERS,
+        },
+    };
+}
+
+
+// VkImageMemoryBarrier vkinit::image_barrier(VkImage image, VkAccessFlags srcAccessMask, VkAccessFlags dstAccessMask, VkImageLayout oldLayout, VkImageLayout newLayout, VkImageAspectFlags aspectMask)
 // {
-// 	VkFramebufferCreateInfo info = {};
-// 	info.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
-// 	info.pNext = nullptr;
+//     VkImageMemoryBarrier result = { VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER };
 
-// 	info.renderPass = renderPass;
-// 	info.attachmentCount = 1;
-// 	info.width = extent.width;
-// 	info.height = extent.height;
-// 	info.layers = 1;
+//     result.srcAccessMask = srcAccessMask;
+//     result.dstAccessMask = dstAccessMask;
+//     result.oldLayout = oldLayout;
+//     result.newLayout = newLayout;
+//     result.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+//     result.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+//     result.image = image;
+//     result.subresourceRange.aspectMask = aspectMask;
+//     result.subresourceRange.levelCount = VK_REMAINING_MIP_LEVELS;
+//     result.subresourceRange.layerCount = VK_REMAINING_ARRAY_LAYERS;
 
-// 	return info;
+//     return result;
 // }
 
 pub fn submitInfo(cmd_buffer: *const vk.CommandBuffer) vk.SubmitInfo {
@@ -47,20 +70,6 @@ pub fn submitInfo(cmd_buffer: *const vk.CommandBuffer) vk.SubmitInfo {
     };
 }
 
-// VkPresentInfoKHR vkinit::present_info()
-// {
-// 	VkPresentInfoKHR info = {};
-// 	info.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-// 	info.pNext = nullptr;
-
-// 	info.swapchainCount = 0;
-// 	info.pSwapchains = nullptr;
-// 	info.pWaitSemaphores = nullptr;
-// 	info.waitSemaphoreCount = 0;
-// 	info.pImageIndices = nullptr;
-
-// 	return info;
-// }
 
 // VkRenderPassBeginInfo vkinit::renderpass_begin_info(VkRenderPass renderPass, VkExtent2D windowExtent, VkFramebuffer framebuffer)
 // {

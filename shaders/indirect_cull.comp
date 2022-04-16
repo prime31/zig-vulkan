@@ -36,8 +36,7 @@ layout (push_constant) uniform constants {
     DrawCullData cullData;
 };
 
-// TODO: temporarily turn off occlusion culling
-// layout (set = 0, binding = 4) uniform sampler2D depthPyramid;
+layout (set = 0, binding = 4) uniform sampler2D depthPyramid;
 
 struct ObjectData {
 	mat4 model;
@@ -137,9 +136,7 @@ bool IsVisible(uint objectIndex) {
 			float level = floor(log2(max(width, height)));
 
 			// Sampler is set up to do min reduction, so this computes the minimum depth of a 2x2 texel quad
-            // TODO: reinstate depth
-			// float depth = textureLod(depthPyramid, (aabb.xy + aabb.zw) * 0.5, level).x;
-            float depth = 0;
+			float depth = textureLod(depthPyramid, (aabb.xy + aabb.zw) * 0.5, level).x;
 			float depthSphere = cullData.znear / (center.z - radius);
 
 			visible = visible && depthSphere >= depth;

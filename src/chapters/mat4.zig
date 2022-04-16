@@ -182,6 +182,67 @@ pub const Mat4 = extern struct {
         return result;
     }
 
+    pub fn inv(mat: Mat4) Mat4 {
+        var inv_mat: Mat4 = undefined;
+
+        var s: [6]f32 = undefined;
+        var c: [6]f32 = undefined;
+
+        s[0] = mat.fields[0][0] * mat.fields[1][1] - mat.fields[1][0] * mat.fields[0][1];
+        s[1] = mat.fields[0][0] * mat.fields[1][2] - mat.fields[1][0] * mat.fields[0][2];
+        s[2] = mat.fields[0][0] * mat.fields[1][3] - mat.fields[1][0] * mat.fields[0][3];
+        s[3] = mat.fields[0][1] * mat.fields[1][2] - mat.fields[1][1] * mat.fields[0][2];
+        s[4] = mat.fields[0][1] * mat.fields[1][3] - mat.fields[1][1] * mat.fields[0][3];
+        s[5] = mat.fields[0][2] * mat.fields[1][3] - mat.fields[1][2] * mat.fields[0][3];
+
+        c[0] = mat.fields[2][0] * mat.fields[3][1] - mat.fields[3][0] * mat.fields[2][1];
+        c[1] = mat.fields[2][0] * mat.fields[3][2] - mat.fields[3][0] * mat.fields[2][2];
+        c[2] = mat.fields[2][0] * mat.fields[3][3] - mat.fields[3][0] * mat.fields[2][3];
+        c[3] = mat.fields[2][1] * mat.fields[3][2] - mat.fields[3][1] * mat.fields[2][2];
+        c[4] = mat.fields[2][1] * mat.fields[3][3] - mat.fields[3][1] * mat.fields[2][3];
+        c[5] = mat.fields[2][2] * mat.fields[3][3] - mat.fields[3][2] * mat.fields[2][3];
+
+        const determ = 1.0 / (s[0] * c[5] - s[1] * c[4] + s[2] * c[3] + s[3] * c[2] - s[4] * c[1] + s[5] * c[0]);
+
+        inv_mat.fields[0][0] =
+            (mat.fields[1][1] * c[5] - mat.fields[1][2] * c[4] + mat.fields[1][3] * c[3]) * determ;
+        inv_mat.fields[0][1] =
+            (-mat.fields[0][1] * c[5] + mat.fields[0][2] * c[4] - mat.fields[0][3] * c[3]) * determ;
+        inv_mat.fields[0][2] =
+            (mat.fields[3][1] * s[5] - mat.fields[3][2] * s[4] + mat.fields[3][3] * s[3]) * determ;
+        inv_mat.fields[0][3] =
+            (-mat.fields[2][1] * s[5] + mat.fields[2][2] * s[4] - mat.fields[2][3] * s[3]) * determ;
+
+        inv_mat.fields[1][0] =
+            (-mat.fields[1][0] * c[5] + mat.fields[1][2] * c[2] - mat.fields[1][3] * c[1]) * determ;
+        inv_mat.fields[1][1] =
+            (mat.fields[0][0] * c[5] - mat.fields[0][2] * c[2] + mat.fields[0][3] * c[1]) * determ;
+        inv_mat.fields[1][2] =
+            (-mat.fields[3][0] * s[5] + mat.fields[3][2] * s[2] - mat.fields[3][3] * s[1]) * determ;
+        inv_mat.fields[1][3] =
+            (mat.fields[2][0] * s[5] - mat.fields[2][2] * s[2] + mat.fields[2][3] * s[1]) * determ;
+
+        inv_mat.fields[2][0] =
+            (mat.fields[1][0] * c[4] - mat.fields[1][1] * c[2] + mat.fields[1][3] * c[0]) * determ;
+        inv_mat.fields[2][1] =
+            (-mat.fields[0][0] * c[4] + mat.fields[0][1] * c[2] - mat.fields[0][3] * c[0]) * determ;
+        inv_mat.fields[2][2] =
+            (mat.fields[3][0] * s[4] - mat.fields[3][1] * s[2] + mat.fields[3][3] * s[0]) * determ;
+        inv_mat.fields[2][3] =
+            (-mat.fields[2][0] * s[4] + mat.fields[2][1] * s[2] - mat.fields[2][3] * s[0]) * determ;
+
+        inv_mat.fields[3][0] =
+            (-mat.fields[1][0] * c[3] + mat.fields[1][1] * c[1] - mat.fields[1][2] * c[0]) * determ;
+        inv_mat.fields[3][1] =
+            (mat.fields[0][0] * c[3] - mat.fields[0][1] * c[1] + mat.fields[0][2] * c[0]) * determ;
+        inv_mat.fields[3][2] =
+            (-mat.fields[3][0] * s[3] + mat.fields[3][1] * s[1] - mat.fields[3][2] * s[0]) * determ;
+        inv_mat.fields[3][3] =
+            (mat.fields[2][0] * s[3] - mat.fields[2][1] * s[1] + mat.fields[2][2] * s[0]) * determ;
+
+        return inv_mat;
+    }
+
     pub fn toArray(m: Mat4) [16]f32 {
         var result: [16]f32 = undefined;
         var i: usize = 0;

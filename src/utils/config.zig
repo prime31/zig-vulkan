@@ -20,8 +20,8 @@ pub var blit_shadow_buffer: AutoCVar(bool) = undefined;
 pub var lock_dir_light_to_camera = false;
 
 pub fn init(window: glfw.Window) void {
-    disable_cull = AutoCVar(bool).init("culling.disable (h)", "Full disables culling", false);
-    freeze_cull = AutoCVar(bool).init("culling.freeze", "Locks culling", false);
+    disable_cull = AutoCVar(bool).init("culling.disable", "Full disables culling", false);
+    freeze_cull = AutoCVar(bool).init("culling.freeze (h)", "Locks culling", false);
     occlusion_cull = AutoCVar(bool).init("culling.enable_occlusion", "Perform occlusion culling on GPU", true);
     cam_lock = AutoCVar(bool).init("camera.lock (c)", "Locks the camera", false);
     draw_distance = AutoCVar(f32).initWithFlags("gpu.draw_distance", "Distance cull", 5000, .{ .float_min = 0, .float_max = 50000 });

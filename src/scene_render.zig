@@ -24,8 +24,8 @@ const DrawCullData = struct {
     znear: f32,
     zfar: f32,
     frustum: [4]f32, // data for left/right/top/bottom frustum planes
-    lod_base: f32, // lod distance i = base * pow(step, i)
-    lod_step: f32,
+    lod_base: f32 = 10, // lod distance i = base * pow(step, i)
+    lod_step: f32 = 1.5,
     pyramid_width: f32, // depth pyramid size in texels
     pyramid_height: f32,
 
@@ -53,8 +53,8 @@ const DrawCullData = struct {
     pub fn init(params: vkutil.CullParams) DrawCullData {
         const proj_t = params.projmat.transpose();
 
-        const frustum_x = normalizePlane(Vec4.newFromArr(proj_t.fields[3]).add(Vec4.newFromArr(proj_t.fields[0])));
-        const frustum_y = normalizePlane(Vec4.newFromArr(proj_t.fields[3]).add(Vec4.newFromArr(proj_t.fields[1])));
+        const frustum_x = normalizePlane(Vec4.newFromArr(proj_t.fields[3]).add(Vec4.newFromArr(proj_t.fields[0]))); // x + w < 0
+        const frustum_y = normalizePlane(Vec4.newFromArr(proj_t.fields[3]).add(Vec4.newFromArr(proj_t.fields[1]))); // y + w < 0
 
         return .{
             .viewmat = params.viewmat,
@@ -63,8 +63,6 @@ const DrawCullData = struct {
             .znear = 0.1,
             .zfar = params.draw_dist,
             .frustum = [4]f32{ frustum_x.x, frustum_x.z, frustum_y.y, frustum_y.z },
-            .lod_base = undefined,
-            .lod_step = undefined,
             .pyramid_width = undefined,
             .pyramid_height = undefined,
             .draw_count = undefined,
@@ -73,12 +71,12 @@ const DrawCullData = struct {
             .occlusion_enabled = if (params.occlusion_cull) 1 else 0,
             .distance_check = if (params.draw_dist > 10000) 1 else 0,
             .aabb_check = if (params.aabb) 1 else 0,
-            .aabbmin_x = undefined,
-            .aabbmin_y = undefined,
-            .aabbmin_z = undefined,
-            .aabbmax_x = undefined,
-            .aabbmax_y = undefined,
-            .aabbmax_z = undefined,
+            .aabbmin_x = params.aabbmin.x,
+            .aabbmin_y = params.aabbmin.y,
+            .aabbmin_z = params.aabbmin.z,
+            .aabbmax_x = params.aabbmax.x,
+            .aabbmax_y = params.aabbmax.y,
+            .aabbmax_z = params.aabbmax.z,
         };
     }
 };
@@ -289,7 +287,7 @@ pub fn drawObjectsShadow(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass) 
     _ = try builder.build(&object_data_set);
     builder.deinit();
 
-    const dynamic_offsets = [1]u32{ camera_data_offset };
+    const dynamic_offsets = [1]u32{camera_data_offset};
     try executeDrawCommands(self, cmd, pass, object_data_set, dynamic_offsets[0..], global_set);
 }
 
@@ -363,11 +361,11 @@ pub fn executeComputeCull(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass,
     const instance_info = pass.pass_objects_buffer.getInfo(0);
     const final_info = pass.compacted_instance_buffer.getInfo(0);
 
-    // const depth_pyramid = vk.DescriptorImageInfo{
-    //     .sampler = self.depth_sampler,
-    //     .image_view = self.depth_pyramid.image.default_view,
-    //     .image_layout = .general,
-    // };
+    const depth_pyramid = vk.DescriptorImageInfo{
+        .sampler = self.depth_sampler,
+        .image_view = self.depth_pyramid.image.default_view,
+        .image_layout = .general,
+    };
 
     var comp_obj_data_set: vk.DescriptorSet = undefined;
     var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.getCurrentFrameData().dynamic_descriptor_allocator, &self.descriptor_layout_cache);
@@ -375,7 +373,7 @@ pub fn executeComputeCull(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass,
     builder.bindBuffer(1, &indirect_info, .storage_buffer, .{ .compute_bit = true });
     builder.bindBuffer(2, &instance_info, .storage_buffer, .{ .compute_bit = true });
     builder.bindBuffer(3, &final_info, .storage_buffer, .{ .compute_bit = true });
-    // builder.bindImage(4, &depth_pyramid, .combined_image_sampler, .{ .compute_bit = true });
+    builder.bindImage(4, &depth_pyramid, .combined_image_sampler, .{ .compute_bit = true });
     builder.bindBuffer(5, &dynamic_info, .uniform_buffer, .{ .compute_bit = true });
     _ = try builder.build(&comp_obj_data_set);
     builder.deinit();
@@ -383,6 +381,11 @@ pub fn executeComputeCull(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass,
     var cull_data = DrawCullData.init(params);
     cull_data.draw_count = @intCast(u32, pass.flat_batches.items.len);
     if (config.disable_cull.get()) cull_data.culling_enabled = 0;
+
+    cull_data.pyramid_width = @intToFloat(f32, self.depth_pyramid_width);
+    cull_data.pyramid_height = @intToFloat(f32, self.depth_pyramid_height);
+
+
 
     self.gc.vkd.cmdBindPipeline(cmd, .compute, self.cull_pip_lay.pipeline);
     self.gc.vkd.cmdPushConstants(cmd, self.cull_pip_lay.layout, .{ .compute_bit = true }, 0, @sizeOf(DrawCullData), &cull_data);
@@ -400,4 +403,61 @@ pub fn executeComputeCull(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass,
 
     try self.post_cull_barriers.append(barrier);
     try self.post_cull_barriers.append(barrier2);
+}
+
+pub fn reduceDepth(self: *Engine, cmd: vk.CommandBuffer) !void {
+    const depth_read_barrier = vkinit.imageBarrier(self.depth_image.image.image, .{ .depth_stencil_attachment_write_bit = true }, .{ .shader_read_bit = true }, .depth_stencil_attachment_optimal, .shader_read_only_optimal, .{ .depth_bit = true });
+
+    self.gc.vkd.cmdPipelineBarrier(cmd, .{ .late_fragment_tests_bit = true }, .{ .compute_shader_bit = true }, .{ .by_region_bit = true }, 0, undefined, 0, undefined, 1, vkutil.ptrToMany(&depth_read_barrier));
+    self.gc.vkd.cmdBindPipeline(cmd, .compute, self.depth_reduce_pip_lay.pipeline);
+
+    const DepthReduceData = struct {
+        image_size: [2]f32 align(16),
+    };
+
+    var i: usize = 0;
+    while (i < self.depth_pyramid_levels) : (i += 1) {
+        const dst_target = vk.DescriptorImageInfo{
+            .sampler = self.depth_sampler,
+            .image_view = self.depth_pyramid_mips[i],
+            .image_layout = .general,
+        };
+
+        const src_target = vk.DescriptorImageInfo{
+            .sampler = self.depth_sampler,
+            .image_view = if (i == 0) self.depth_image.view else self.depth_pyramid_mips[i - 1],
+            .image_layout = if (i == 0) .shader_read_only_optimal else .general,
+        };
+
+        var depth_set: vk.DescriptorSet = undefined;
+        var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.getCurrentFrameData().dynamic_descriptor_allocator, &self.descriptor_layout_cache);
+        builder.bindImage(0, &dst_target, .storage_image, .{ .compute_bit = true });
+        builder.bindImage(1, &src_target, .combined_image_sampler, .{ .compute_bit = true });
+        _ = try builder.build(&depth_set);
+        builder.deinit();
+
+        self.gc.vkd.cmdBindDescriptorSets(cmd, .compute, self.depth_reduce_pip_lay.layout, 0, 1, vkutil.ptrToMany(&depth_set), 0, undefined);
+
+        var level_width = self.depth_pyramid_width >> @intCast(u5, i);
+        var level_height = self.depth_pyramid_height >> @intCast(u5, i);
+        if (level_width < 1) level_width = 1;
+        if (level_height < 1) level_height = 1;
+
+        const reduce_data = DepthReduceData {
+            .image_size = [2]f32{ @intToFloat(f32, level_width), @intToFloat(f32, level_height) },
+        };
+
+        self.gc.vkd.cmdPushConstants(cmd, self.depth_reduce_pip_lay.layout, .{ .compute_bit = true }, 0, @sizeOf(DepthReduceData), &reduce_data);
+        self.gc.vkd.cmdDispatch(cmd, getGroupCount(level_width, 32), getGroupCount(level_height, 32), 1);
+
+        const reduce_barrier = vkinit.imageBarrier(self.depth_pyramid.image.image, .{ .shader_write_bit = true }, .{ .shader_read_bit = true }, .general, .general, .{ .color_bit = true });
+        self.gc.vkd.cmdPipelineBarrier(cmd, .{ .compute_shader_bit = true }, .{ .compute_shader_bit = true }, .{ .by_region_bit = true }, 0, undefined, 0, undefined, 1, vkutil.ptrToMany(&reduce_barrier));
+    }
+
+    const depth_write_barrier = vkinit.imageBarrier(self.depth_image.image.image, .{ .shader_read_bit = true }, .{ .depth_stencil_attachment_read_bit = true, .depth_stencil_attachment_write_bit = true }, .shader_read_only_optimal, .depth_stencil_attachment_optimal, .{ .depth_bit = true });
+    self.gc.vkd.cmdPipelineBarrier(cmd, .{ .compute_shader_bit = true }, .{ .early_fragment_tests_bit = true }, .{ .by_region_bit = true }, 0, undefined, 0, undefined, 1, vkutil.ptrToMany(&depth_write_barrier));
+}
+
+fn getGroupCount(thread_cnt: u32, local_size: u32) u32 {
+    return (thread_cnt + local_size - 1) / local_size;
 }
