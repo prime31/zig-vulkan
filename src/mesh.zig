@@ -2,6 +2,7 @@ const std = @import("std");
 const vk = @import("vulkan");
 const vma = @import("vma");
 const tiny = @import("tiny");
+const shapes = @import("shapes");
 const assets = @import("assetlib/assets.zig");
 
 const Vec3 = @import("chapters/vec3.zig").Vec3;
@@ -96,11 +97,11 @@ pub const Mesh = struct {
         return .{ .vertices = std.ArrayList(Vertex).init(allocator), .indices = indices, .index_count = 3 };
     }
 
-    pub fn initFromObj(allocator: std.mem.Allocator, filename: []const u8) !Mesh {
+    pub fn initFromObj(gpa: std.mem.Allocator, filename: []const u8) !Mesh {
         const tiny_mesh = tiny.obj_load_indexed(filename.ptr);
         defer tiny.obj_free_indexed(tiny_mesh);
 
-        var vertices = try std.ArrayList(Vertex).initCapacity(allocator, tiny_mesh.num_vertices);
+        var vertices = try std.ArrayList(Vertex).initCapacity(gpa, tiny_mesh.num_vertices);
 
         var i: usize = 0;
         while (i < tiny_mesh.num_vertices) : (i += 1) {
@@ -123,7 +124,7 @@ pub const Mesh = struct {
             vertices.appendAssumeCapacity(vert);
         }
 
-        var indices = try allocator.alloc(u32, tiny_mesh.num_indices);
+        var indices = try gpa.alloc(u32, tiny_mesh.num_indices);
         std.mem.copy(u32, indices, tiny_mesh.indices[0..tiny_mesh.num_indices]);
 
         return Mesh{
@@ -134,17 +135,79 @@ pub const Mesh = struct {
         };
     }
 
-    pub fn initFromAsset(allocator: std.mem.Allocator, filename: []const u8) !Mesh {
+    pub fn initFromAsset(gpa: std.mem.Allocator, filename: []const u8) !Mesh {
         const mesh_asset = try assets.load(assets.MeshInfo, filename);
-        const mesh_buffers = try assets.unpackMesh(Vertex, allocator, mesh_asset);
+        const mesh_buffers = try assets.unpackMesh(Vertex, gpa, mesh_asset);
 
-        var vertices = std.ArrayList(Vertex).fromOwnedSlice(allocator, mesh_buffers.vert);
+        var vertices = std.ArrayList(Vertex).fromOwnedSlice(gpa, mesh_buffers.vert);
 
         return Mesh{
             .bounds = RenderBounds.initWithMeshBounds(mesh_asset.info.bounds),
             .vertices = vertices,
             .indices = mesh_buffers.index,
             .index_count = @intCast(u32, mesh_buffers.index.len),
+        };
+    }
+
+    pub fn initProcSphere(gpa: std.mem.Allocator, slices: i32, stacks: i32) !Mesh {
+        shapes.init(gpa);
+        defer shapes.deinit();
+
+        var mesh = shapes.initParametricSphere(slices, stacks);
+        defer mesh.deinit();
+
+        mesh.unweld();
+        mesh.computeNormals();
+
+        var vertices = try std.ArrayList(Vertex).initCapacity(gpa, mesh.positions.len);
+        for (mesh.positions) |pos, i| {
+            var vert: Vertex = undefined;
+            vert.position = pos;
+            vert.normal = if (mesh.normals) |norms| norms[i] else [3]f32{0.5, 0.5, 0.5};
+            vert.uv = if (mesh.texcoords) |uvs| uvs[i] else [2]f32{0, 1};
+            vert.color = if (mesh.normals) |norms| norms[i] else [3]f32{0.5, 0.5, 0.5};
+            vertices.appendAssumeCapacity(vert);
+        }
+
+        var indices = try gpa.alloc(u32, mesh.indices.len);
+        for (mesh.indices) |idx, i| indices[i] = idx;
+
+        return Mesh{
+            .bounds = RenderBounds.initWithMeshBounds(assets.calculateBounds(Vertex, vertices.items)),
+            .vertices = vertices,
+            .indices = indices,
+            .index_count = @intCast(u32, mesh.indices.len),
+        };
+    }
+
+    pub fn initProcRock(gpa: std.mem.Allocator, seed: i32, num_subdivisions: i32) !Mesh {
+        shapes.init(gpa);
+        defer shapes.deinit();
+
+        var mesh = shapes.initRock(seed, num_subdivisions);
+        defer mesh.deinit();
+
+        mesh.unweld();
+        mesh.computeNormals();
+
+        var vertices = try std.ArrayList(Vertex).initCapacity(gpa, mesh.positions.len);
+        for (mesh.positions) |pos, i| {
+            var vert: Vertex = undefined;
+            vert.position = pos;
+            vert.normal = if (mesh.normals) |norms| norms[i] else [3]f32{0.5, 0.5, 0.5};
+            vert.uv = if (mesh.texcoords) |uvs| uvs[i] else [2]f32{0, 1};
+            vert.color = if (mesh.normals) |norms| norms[i] else [3]f32{0.5, 0.5, 0.5};
+            vertices.appendAssumeCapacity(vert);
+        }
+
+        var indices = try gpa.alloc(u32, mesh.indices.len);
+        for (mesh.indices) |idx, i| indices[i] = idx;
+
+        return Mesh{
+            .bounds = RenderBounds.initWithMeshBounds(assets.calculateBounds(Vertex, vertices.items)),
+            .vertices = vertices,
+            .indices = indices,
+            .index_count = @intCast(u32, mesh.indices.len),
         };
     }
 
@@ -160,6 +223,5 @@ pub const Mesh = struct {
             self.bounds = RenderBounds.initWithMeshBounds(assets.calculateBounds(Vertex, self.vertices.items));
             self.bounds.valid = true;
         }
-
     }
 };

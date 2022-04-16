@@ -709,18 +709,24 @@ pub const Engine = struct {
         var cube_thing_mesh = try Mesh.initFromObj(gpa, "src/chapters/cube_thing.obj");
         var cube = try Mesh.initFromObj(gpa, "src/chapters/cube.obj");
         var lost_empire = try Mesh.initFromObj(gpa, "src/chapters/lost_empire.obj");
+        var rock = try Mesh.initProcRock(gpa, 123, 2);
+        var sphere = try Mesh.initProcSphere(gpa, 20, 20);
 
         try uploadMesh(self.gc, &tri_mesh);
         try uploadMesh(self.gc, &monkey_mesh);
         try uploadMesh(self.gc, &cube_thing_mesh);
         try uploadMesh(self.gc, &cube);
         try uploadMesh(self.gc, &lost_empire);
+        try uploadMesh(self.gc, &rock);
+        try uploadMesh(self.gc, &sphere);
 
         try self.meshes.put("triangle", tri_mesh);
         try self.meshes.put("monkey", monkey_mesh);
         try self.meshes.put("cube_thing", cube_thing_mesh);
         try self.meshes.put("cube", cube);
         try self.meshes.put("lost_empire", lost_empire);
+        try self.meshes.put("rock", rock);
+        try self.meshes.put("sphere", sphere);
     }
 
     fn initScene(self: *Self) !void {
@@ -771,6 +777,30 @@ pub const Engine = struct {
         };
         tri_ground.refreshRenderBounds();
         _ = try self.render_scene.registerObject(tri_ground);
+
+        var rock = MeshObject{
+            .mesh = self.meshes.getPtr("rock").?,
+            .material = self.material_system.getMaterial("white_tex").?,
+            .custom_sort_key = 0,
+            .transform_matrix = Mat4.createTranslation(.{ .x = 0, .y = 1, .z = 0 }),
+            .bounds = self.meshes.getPtr("rock").?.bounds,
+            .draw_forward_pass = true,
+            .draw_shadow_pass = true,
+        };
+        rock.refreshRenderBounds();
+        _ = try self.render_scene.registerObject(rock);
+
+        var sphere = MeshObject{
+            .mesh = self.meshes.getPtr("sphere").?,
+            .material = self.material_system.getMaterial("opaque").?,
+            .custom_sort_key = 0,
+            .transform_matrix = Mat4.createTranslation(.{ .x = 2, .y = 1.5, .z = 2 }),
+            .bounds = self.meshes.getPtr("sphere").?.bounds,
+            .draw_forward_pass = true,
+            .draw_shadow_pass = true,
+        };
+        sphere.refreshRenderBounds();
+        _ = try self.render_scene.registerObject(sphere);
     }
 
     fn draw(self: *Self, frame: *FrameData) !void {
