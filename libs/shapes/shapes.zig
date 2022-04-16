@@ -7,102 +7,6 @@ const Mutex = std.Thread.Mutex;
 pub const IndexType = u16;
 pub const MeshHandle = *opaque {};
 
-extern fn zmesh_set_allocator(
-    malloc: fn (size: usize) callconv(.C) ?*anyopaque,
-    calloc: fn (num: usize, size: usize) callconv(.C) ?*anyopaque,
-    realloc: fn (ptr: ?*anyopaque, size: usize) callconv(.C) ?*anyopaque,
-    free: fn (ptr: ?*anyopaque) callconv(.C) void,
-) void;
-
-var allocator: ?std.mem.Allocator = null;
-var allocations: ?std.AutoHashMap(usize, usize) = null;
-var mutex: Mutex = .{};
-
-export fn mallocFunc(size: usize) callconv(.C) ?*anyopaque {
-    mutex.lock();
-    defer mutex.unlock();
-
-    var slice = allocator.?.allocBytes(
-        @sizeOf(usize),
-        size,
-        0,
-        @returnAddress(),
-    ) catch @panic("zmesh: out of memory");
-
-    allocations.?.put(@ptrToInt(slice.ptr), size) catch
-        @panic("zmesh: out of memory");
-
-    return slice.ptr;
-}
-
-export fn callocFunc(num: usize, size: usize) callconv(.C) ?*anyopaque {
-    const ptr = mallocFunc(num * size);
-    if (ptr != null) {
-        @memset(@ptrCast([*]u8, ptr), 0, num * size);
-        return ptr;
-    }
-    return null;
-}
-
-export fn reallocFunc(ptr: ?*anyopaque, size: usize) callconv(.C) ?*anyopaque {
-    mutex.lock();
-    defer mutex.unlock();
-
-    const old_len = if (ptr != null)
-        allocations.?.get(@ptrToInt(ptr.?)).?
-    else
-        0;
-
-    var old_mem = if (old_len > 0)
-        @ptrCast([*]u8, ptr)[0..old_len]
-    else
-        @as([*]u8, undefined)[0..0];
-
-    var slice = allocator.?.reallocBytes(
-        old_mem,
-        @sizeOf(usize),
-        size,
-        @sizeOf(usize),
-        0,
-        @returnAddress(),
-    ) catch @panic("zmesh: out of memory");
-
-    if (ptr != null) {
-        const removed = allocations.?.remove(@ptrToInt(ptr.?));
-        std.debug.assert(removed);
-    }
-
-    allocations.?.put(@ptrToInt(slice.ptr), size) catch
-        @panic("zmesh: out of memory");
-
-    return slice.ptr;
-}
-
-export fn freeFunc(ptr: ?*anyopaque) callconv(.C) void {
-    if (ptr != null) {
-        mutex.lock();
-        defer mutex.unlock();
-
-        const size = allocations.?.fetchRemove(@ptrToInt(ptr.?)).?.value;
-        const slice = @ptrCast([*]u8, ptr.?)[0..size];
-        allocator.?.free(slice);
-    }
-}
-
-pub fn init(alloc: std.mem.Allocator) void {
-    std.debug.assert(allocator == null and allocations == null);
-    allocator = alloc;
-    allocations = std.AutoHashMap(usize, usize).init(allocator.?);
-    allocations.?.ensureTotalCapacity(32) catch unreachable;
-    zmesh_set_allocator(mallocFunc, callocFunc, reallocFunc, freeFunc);
-}
-
-pub fn deinit() void {
-    allocations.?.deinit();
-    allocations = null;
-    allocator = null;
-}
-
 const ParMesh = extern struct {
     points: [*]f32,
     npoints: c_int,
@@ -354,9 +258,6 @@ extern fn par_shapes_create_parametric(
 const save = false;
 
 test "zmesh.basic" {
-    init(std.testing.allocator);
-    defer deinit();
-
     const cylinder = initCylinder(10, 10);
     defer cylinder.deinit();
     if (save) cylinder.saveToObj("zmesh.cylinder.obj");
@@ -425,9 +326,6 @@ test "zmesh.basic" {
 }
 
 test "zmesh.clone" {
-    init(std.testing.allocator);
-    defer deinit();
-
     const cube = initCube();
     defer cube.deinit();
 
@@ -438,9 +336,6 @@ test "zmesh.clone" {
 }
 
 test "zmesh.merge" {
-    init(std.testing.allocator);
-    defer deinit();
-
     var cube = initCube();
     defer cube.deinit();
 
@@ -456,9 +351,6 @@ test "zmesh.merge" {
 }
 
 test "zmesh.invert" {
-    init(std.testing.allocator);
-    defer deinit();
-
     var hemisphere = initParametricSphere(10, 10);
     defer hemisphere.deinit();
     hemisphere.invert(0, 0);

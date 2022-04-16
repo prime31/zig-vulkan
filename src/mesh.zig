@@ -150,9 +150,6 @@ pub const Mesh = struct {
     }
 
     pub fn initProcSphere(gpa: std.mem.Allocator, slices: i32, stacks: i32) !Mesh {
-        shapes.init(gpa);
-        defer shapes.deinit();
-
         var mesh = shapes.initParametricSphere(slices, stacks);
         defer mesh.deinit();
 
@@ -181,9 +178,6 @@ pub const Mesh = struct {
     }
 
     pub fn initProcRock(gpa: std.mem.Allocator, seed: i32, num_subdivisions: i32) !Mesh {
-        shapes.init(gpa);
-        defer shapes.deinit();
-
         var mesh = shapes.initRock(seed, num_subdivisions);
         defer mesh.deinit();
 
