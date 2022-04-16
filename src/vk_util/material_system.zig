@@ -172,6 +172,7 @@ pub const MaterialSystem = struct {
             db.bindImage(@intCast(u32, i), &image_buffer_info, .combined_image_sampler, .{ .fragment_bit = true });
         }
 
+        // TODO: why are we building the same descriptor set twice?
         _ = try db.build(material.pass_sets.getPtr(.forward));
         _ = try db.build(material.pass_sets.getPtr(.transparency));
 

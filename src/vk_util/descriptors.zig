@@ -242,6 +242,11 @@ pub const DescriptorBuilder = struct {
     }
 
     pub fn build(self: *Self, descriptor_set: *vk.DescriptorSet) !vk.DescriptorSetLayout {
+        if (self.bindings.items.len == 0) {
+            descriptor_set.* = .null_handle;
+            return .null_handle;
+        }
+
         // build layout first
         const layout = try self.cache.createDescriptorSetLayout(&.{
             .flags = .{},

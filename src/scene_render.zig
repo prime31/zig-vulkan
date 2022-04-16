@@ -320,9 +320,10 @@ fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, ob
             self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, new_layout, 0, 1, vkutil.ptrToMany(&global_set), @intCast(u32, dyn_offsets.len), dyn_offsets.ptr);
         }
 
-        if (new_material_set != last_material_set) {
+        // set 3 is optional, not defined by the system
+        if (new_material_set != last_material_set and new_material_set != .null_handle) {
             last_material_set = new_material_set;
-            self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, new_layout, 2, 1, vkutil.ptrToMany(&last_material_set), 0, undefined);
+            self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, new_layout, 2, 1, vkutil.ptrToMany(&new_material_set), 0, undefined);
         }
 
         if (self.render_scene.getMesh(instance_draw.mesh_id).is_merged) {

@@ -687,10 +687,10 @@ pub const Engine = struct {
     }
 
     fn loadImages(self: *Self) !void {
-        // const lost_empire_tex = try loadTextureFromAsset(self.gc, "/Users/desaro/zig-vulkan/zig-cache/baked_assets/lost_empire-RGBA.tx");
-        const lost_empire_tex = try loadTextureFromFile(self.gc, "src/chapters/lost_empire-RGBA.png");
-        self.deletion_queue.append(lost_empire_tex.image.default_view);
-        try self.textures.put("empire_diffuse", lost_empire_tex);
+        // const background = try loadTextureFromAsset(self.gc, "/Users/desaro/zig-vulkan/zig-cache/baked_assets/background.tx");
+        const background = try loadTextureFromFile(self.gc, "src/chapters/background.png");
+        self.deletion_queue.append(background.image.default_view);
+        try self.textures.put("background", background);
 
         const white_tex = try loadTextureFromFile(self.gc, "src/chapters/white.jpg");
         self.deletion_queue.append(white_tex.image.default_view);
@@ -725,19 +725,22 @@ pub const Engine = struct {
 
     fn initScene(self: *Self) !void {
         var textured_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
-        try textured_data.addTexture(self.smooth_sampler, self.textures.get("empire_diffuse").?.view);
+        try textured_data.addTexture(self.smooth_sampler, self.textures.get("background").?.view);
         _ = try self.material_system.buildMaterial("textured", textured_data);
 
-        var mat_info = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
-        try mat_info.addTexture(self.smooth_sampler, self.textures.get("white").?.view);
-        _ = try self.material_system.buildMaterial("default", mat_info);
+        var white_tex_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
+        try white_tex_data.addTexture(self.smooth_sampler, self.textures.get("white").?.view);
+        _ = try self.material_system.buildMaterial("white_tex", white_tex_data);
+
+        var mat_info = vkutil.MaterialData.init(self.gc.gpa, "colored_opaque");
+        _ = try self.material_system.buildMaterial("opaque", mat_info);
 
         var x: f32 = 0;
         while (x < 20) : (x += 1) {
             var y: f32 = 0;
             while (y < 20) : (y += 1) {
                 const mesh = if (@mod(x, 2) == 0) self.meshes.getPtr("triangle").? else self.meshes.getPtr("monkey").?;
-                const material = if (@mod(x, 2) == 0) self.material_system.getMaterial("default").? else self.material_system.getMaterial("textured").?;
+                const material = if (@mod(x, 2) == 0) self.material_system.getMaterial("white_tex").? else self.material_system.getMaterial("textured").?;
 
                 var tri = MeshObject{
                     .mesh = mesh,
@@ -759,7 +762,7 @@ pub const Engine = struct {
 
         var tri_ground = MeshObject{
             .mesh = self.meshes.getPtr("triangle").?,
-            .material = self.material_system.getMaterial("default").?,
+            .material = self.material_system.getMaterial("opaque").?,
             .custom_sort_key = 0,
             .transform_matrix = mat,
             .bounds = self.meshes.getPtr("triangle").?.bounds,

@@ -1,12 +1,11 @@
 #version 450
 
-// output write
 layout (location = 0) out vec4 outFragColor;
 
-// shader input
 layout (location = 0) in vec3 inColor;
 layout (location = 1) in vec2 texCoord;
 layout (location = 2) in vec3 inNormal;
+layout (location = 3) in vec4 inShadowCoord;
 
 layout (set = 0, binding = 1) uniform SceneData {
     vec4 fogColor; // w is for exponent
@@ -16,14 +15,15 @@ layout (set = 0, binding = 1) uniform SceneData {
 	vec4 sunlightColor;
 } sceneData;
 
+layout (set = 0, binding = 2) uniform sampler2DShadow shadowSampler;
+
+
 void main() {
-	vec3 color = inColor.xyz;
+	float lightAngle = clamp(dot(inNormal, -sceneData.sunlightDirection.xyz), 0.f, 1.f);
 
-	float lightAngle = clamp(dot(inNormal, sceneData.sunlightDirection.xyz), 0.f, 1.f);
 	vec3 lightColor = sceneData.sunlightColor.xyz * lightAngle;
+	vec3 ambient = inColor.rgb * sceneData.ambientColor.xyz;
+	vec3 diffuse = lightColor * inColor.rgb;
 
-	outFragColor = vec4(inColor + sceneData.ambientColor.xyz, 1.0f);
-
-	// TODO: dont do this
-	// outFragColor = vec4(1.0, 0.8, 0.4, 1.0);
+	outFragColor = vec4(diffuse + ambient, 1);
 }
