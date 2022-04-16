@@ -3,6 +3,7 @@ const vk = @import("vulkan");
 const vma = @import("vma");
 const tiny = @import("tiny");
 const shapes = @import("shapes");
+const znoise = @import("znoise");
 const assets = @import("assetlib/assets.zig");
 
 const Vec3 = @import("chapters/vec3.zig").Vec3;
@@ -181,6 +182,52 @@ pub const Mesh = struct {
         var mesh = shapes.initRock(seed, num_subdivisions);
         defer mesh.deinit();
 
+        mesh.unweld();
+        mesh.computeNormals();
+
+        var vertices = try std.ArrayList(Vertex).initCapacity(gpa, mesh.positions.len);
+        for (mesh.positions) |pos, i| {
+            var vert: Vertex = undefined;
+            vert.position = pos;
+            vert.normal = if (mesh.normals) |norms| norms[i] else [3]f32{0.5, 0.5, 0.5};
+            vert.uv = if (mesh.texcoords) |uvs| uvs[i] else [2]f32{0, 1};
+            vert.color = if (mesh.normals) |norms| norms[i] else [3]f32{0.5, 0.5, 0.5};
+            vertices.appendAssumeCapacity(vert);
+        }
+
+        var indices = try gpa.alloc(u32, mesh.indices.len);
+        for (mesh.indices) |idx, i| indices[i] = idx;
+
+        return Mesh{
+            .bounds = RenderBounds.initWithMeshBounds(assets.calculateBounds(Vertex, vertices.items)),
+            .vertices = vertices,
+            .indices = indices,
+            .index_count = @intCast(u32, mesh.indices.len),
+        };
+    }
+
+    pub fn initProcTerrain(gpa: std.mem.Allocator) !Mesh {
+        const gen = znoise.FnlGenerator{
+            .fractal_type = .fbm,
+            .frequency = 2.0,
+            .octaves = 5,
+            .lacunarity = 2.02,
+        };
+        const local = struct {
+            fn terrain(uv: *const [2]f32, position: *[3]f32, userdata: ?*anyopaque) callconv(.C) void {
+                _ = userdata;
+                position[0] = uv[0];
+                position[1] = 0.025 * gen.noise2(uv[0], uv[1]);
+                position[2] = uv[1];
+            }
+        };
+
+        var mesh = shapes.initParametric(local.terrain, 40, 40, null);
+        defer mesh.deinit();
+        mesh.translate(-0.5, 0.01, -0.5);
+        mesh.invert(0, 0);
+        mesh.rotate(1.5708, 1, 0, 0);
+        mesh.scale(2, 2, 2);
         mesh.unweld();
         mesh.computeNormals();
 

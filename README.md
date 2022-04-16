@@ -3,6 +3,7 @@
 <p align="center"><img height="300" src="https://developer.nvidia.com/sites/default/files/akamai/Vulcan-1-3.png" /></p>
 
 ## TODO
+- other math lib [cglm](https://github.com/recp/cglm)
 - other math lib: [Zalgebra](https://github.com/kooparse/zalgebra)
 - other math lib: [vectormath](https://github.com/michal-z/zig-gamedev/blob/main/libs/common/src/vectormath.zig)
 - other math lib: [zmath](https://github.com/michal-z/zig-gamedev/tree/main/libs/zmath)

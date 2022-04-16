@@ -711,6 +711,7 @@ pub const Engine = struct {
         var lost_empire = try Mesh.initFromObj(gpa, "src/chapters/lost_empire.obj");
         var rock = try Mesh.initProcRock(gpa, 123, 2);
         var sphere = try Mesh.initProcSphere(gpa, 20, 20);
+        var terrain = try Mesh.initProcTerrain(gpa);
 
         try uploadMesh(self.gc, &tri_mesh);
         try uploadMesh(self.gc, &monkey_mesh);
@@ -719,6 +720,7 @@ pub const Engine = struct {
         try uploadMesh(self.gc, &lost_empire);
         try uploadMesh(self.gc, &rock);
         try uploadMesh(self.gc, &sphere);
+        try uploadMesh(self.gc, &terrain);
 
         try self.meshes.put("triangle", tri_mesh);
         try self.meshes.put("monkey", monkey_mesh);
@@ -727,6 +729,7 @@ pub const Engine = struct {
         try self.meshes.put("lost_empire", lost_empire);
         try self.meshes.put("rock", rock);
         try self.meshes.put("sphere", sphere);
+        try self.meshes.put("terrain", terrain);
     }
 
     fn initScene(self: *Self) !void {
@@ -767,11 +770,11 @@ pub const Engine = struct {
         mat = mat.mul(Mat4.createRotate(-1.5708, Vec3.new(1, 0, 0)));
 
         var tri_ground = MeshObject{
-            .mesh = self.meshes.getPtr("triangle").?,
+            .mesh = self.meshes.getPtr("terrain").?,
             .material = self.material_system.getMaterial("opaque").?,
             .custom_sort_key = 0,
             .transform_matrix = mat,
-            .bounds = self.meshes.getPtr("triangle").?.bounds,
+            .bounds = self.meshes.getPtr("terrain").?.bounds,
             .draw_forward_pass = true,
             .draw_shadow_pass = true,
         };
