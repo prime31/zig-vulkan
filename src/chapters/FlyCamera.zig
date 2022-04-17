@@ -88,8 +88,8 @@ pub fn getReversedProjMatrix(_: Self, extent: vk.Extent2D) Mat4 {
     return proj;
 }
 
-pub fn getRotationMatrix(_: Self, extent: vk.Extent2D) Mat4 {
-    var proj = Mat4.createPerspective(toRadians(70.0), @intToFloat(f32, extent.width) / @intToFloat(f32, extent.height), 0.1, 5000);
-    proj.fields[1][1] *= -1;
-    return proj;
-}
+// pub fn getRotationMatrix(_: Self, extent: vk.Extent2D) Mat4 {
+//     var proj = Mat4.createPerspective(toRadians(70.0), @intToFloat(f32, extent.width) / @intToFloat(f32, extent.height), 0.1, 5000);
+//     proj.fields[1][1] *= -1;
+//     return proj;
+// }

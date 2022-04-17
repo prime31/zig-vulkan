@@ -196,10 +196,9 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
 pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass) !void {
     const frame = self.getCurrentFrameData();
 
-    var view = self.camera.getViewMatrix();
-    var proj = Mat4.createPerspective(toRadians(70.0), @intToFloat(f32, self.swapchain.extent.width) / @intToFloat(f32, self.swapchain.extent.height), 0.1, 200);
-    proj.fields[1][1] *= -1;
-    var view_proj = Mat4.mul(proj, view);
+    const view = self.camera.getViewMatrix();
+    const proj = self.camera.getProjMatrix(self.swapchain.extent);
+    const view_proj = Mat4.mul(proj, view);
 
     // fill a GPU camera data struct
     const cam_data = vkutil.GpuCameraData{

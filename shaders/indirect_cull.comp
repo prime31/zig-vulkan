@@ -116,9 +116,10 @@ bool IsVisible(uint objectIndex) {
 	visible = visible && center.z * cullData.frustum[1] - abs(center.x) * cullData.frustum[0] > -radius;
 	visible = visible && center.z * cullData.frustum[3] - abs(center.y) * cullData.frustum[2] > -radius;
 
-	if (cullData.distCull != 0) {
+	// TODO: fix this
+	if (cullData.distCull != 0 && visible) {
 		// the near/far plane culling uses camera space Z directly
-		visible = visible && center.z + radius > cullData.znear && center.z - radius < cullData.zfar;
+		visible = center.z + radius > cullData.znear && center.z - radius < cullData.zfar;
 	}
 
 

@@ -3,6 +3,12 @@
 <p align="center"><img height="300" src="https://developer.nvidia.com/sites/default/files/akamai/Vulcan-1-3.png" /></p>
 
 ## TODO
+- why doesnt znear/zfar clip anything?
+- distance culling is fucked up. Seems inverse view matrix is required?
+- occlusion culling is jacked up
+- shadows are fucked
+
+
 - other math lib [cglm](https://github.com/recp/cglm)
 - other math lib: [Zalgebra](https://github.com/kooparse/zalgebra)
 - other math lib: [vectormath](https://github.com/michal-z/zig-gamedev/blob/main/libs/common/src/vectormath.zig)
@@ -16,8 +22,6 @@
 
 - higher-level helpers:
     - vertex_input_state: blahGetVertexInputState(VertexT)
-
-- add auto uniform/push/pip_layout generation (`spirv-cross shaer.spv --reflect`)
 
 
 Future

@@ -18,6 +18,9 @@ pub var shadow_slope_bias: AutoCVar(f32) = undefined;
 pub var blit_shadow_buffer: AutoCVar(bool) = undefined;
 
 pub var lock_dir_light_to_camera = false;
+pub var lock_mouse = false;
+
+var win: glfw.Window = undefined;
 
 pub fn init(window: glfw.Window) void {
     disable_cull = AutoCVar(bool).init("culling.disable", "Full disables culling", false);
@@ -33,6 +36,7 @@ pub fn init(window: glfw.Window) void {
     blit_shadow_buffer = AutoCVar(bool).init("gpu.blit_shadow_buffer (v)", "Makes the final blit display the shadow buffer", true);
 
     window.setKeyCallback(onKeyPress);
+    win = window;
 }
 
 fn onKeyPress(_: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action, _: glfw.Mods) void {
@@ -42,16 +46,18 @@ fn onKeyPress(_: glfw.Window, key: glfw.Key, scancode: i32, action: glfw.Action,
     if (key == glfw.Key.v and action == .release) blit_shadow_buffer.set(!blit_shadow_buffer.get());
     if (key == glfw.Key.h and action == .release) freeze_cull.set(!freeze_cull.get());
     if (key == glfw.Key.l and action == .release) lock_dir_light_to_camera = !lock_dir_light_to_camera;
+    if (key == glfw.Key.m and action == .release) {
+        lock_mouse = !lock_mouse;
+        win.setInputModeCursor(if (lock_mouse) .disabled else .normal) catch unreachable;
+    }
 }
 
 pub fn drawImGuiEditor(engine: *Engine) void {
     cvars.CVar.system().drawImGuiEditor();
 
     _ = ig.igCheckbox("Lock directional light to camera (l)", &lock_dir_light_to_camera);
+    _ = ig.igCheckbox("Lock mouse (m)", &lock_dir_light_to_camera);
 
-    if (lock_dir_light_to_camera) {
-        engine.main_light.light_pos = engine.camera.pos;
+    if (lock_dir_light_to_camera)
         engine.main_light.light_dir = engine.camera.front;
-        // engine.main_light.light_dir.z = -engine.main_light.light_dir.z;
-    }
 }
