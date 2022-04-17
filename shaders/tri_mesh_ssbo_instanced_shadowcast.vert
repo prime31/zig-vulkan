@@ -32,6 +32,6 @@ void main() {
 	uint index = instanceBuffer.IDs[gl_InstanceIndex];
 
 	mat4 model = objectBuffer.objects[index].model;
-	mat4 transform = (cameraData.viewproj * model);
+	mat4 transform = cameraData.viewproj * model;
 	gl_Position = transform * vec4(vPosition, 1.0f);
 }

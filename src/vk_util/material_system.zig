@@ -72,7 +72,7 @@ pub const MaterialSystem = struct {
         self.shadow_builder.vertex_description = Vertex.vertex_description;
         self.shadow_builder.rasterizer.cull_mode = .{ .front_bit = true };
         self.shadow_builder.rasterizer.depth_bias_enable = vk.TRUE;
-        self.shadow_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less);
+        self.shadow_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less_or_equal);
     }
 
     fn buildDefaultTemplates(self: *MaterialSystem) !void {

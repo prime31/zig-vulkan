@@ -256,11 +256,12 @@ pub fn drawObjectsShadow(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass) 
     const frame = self.getCurrentFrameData();
     const view = self.main_light.getViewMatrix();
     const proj = self.main_light.getProjMatrix();
+    const view_proj = Mat4.mul(proj, view);
 
     const cam_data = vkutil.GpuCameraData{
         .view = view,
         .proj = proj,
-        .view_proj = proj.mul(view),
+        .view_proj = view_proj,
     };
 
     // push data to dynmem

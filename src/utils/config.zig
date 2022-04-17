@@ -60,6 +60,8 @@ pub fn drawImGuiEditor(engine: *Engine) void {
         win.setInputModeCursor(if (lock_mouse) .disabled else .normal) catch unreachable;
     }
 
-    if (lock_dir_light_to_camera)
+    if (lock_dir_light_to_camera) {
+        engine.main_light.light_pos = engine.camera.pos;
         engine.main_light.light_dir = engine.camera.front;
+    }
 }
