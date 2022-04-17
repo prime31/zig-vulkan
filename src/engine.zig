@@ -52,16 +52,20 @@ const Texture = struct {
 const DirectionalLight = struct {
     light_pos: Vec3 = Vec3.new(0, 0, 0),
     light_dir: Vec3 = Vec3.new(0.3, -1, 0.3),
-    shadow_extent: Vec3 = Vec3.new(100, 100, 100),
+    shadow_extent: Vec3 = Vec3.new(20, 20, 100),
 
     pub fn getViewMatrix(self: DirectionalLight) Mat4 {
         return Mat4.createLookAt(self.light_pos, self.light_pos.add(self.light_dir), Vec3.new(0, 1, 0));
+        // return Mat4.createLookAt(self.light_pos, Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
     }
 
     pub fn getProjMatrix(self: DirectionalLight) Mat4 {
         const se = self.shadow_extent;
-        var proj = Mat4.createOrthographicLH_Z0(-se.x, se.x, -se.y, se.y, -se.z, se.z);
-        // proj.fields[1][1] *= -1;
+        _ = se;
+        // var proj = Mat4.createOrthographicLH_Z0(-se.x, se.x, se.y, -se.y, -se.z, se.z);
+        // Sascha uses a perspective cam for shadows
+        var proj = Mat4.createPerspective(std.math.pi * 45.0 / 180.0, 1, 0.1, 96);
+        proj.fields[1][1] *= -1;
         return proj;
     }
 
@@ -749,7 +753,7 @@ pub const Engine = struct {
             var y: f32 = 0;
             while (y < 20) : (y += 1) {
                 const mesh = if (@mod(x, 2) == 0) self.meshes.getPtr("triangle").? else self.meshes.getPtr("monkey").?;
-                const material = if (@mod(x, 2) == 0) self.material_system.getMaterial("white_tex").? else self.material_system.getMaterial("textured").?;
+                const material = if (@mod(x, 2) == 0) self.material_system.getMaterial("white_tex").? else self.material_system.getMaterial("white_tex").?;
 
                 var tri = MeshObject{
                     .mesh = mesh,
@@ -771,7 +775,7 @@ pub const Engine = struct {
 
         var tri_ground = MeshObject{
             .mesh = self.meshes.getPtr("terrain").?,
-            .material = self.material_system.getMaterial("opaque").?,
+            .material = self.material_system.getMaterial("white_tex").?,
             .custom_sort_key = 0,
             .transform_matrix = mat,
             .bounds = self.meshes.getPtr("terrain").?.bounds,
@@ -795,7 +799,7 @@ pub const Engine = struct {
 
         var sphere = MeshObject{
             .mesh = self.meshes.getPtr("sphere").?,
-            .material = self.material_system.getMaterial("opaque").?,
+            .material = self.material_system.getMaterial("textured").?,
             .custom_sort_key = 0,
             .transform_matrix = Mat4.createTranslation(.{ .x = 2, .y = 1.5, .z = 2 }),
             .bounds = self.meshes.getPtr("sphere").?.bounds,
@@ -831,7 +835,7 @@ pub const Engine = struct {
         self.gc.vkd.cmdPipelineBarrier(frame.cmd_buffer, .{ .transfer_bit = true }, .{ .compute_shader_bit = true }, .{}, 0, undefined, @intCast(u32, self.cull_ready_barriers.items.len), self.cull_ready_barriers.items.ptr, 0, undefined);
 
         const forward_cull = vkutil.CullParams{
-            .projmat = self.camera.getReversedProjMatrix(self.swapchain.extent),
+            .projmat = self.camera.getProjMatrix(self.swapchain.extent),
             .viewmat = self.camera.getViewMatrix(),
             .frustum_cull = true,
             .occlusion_cull = true,

@@ -25,8 +25,8 @@ float textureProj(vec4 P, vec2 offset) {
 	shadowCoord.st = shadowCoord.st * 0.5 + 0.5;
 	
 	if (shadowCoord.z > -1.0 && shadowCoord.z < 1.0) {
-		vec3 sc = vec3(vec2(shadowCoord.st + offset),shadowCoord.z);
-		shadow =  texture(shadowSampler, sc);		
+		vec3 sc = vec3(vec2(shadowCoord.st + offset), shadowCoord.z);
+		shadow = texture(shadowSampler, sc);		
 	}
 	return shadow;
 }
@@ -68,15 +68,46 @@ float filterPCF(vec4 sc) {
 	//sc.x += dx * rand.z;
     //sc.y += dy * rand.y;
 	vec2 dirA = normalize(rand.xy);
-	vec2 dirB = normalize(vec2(-dirA.y,dirA.x));
+	vec2 dirB = normalize(vec2(-dirA.y, dirA.x));
 	
 	dirA *= dx;
 	dirB *= dy;
 	for (int x = -range; x <= range; x++) {
 		for (int y = -range; y <= range; y++) {
-			shadowFactor += textureProj(sc,dirA*x + dirB*y);
+			shadowFactor += textureProj(sc, dirA * x + dirB * y);
 			count++;
 		}	
+	}
+	return shadowFactor / count;
+}
+
+// https://github.com/SaschaWillems/Vulkan/blob/master/data/shaders/glsl/shadowmapping/scene.frag
+float textureProj2(vec4 shadowCoord, vec2 off) {
+	float shadow = 1.0;
+	if (shadowCoord.z > -1.0 && shadowCoord.z < 1.0)  {
+		float dist = texture(shadowSampler, vec3(vec2(shadowCoord.st + off), shadowCoord.z));
+		if (shadowCoord.w > 0.0 && dist < shadowCoord.z) 
+			shadow = 0.1; // #define ambient 0.1
+	}
+	return shadow;
+}
+
+float filterPCF2(vec4 sc) {
+	ivec2 texDim = textureSize(shadowSampler, 0);
+	float scale = 1.5;
+	float dx = scale * 1.0 / float(texDim.x);
+	float dy = scale * 1.0 / float(texDim.y);
+
+	float shadowFactor = 0.0;
+	int count = 0;
+	int range = 1;
+	
+	for (int x = -range; x <= range; x++) {
+		for (int y = -range; y <= range; y++) {
+			shadowFactor += textureProj2(sc, vec2(dx * x, dy * y));
+			count++;
+		}
+	
 	}
 	return shadowFactor / count;
 }
@@ -100,5 +131,10 @@ void main() {
 	// from learn opengl
 	// ambient = 0.15 * lightColor
 	// (ambient + (1.0 - shadow) * (diffuse + specular)) * color;
-	outFragColor = vec4(diffuse + ambient, texture(tex1, texCoord).a);
+	outFragColor = vec4(diffuse + ambient * 0.2, texture(tex1, texCoord).a);
+
+
+	shadow = textureProj2(inShadowCoord / inShadowCoord.w, vec2(0.0));
+	shadow = filterPCF2(inShadowCoord / inShadowCoord.w);
+	outFragColor = vec4(diffuse * shadow, 1);
 }
