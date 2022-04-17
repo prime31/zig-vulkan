@@ -56,7 +56,9 @@ pub fn drawImGuiEditor(engine: *Engine) void {
     cvars.CVar.system().drawImGuiEditor();
 
     _ = ig.igCheckbox("Lock directional light to camera (l)", &lock_dir_light_to_camera);
-    _ = ig.igCheckbox("Lock mouse (m)", &lock_dir_light_to_camera);
+    if (ig.igCheckbox("Lock mouse (m)", &lock_mouse)) {
+        win.setInputModeCursor(if (lock_mouse) .disabled else .normal) catch unreachable;
+    }
 
     if (lock_dir_light_to_camera)
         engine.main_light.light_dir = engine.camera.front;

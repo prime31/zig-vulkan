@@ -17,7 +17,7 @@ const MeshPass = @import("render_scene.zig").MeshPass;
 const GpuInstance = @import("render_scene.zig").GpuInstance;
 const GpuIndirectObject = @import("render_scene.zig").GpuIndirectObject;
 
-const DrawCullData = struct {
+const DrawCullData = extern struct {
     viewmat: Mat4,
     p00: f32, // symmetric projection parameters
     p11: f32,
@@ -33,7 +33,6 @@ const DrawCullData = struct {
 
     culling_enabled: i32 = 1,
     frustum_culling_enabled: i32,
-    lod_enabled: i32,
     occlusion_enabled: i32,
     distance_check: i32,
     aabb_check: i32, // if on, frustum culling is disabled. used for ortho projection
@@ -67,7 +66,6 @@ const DrawCullData = struct {
             .pyramid_height = undefined,
             .draw_count = undefined,
             .frustum_culling_enabled = if (params.frustum_cull) 1 else 0,
-            .lod_enabled = 0,
             .occlusion_enabled = if (params.occlusion_cull) 1 else 0,
             .distance_check = if (params.draw_dist > 10000) 1 else 0,
             .aabb_check = if (params.aabb) 1 else 0,
