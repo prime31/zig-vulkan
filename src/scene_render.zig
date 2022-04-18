@@ -292,6 +292,12 @@ pub fn drawObjectsShadow(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass) 
 fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, obj_data_set: vk.DescriptorSet, dyn_offsets: []const u32, global_set: vk.DescriptorSet) !void {
     if (pass.batches.items.len == 0) return;
 
+    // HACK: just to get x64 functional
+    if (@import("builtin").os.tag == .macos and @import("builtin").target.cpu.arch == std.Target.Cpu.Arch.x86_64) {
+        try executeDrawCommandsNonIndexed(self, cmd, pass, obj_data_set, dyn_offsets, global_set);
+        return;
+    }
+
     var last_mesh: ?*Mesh = null;
     var last_pip: vk.Pipeline = .null_handle;
     var last_material_set: vk.DescriptorSet = .null_handle;
@@ -458,4 +464,58 @@ pub fn reduceDepth(self: *Engine, cmd: vk.CommandBuffer) !void {
 
 fn getGroupCount(thread_cnt: u32, local_size: u32) u32 {
     return (thread_cnt + local_size - 1) / local_size;
+}
+
+// HACK: used only on x64 to work around the draw indirect bug for now...
+fn executeDrawCommandsNonIndexed(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, obj_data_set: vk.DescriptorSet, dyn_offsets: []const u32, global_set: vk.DescriptorSet) !void {
+    if (pass.batches.items.len == 0) return;
+
+    // HACK: copy the object IDs in sequentially so we can sequentially do our draws
+    var instance_buffer = (try pass.compacted_instance_buffer.mapMemory(self.gc.vma))[0..pass.flat_batches.items.len];
+    for (pass.flat_batches.items) |rb, i| {
+        instance_buffer[i] = pass.get(rb.object).original.handle;
+    }
+    pass.compacted_instance_buffer.unmapMemory(self.gc.vma);
+
+    var last_mesh: ?*Mesh = null;
+    var last_pip: vk.Pipeline = .null_handle;
+    var last_material_set: vk.DescriptorSet = .null_handle;
+    var offset: vk.DeviceSize = 0;
+
+    for (pass.flat_batches.items) |rb, i| {
+        _ = i;
+        const obj = pass.get(rb.object);
+
+        const new_pip = obj.material.shader_pass.pip;
+        const new_layout = obj.material.shader_pass.pip_layout;
+        const new_material_set = obj.material.material_set;
+
+        const draw_mesh = self.render_scene.getMesh(obj.mesh_id).original;
+
+        if (new_pip != last_pip) {
+            last_pip = new_pip;
+            self.gc.vkd.cmdBindPipeline(cmd, .graphics, last_pip);
+            self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, new_layout, 1, 1, vkutil.ptrToMany(&obj_data_set), 0, undefined);
+
+            // update dynamic binds
+            self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, new_layout, 0, 1, vkutil.ptrToMany(&global_set), @intCast(u32, dyn_offsets.len), dyn_offsets.ptr);
+        }
+
+        // set 3 is optional, not defined by the system
+        if (new_material_set != last_material_set and new_material_set != .null_handle) {
+            last_material_set = new_material_set;
+            self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, new_layout, 2, 1, vkutil.ptrToMany(&new_material_set), 0, undefined);
+        }
+
+        if (last_mesh == null or last_mesh.? != draw_mesh) {
+            // bind the mesh vertex buffer with offset 0
+            offset = 0;
+            self.gc.vkd.cmdBindVertexBuffers(cmd, 0, 1, vkutil.ptrToMany(&draw_mesh.vert_buffer.buffer), vkutil.ptrToMany(&offset));
+            if (draw_mesh.vert_buffer.buffer != .null_handle)
+                self.gc.vkd.cmdBindIndexBuffer(cmd, draw_mesh.index_buffer.buffer, 0, .uint32);
+            last_mesh = draw_mesh;
+        }
+
+        self.gc.vkd.cmdDrawIndexed(cmd, @intCast(u32, draw_mesh.indices.len), 1, 0, 0, @intCast(u32, i));
+    }
 }
