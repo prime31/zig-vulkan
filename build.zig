@@ -65,7 +65,8 @@ pub fn build(b: *Builder) void {
     const exe_step = b.step("generate_vulkan_bindings", b.fmt("Generates the vk.zig file", .{}));
     exe_step.dependOn(&generate_exe.step);
 
-    const vk_sdk_root = std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ std.os.getenv("HOME"), "VulkanSDK/1.3.204.1/macOS" }) catch unreachable;
+    // TODO: figure out how to get this from env
+    const vk_sdk_root = std.fmt.allocPrint(b.allocator, "{s}/{s}", .{ std.os.getenv("HOME"), "VulkanSDK/1.3.211.0/macOS" }) catch unreachable;
     defer b.allocator.free(vk_sdk_root);
 
     const gen = vkgen.VkGenerateStep.initFromSdk(b, vk_sdk_root, "vk.zig");

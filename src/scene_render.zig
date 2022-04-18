@@ -134,7 +134,7 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
 
         if (pass.compacted_instance_buffer.size < pass.flat_batches.items.len * @sizeOf(u32)) {
             pass.compacted_instance_buffer.deinit(self.gc.vma);
-            pass.compacted_instance_buffer = try self.gc.vma.createBuffer(u32, pass.flat_batches.items.len * @sizeOf(u32), .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .auto, .{});
+            pass.compacted_instance_buffer = try self.gc.vma.createBuffer(u32, pass.flat_batches.items.len * @sizeOf(u32), .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .auto_prefer_device, .{});
         }
 
         if (pass.pass_objects_buffer.size < pass.flat_batches.items.len * @sizeOf(GpuInstance)) {

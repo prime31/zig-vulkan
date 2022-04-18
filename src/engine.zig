@@ -863,7 +863,7 @@ pub const Engine = struct {
             .frustum_cull = true,
             .occlusion_cull = false,
             .draw_dist = 9999999,
-            .aabb = true,
+            .aabb = if (self.main_light.use_ortho) true else false,
             .aabbmax = aabb_center.add(aabb_extent),
             .aabbmin = aabb_center.sub(aabb_extent),
         };
