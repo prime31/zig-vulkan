@@ -15,7 +15,8 @@ layout (set = 0, binding = 1) uniform SceneData {
 	vec4 sunlightColor;
 } sceneData;
 
-layout (set = 0, binding = 2) uniform sampler2DShadow shadowSampler;
+// layout (set = 0, binding = 2) uniform sampler2DShadow shadowSampler;
+layout (set = 0, binding = 2) uniform sampler2D shadowSampler;
 layout (set = 2, binding = 0) uniform sampler2D tex1;
 
 
@@ -26,7 +27,7 @@ float textureProj(vec4 P, vec2 offset) {
 	
 	if (shadowCoord.z > -1.0 && shadowCoord.z < 1.0) {
 		vec3 sc = vec3(vec2(shadowCoord.st + offset), shadowCoord.z);
-		shadow = texture(shadowSampler, sc);		
+		// shadow = texture(shadowSampler, sc);
 	}
 	return shadow;
 }
@@ -84,8 +85,8 @@ float filterPCF(vec4 sc) {
 // https://github.com/SaschaWillems/Vulkan/blob/master/data/shaders/glsl/shadowmapping/scene.frag
 float textureProj2(vec4 shadowCoord, vec2 off) {
 	float shadow = 1.0;
-	if (shadowCoord.z > -1.0 && shadowCoord.z < 1.0)  {
-		float dist = texture(shadowSampler, vec3(vec2(shadowCoord.st + off), shadowCoord.z));
+	if (shadowCoord.z > -1.0 && shadowCoord.z < 1.0) {
+		float dist = texture(shadowSampler, shadowCoord.st + off).r;//texture(shadowSampler, vec3(vec2(shadowCoord.st + off), shadowCoord.z));
 		if (shadowCoord.w > 0.0 && dist < shadowCoord.z) 
 			shadow = 0.1; // #define ambient 0.1
 	}
@@ -134,7 +135,12 @@ void main() {
 	outFragColor = vec4(diffuse + ambient * 0.2, texture(tex1, texCoord).a);
 
 
+	vec2 shadowUV = inShadowCoord.st * 0.5 + 0.5;
 	shadow = textureProj2(inShadowCoord / inShadowCoord.w, vec2(0.0));
 	shadow = filterPCF2(inShadowCoord / inShadowCoord.w);
+
+	shadow = texture(shadowSampler, inShadowCoord.st).r < inShadowCoord.z ? 0.5 : 1.0;
+	// outFragColor = vec4(shadow_r, shadow_r, shadow_r, 1);
+
 	outFragColor = vec4(diffuse * shadow, 1);
 }
