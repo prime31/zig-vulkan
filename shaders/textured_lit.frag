@@ -113,6 +113,17 @@ float filterPCF2(vec4 sc) {
 	return shadowFactor / count;
 }
 
+// https://learnopengl.com/Advanced-Lighting/Shadows/Shadow-Mapping
+float shadowCalculation(vec4 fragPosLightSpace) {
+	vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
+	projCoords = projCoords * 0.5 + 0.5;
+	float closestDepth = texture(shadowSampler, projCoords.xy).r;
+	float currentDepth = projCoords.z;
+	float shadow = currentDepth > closestDepth ? 0.8 : 0.0;
+
+	return shadow;
+}
+
 
 void main() {
 	vec3 color = texture(tex1, texCoord).xyz;
@@ -142,5 +153,8 @@ void main() {
 	shadow = texture(shadowSampler, inShadowCoord.st).r < inShadowCoord.z ? 0.5 : 1.0;
 	// outFragColor = vec4(shadow_r, shadow_r, shadow_r, 1);
 
-	outFragColor = vec4(diffuse * shadow, 1);
+
+
+	shadow = shadowCalculation(inShadowCoord);
+	outFragColor = vec4(diffuse * (1.0 - shadow), 1);
 }

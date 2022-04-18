@@ -54,12 +54,6 @@ layout (set = 1, binding = 1) readonly buffer InstanceBuffer {
 	uint IDs[];
 } instanceBuffer;
 
-const mat4 biasMat = mat4( 
-	0.5, 0.0, 0.0, 0.0,
-	0.0, 0.5, 0.0, 0.0,
-	0.0, 0.0, 1.0, 0.0,
-	0.5, 0.5, 0.0, 1.0 );
-
 void main() {
 	uint index = instanceBuffer.IDs[gl_InstanceIndex];
 	
@@ -73,5 +67,5 @@ void main() {
 	outColor = vColor;
 	texCoord = vTexCoord;
 
-	ShadowCoord = biasMat * sceneData.sunlightShadowMatrix * (modelMatrix * vec4(vPosition, 1.0f));
+	ShadowCoord = sceneData.sunlightShadowMatrix * (modelMatrix * vec4(vPosition, 1.0f));
 }

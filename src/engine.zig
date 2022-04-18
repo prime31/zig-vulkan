@@ -55,17 +55,17 @@ const DirectionalLight = struct {
     shadow_extent: Vec3 = Vec3.new(20, 20, 100),
 
     pub fn getViewMatrix(self: DirectionalLight) Mat4 {
-        return Mat4.createLookAt(self.light_pos, self.light_pos.add(self.light_dir), Vec3.new(0, 1, 0));
-        // return Mat4.createLookAt(self.light_pos, Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
+        // return Mat4.createLookAt(self.light_pos, self.light_pos.add(self.light_dir), Vec3.new(0, 1, 0));
+        return Mat4.createLookAt(self.light_pos, Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
     }
 
     pub fn getProjMatrix(self: DirectionalLight) Mat4 {
         const se = self.shadow_extent;
         _ = se;
-        // var proj = Mat4.createOrthographicLH_Z0(-se.x, se.x, se.y, -se.y, -se.z, se.z);
+        var proj = Mat4.createOrthographicLH_Z0(-se.x, se.x, se.y, -se.y, -se.z, se.z);
         // Sascha uses a perspective cam for shadows
-        var proj = Mat4.createPerspective(std.math.pi * 45.0 / 180.0, 1, 0.1, 96);
-        proj.fields[1][1] *= -1;
+        // var proj = Mat4.createPerspective(std.math.pi * 45.0 / 180.0, 1, 0.1, 96);
+        // proj.fields[1][1] *= -1;
         return proj;
     }
 
