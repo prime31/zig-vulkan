@@ -53,6 +53,7 @@ const DirectionalLight = struct {
     light_pos: Vec3 = Vec3.new(0, 0, 0),
     light_dir: Vec3 = Vec3.new(0.3, -1, 0.3),
     shadow_extent: Vec3 = Vec3.new(20, 20, 100),
+    use_ortho: bool = true,
 
     pub fn getViewMatrix(self: DirectionalLight) Mat4 {
         // return Mat4.createLookAt(self.light_pos, self.light_pos.add(self.light_dir), Vec3.new(0, 1, 0));
@@ -60,13 +61,16 @@ const DirectionalLight = struct {
     }
 
     pub fn getProjMatrix(self: DirectionalLight) Mat4 {
-        const se = self.shadow_extent;
-        _ = se;
-        var proj = Mat4.createOrthographicLH_Z0(-se.x, se.x, se.y, -se.y, -se.z, se.z);
-        // Sascha uses a perspective cam for shadows
-        // var proj = Mat4.createPerspective(std.math.pi * 45.0 / 180.0, 1, 0.1, 96);
-        // proj.fields[1][1] *= -1;
-        return proj;
+        if (self.use_ortho) {
+            const se = self.shadow_extent;
+            var proj = Mat4.createOrthographicLH_Z0(-se.x, se.x, se.y, -se.y, -se.z, se.z);
+            return proj;
+        } else {
+            // Sascha uses a perspective cam for shadows
+            var proj = Mat4.createPerspective(std.math.pi * 45.0 / 180.0, 1, 0.1, 96);
+            proj.fields[1][1] *= -1;
+            return proj;
+        }
     }
 
     pub fn drawImGuiEditor(self: *DirectionalLight) void {
@@ -74,12 +78,16 @@ const DirectionalLight = struct {
             ig.igIndent(10);
             defer ig.igUnindent(10);
 
+            _ = ig.igCheckbox("Use Orthographic Matrix", &self.use_ortho);
+
             _ = ig.igDragFloat3("light_pos", &self.light_pos.x, 0.1, -360, 360, null, ig.ImGuiSliderFlags_None);
             _ = ig.igDragFloat3("light_dir", &self.light_dir.x, 0.1, -360, 360, null, ig.ImGuiSliderFlags_None);
             if (ig.igDragFloat("shadow_extent", &self.shadow_extent.x, 1, 0, 1000, null, ig.ImGuiSliderFlags_None)) {
                 self.shadow_extent.y = self.shadow_extent.x;
                 self.shadow_extent.z = self.shadow_extent.x;
             }
+
+            if (ig.igButton("Reset Pos", .{.x = 0, .y = 0})) self.light_pos = Vec3.new(0, 0, 0);
         }
     }
 };
