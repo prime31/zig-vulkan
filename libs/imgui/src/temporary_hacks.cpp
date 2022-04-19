@@ -1,6 +1,28 @@
 #include "imgui/imgui.h"
 #include "imgui/imgui_internal.h"
 #include "cimgui.h"
+#include "ImGuizmo.h"
+
+CIMGUI_API void _ogGizmoBegin(float* view, float* proj, float* matrix) {
+    ImGuiIO& io = ImGui::GetIO();
+    io.ConfigWindowsMoveFromTitleBarOnly = true;
+    ImGuizmo::BeginFrame();
+
+    ImGui::SetNextWindowSize(ImVec2(800, 400), ImGuiCond_Appearing);
+    ImGui::SetNextWindowPos(ImVec2(400, 20), ImGuiCond_Appearing);
+    ImGui::PushStyleColor(ImGuiCol_WindowBg, (ImVec4)ImColor(0.35f, 0.3f, 0.3f));
+    ImGui::Begin("Gizmo", 0, 0);
+    ImGuizmo::SetDrawlist();
+
+    float windowWidth = (float)ImGui::GetWindowWidth();
+    float windowHeight = (float)ImGui::GetWindowHeight();
+    ImGuizmo::SetRect(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, windowWidth, windowHeight);
+
+    ImGuizmo::Manipulate(view, proj, ImGuizmo::ROTATE, ImGuizmo::WORLD, matrix);
+
+    ImGui::End();
+    ImGui::PopStyleColor(1);
+}
 
 CIMGUI_API void _ogImDrawData_ScaleClipRects(ImDrawData* self, const float fb_scale) {
     ImVec2 fb_scale_vec;

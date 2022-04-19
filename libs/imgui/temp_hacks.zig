@@ -1,6 +1,7 @@
 const std = @import("std");
 const imgui = @import("imgui.zig");
 
+pub extern fn _ogGizmoBegin(view: *f32, proj: *f32, matrix: *f32) void;
 extern fn _ogImage(user_texture_id: imgui.ImTextureID, size: *const imgui.ImVec2, uv0: *const imgui.ImVec2, uv1: *const imgui.ImVec2) void;
 extern fn _ogImageButton(user_texture_id: imgui.ImTextureID, size: *const imgui.ImVec2, uv0: *const imgui.ImVec2, uv1: *const imgui.ImVec2, frame_padding: c_int) bool;
 extern fn _ogImageButtonEx(user_texture_id: imgui.ImTextureID, size: *const imgui.ImVec2, uv0: *const imgui.ImVec2, uv1: *const imgui.ImVec2, frame_padding: c_int, bg_col: *const imgui.ImVec4, tint_col: *const imgui.ImVec4) bool;

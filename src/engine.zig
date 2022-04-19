@@ -54,10 +54,12 @@ const DirectionalLight = struct {
     light_dir: Vec3 = Vec3.new(0.3, -1, 0.3),
     shadow_extent: Vec3 = Vec3.new(20, 20, 100),
     use_ortho: bool = true,
+    angle: f32 = 0,
+    radius: f32 = 10,
 
     pub fn getViewMatrix(self: DirectionalLight) Mat4 {
         // return Mat4.createLookAt(self.light_pos, self.light_pos.add(self.light_dir), Vec3.new(0, 1, 0));
-        return Mat4.createLookAt(self.light_pos, Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
+        return Mat4.createLookAt(self.light_dir, Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
     }
 
     pub fn getProjMatrix(self: DirectionalLight) Mat4 {
@@ -88,7 +90,20 @@ const DirectionalLight = struct {
             }
 
             if (ig.ogButton("Reset Pos")) self.light_pos = Vec3.new(0, 0, 0);
+            
+            _ = ig.igDragFloat("Radius", &self.radius, 0.1, 1, 50, null, ig.ImGuiSliderFlags_None);
         }
+
+        // rotate
+        self.light_pos = Vec3.new(0, 10, 0);
+        self.light_pos.x = self.radius * @cos(self.angle) - self.radius * @sin(self.angle);
+        self.light_pos.z = self.radius * @sin(self.angle) + self.radius * @cos(self.angle);
+        
+        self.light_dir = Vec3.sub(Vec3.new(0, 0, 0), self.light_pos);
+        // self.light_dir.y = -0.3 * self.radius;
+        self.light_dir = self.light_dir.normalize();
+        
+        self.angle += 0.005;
     }
 };
 
