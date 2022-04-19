@@ -31,7 +31,7 @@ pub fn link(exe: *std.build.LibExeObjStep, target: std.zig.CrossTarget) void {
     exe.addCSourceFile(pwd() ++ "src/imgui/imgui_tables.cpp", &cpp_args);
     exe.addCSourceFile(pwd() ++ "src/imgui/imgui_widgets.cpp", &cpp_args);
     exe.addCSourceFile(pwd() ++ "src/cimgui.cpp", &cpp_args);
-    // exe.addCSourceFile(pwd() ++ "src/temporary_hacks.cpp", &cpp_args);
+    exe.addCSourceFile(pwd() ++ "src/temporary_hacks.cpp", &cpp_args);
 
     const cpp_args2 = [_][]const u8{ "-Wno-return-type-c-linkage", "-DIMGUI_IMPL_API=extern \"C\"", "-DCIMGUI_DEFINE_ENUMS_AND_STRUCTS=1", "-DIMGUI_IMPL_VULKAN_NO_PROTOTYPES=1", "-DVK_NO_PROTOTYPES=1" };
     exe.addCSourceFile(pwd() ++ "src/imgui/imgui_impl_glfw.cpp", &cpp_args2);

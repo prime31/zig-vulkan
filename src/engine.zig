@@ -87,7 +87,7 @@ const DirectionalLight = struct {
                 self.shadow_extent.z = self.shadow_extent.x;
             }
 
-            if (ig.igButton("Reset Pos", .{.x = 0, .y = 0})) self.light_pos = Vec3.new(0, 0, 0);
+            if (ig.ogButton("Reset Pos")) self.light_pos = Vec3.new(0, 0, 0);
         }
     }
 };

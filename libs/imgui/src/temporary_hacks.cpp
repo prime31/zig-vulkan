@@ -28,7 +28,6 @@ CIMGUI_API bool _ogImageButtonEx(ImTextureID user_texture_id, const ImVec2* size
     return ImGui::ImageButton(user_texture_id, *size, *uv0, *uv1, frame_padding, *bg_col, *tint_col);
 }
 
-
 CIMGUI_API void _ogColoredText(float r, float g, float b, const char* text) {
     ImVec4 tint_col;
     tint_col.x = r;
@@ -126,10 +125,6 @@ CIMGUI_API void _ogImDrawList_AddImage(ImDrawList* self, ImTextureID texture_id,
 
 CIMGUI_API void _ogSetCursorScreenPos(const ImVec2* pos) {
     ImGui::SetCursorScreenPos(*pos);
-}
-
-CIMGUI_API bool _ogListBoxHeaderVec2(const char* label, const ImVec2* size) {
-    return ImGui::ListBoxHeader(label, *size);
 }
 
 CIMGUI_API bool _ogBeginChildID(ImGuiID id, const ImVec2* size, bool border, ImGuiWindowFlags flags) {

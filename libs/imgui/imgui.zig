@@ -1,5 +1,7 @@
-pub const va_list = [*c]u8;
-pub const FILE = *anyopaque;
+pub usingnamespace @import("temp_hacks.zig");
+
+const va_list = [*c]u8;
+const FILE = *anyopaque;
 
 pub const struct_ImVec4 = extern struct {
     x: f32,
