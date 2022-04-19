@@ -56,6 +56,7 @@ const DirectionalLight = struct {
     use_ortho: bool = true,
     angle: f32 = 0,
     radius: f32 = 10,
+    autorotate: bool = true,
 
     pub fn getViewMatrix(self: DirectionalLight) Mat4 {
         // return Mat4.createLookAt(self.light_pos, self.light_pos.add(self.light_dir), Vec3.new(0, 1, 0));
@@ -81,6 +82,7 @@ const DirectionalLight = struct {
             defer ig.igUnindent(10);
 
             _ = ig.igCheckbox("Use Orthographic Matrix", &self.use_ortho);
+            _ = ig.igCheckbox("Autorotate", &self.autorotate);
 
             _ = ig.igDragFloat3("light_pos", &self.light_pos.x, 0.1, -360, 360, null, ig.ImGuiSliderFlags_None);
             _ = ig.igDragFloat3("light_dir", &self.light_dir.x, 0.1, -360, 360, null, ig.ImGuiSliderFlags_None);
@@ -90,20 +92,22 @@ const DirectionalLight = struct {
             }
 
             if (ig.ogButton("Reset Pos")) self.light_pos = Vec3.new(0, 0, 0);
-            
+
             _ = ig.igDragFloat("Radius", &self.radius, 0.1, 1, 50, null, ig.ImGuiSliderFlags_None);
         }
 
         // rotate
-        self.light_pos = Vec3.new(0, 10, 0);
-        self.light_pos.x = self.radius * @cos(self.angle) - self.radius * @sin(self.angle);
-        self.light_pos.z = self.radius * @sin(self.angle) + self.radius * @cos(self.angle);
-        
-        self.light_dir = Vec3.sub(Vec3.new(0, 0, 0), self.light_pos);
-        // self.light_dir.y = -0.3 * self.radius;
-        self.light_dir = self.light_dir.normalize();
-        
-        self.angle += 0.005;
+        if (self.autorotate) {
+            self.light_pos = Vec3.new(0, 10, 0);
+            self.light_pos.x = self.radius * @cos(self.angle) - self.radius * @sin(self.angle);
+            self.light_pos.z = self.radius * @sin(self.angle) + self.radius * @cos(self.angle);
+
+            self.light_dir = Vec3.sub(Vec3.new(0, 0, 0), self.light_pos);
+            // self.light_dir.y = -0.3 * self.radius;
+            self.light_dir = self.light_dir.normalize();
+
+            self.angle += 0.005;
+        }
     }
 };
 
@@ -792,7 +796,7 @@ pub const Engine = struct {
             }
         }
 
-        var mat = Mat4.createTranslation(.{ .x = 10, .y = -0.5, .z = 10 });
+        var mat = Mat4.createTranslation(.{ .x = 10, .y = -1, .z = 10 });
         mat = mat.mul(Mat4.createScale(.{ .x = 20, .y = 20, .z = 20 }));
         mat = mat.mul(Mat4.createRotate(-1.5708, Vec3.new(1, 0, 0)));
 

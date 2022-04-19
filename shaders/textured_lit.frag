@@ -167,6 +167,9 @@ void main() {
 
 
 
-	shadow = shadowCalculation(inShadowCoord);
-	outFragColor = vec4(diffuse * (1.0 - shadow), 1);
+	shadow = 0;
+
+	// if (lightAngle > 0.01)
+		shadow = shadowCalculation(inShadowCoord);
+	outFragColor = vec4(color * (sceneData.ambientColor.xyz * 0.1) * (1.0 - shadow), 1);
 }
