@@ -75,6 +75,14 @@ pub const MaterialSystem = struct {
         self.shadow_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less_or_equal);
     }
 
+    // doesnt actually work because this seems to only update the template material i think
+    pub fn hotReloadTexturedLitShader(self: *MaterialSystem) !void {
+        var textured_lit = try self.buildEffect("tri_mesh_ssbo_instanced_vert", "textured_lit_frag");
+        var textured_lit_pass = try self.buildShader(self.engine.render_pass, &self.forward_builder, textured_lit);
+        try self.tmp_pass_cache.append(textured_lit_pass);
+        self.template_cache.getPtr("texturedPBR_opaque").?.pass_shaders.set(.forward, textured_lit_pass);
+    }
+
     fn buildDefaultTemplates(self: *MaterialSystem) !void {
         // default effects
         var textured_lit = try self.buildEffect("tri_mesh_ssbo_instanced_vert", "textured_lit_frag");
@@ -150,7 +158,7 @@ pub const MaterialSystem = struct {
     pub fn buildMaterial(self: *MaterialSystem, name: []const u8, info: MaterialData) !Material {
         if (self.material_cache.get(info)) |mat| {
             try self.materials.put(name, mat);
-            // we have to deinit the MaterialData since MaterialSystem.deinit wont catch it
+            // we have to deinit the MaterialData since MaterialSystem.deinit wont catch it for cache hits
             info.deinit();
             return mat;
         }

@@ -162,14 +162,14 @@ void main() {
 	shadow = textureProj2(inShadowCoord / inShadowCoord.w, vec2(0.0));
 	shadow = filterPCF2(inShadowCoord / inShadowCoord.w);
 
-	shadow = texture(shadowSampler, inShadowCoord.st).r < inShadowCoord.z ? 0.5 : 1.0;
+	// shadow = texture(shadowSampler, inShadowCoord.st).r < inShadowCoord.z ? 0.5 : 1.0;
 	// outFragColor = vec4(shadow_r, shadow_r, shadow_r, 1);
 
 
 
-	shadow = 0;
+	// shadow = 0;
 
 	// if (lightAngle > 0.01)
 		shadow = shadowCalculation(inShadowCoord);
-	outFragColor = vec4(color * (sceneData.ambientColor.xyz * 0.1) * (1.0 - shadow), 1);
+	outFragColor = vec4(color * (1.0 - shadow), 1);
 }

@@ -840,6 +840,8 @@ pub const Engine = struct {
     fn draw(self: *Self, frame: *FrameData) !void {
         self.main_light.drawImGuiEditor();
 
+        if (ig.ogButton("Hot Reload Textured Lit Shader")) try self.material_system.hotReloadTexturedLitShader();
+
         ig.igRender();
         if ((ig.igGetIO().*.ConfigFlags & ig.ImGuiConfigFlags_ViewportsEnable) != 0) {
             ig.igUpdatePlatformWindows();
