@@ -28,6 +28,7 @@ float textureProj(vec4 P, vec2 offset) {
 	if (shadowCoord.z > -1.0 && shadowCoord.z < 1.0) {
 		vec3 sc = vec3(vec2(shadowCoord.st + offset), shadowCoord.z);
 		// shadow = texture(shadowSampler, sc);
+		shadow = texture(shadowSampler, shadowCoord.st + offset).r;
 	}
 	return shadow;
 }
@@ -85,6 +86,8 @@ float filterPCF(vec4 sc) {
 // https://github.com/SaschaWillems/Vulkan/blob/master/data/shaders/glsl/shadowmapping/scene.frag
 float textureProj2(vec4 shadowCoord, vec2 off) {
 	float shadow = 1.0;
+
+	shadowCoord.st = shadowCoord.st * 0.5 + 0.5;
 	if (shadowCoord.z > -1.0 && shadowCoord.z < 1.0) {
 		float dist = texture(shadowSampler, shadowCoord.st + off).r;//texture(shadowSampler, vec3(vec2(shadowCoord.st + off), shadowCoord.z));
 		if (shadowCoord.w > 0.0 && dist < shadowCoord.z) 
@@ -119,16 +122,13 @@ float shadowCalculation(vec4 fragPosLightSpace) {
 	vec3 projCoords = fragPosLightSpace.xyz / fragPosLightSpace.w;
 
 	// transform to [0,1] range
-	projCoords = projCoords * 0.5 + 0.5;
+	projCoords.xy = projCoords.xy * 0.5 + 0.5;
 
 	// get closest depth value from light's perspective (using [0,1] range fragPosLight as coords)
 	float closestDepth = texture(shadowSampler, projCoords.xy).r;
 
 	// get depth of current fragment from light's perspective
 	float currentDepth = projCoords.z;
-
-	// check whether current frag pos is in shadow
-	// float shadow = currentDepth > closestDepth ? 0.8 : 0.0;
 
 	float bias = 0.005;
 	float shadow = currentDepth - bias > closestDepth  ? 0.8 : 0.0;
@@ -167,9 +167,21 @@ void main() {
 
 
 
-	// shadow = 0;
-
-	// if (lightAngle > 0.01)
+	shadow = 0;
+	if (lightAngle > 0.01)
 		shadow = shadowCalculation(inShadowCoord);
-	outFragColor = vec4(color * (1.0 - shadow), 1);
+	// shadow = 1.0 - textureProj2(inShadowCoord / inShadowCoord.w, vec2(0.0));
+	// shadow = 1.0 - textureProj2(inShadowCoord / inShadowCoord.w, vec2(0.0));
+	// if (lightAngle > 0.01)
+		shadow = mix(0.8f, 0.0f, filterPCF2(inShadowCoord / inShadowCoord.w));
+		
+	// outFragColor = vec4(color * (1.0 - shadow), 1);
+	shadow = filterPCF2(inShadowCoord / inShadowCoord.w);
+	// shadow = shadowCalculation(inShadowCoord);
+
+	vec3 N = normalize(inNormal);
+	vec3 L = normalize(sceneData.sunlightDirection.xyz);
+	vec3 diffuse2 = max(dot(N, L), 0.1 /* ambient define from above */) * color;
+
+	outFragColor = vec4(diffuse2 * shadow, 1.0);
 }

@@ -1,6 +1,7 @@
 #version 450
 layout (location = 0) in vec3 vPosition;
-layout (location = 1) in vec2 vOctNormal;
+// layout (location = 1) in vec2 vOctNormal;
+layout (location = 1) in vec3 vNormal;
 layout (location = 2) in vec3 vColor;
 layout (location = 3) in vec2 vTexCoord;
 
@@ -56,8 +57,7 @@ layout (set = 1, binding = 1) readonly buffer InstanceBuffer {
 
 void main() {
 	uint index = instanceBuffer.IDs[gl_InstanceIndex];
-	
-	vec3 vNormal = OctNormalDecode(vOctNormal);
+	// vec3 vNormal = OctNormalDecode(vOctNormal); // TODO: data is just raw normals
 
 	mat4 modelMatrix = objectBuffer.objects[index].model;
 	mat4 transformMatrix = cameraData.viewproj * modelMatrix;

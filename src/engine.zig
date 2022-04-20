@@ -730,9 +730,9 @@ pub const Engine = struct {
 
     fn loadMeshes(self: *Self) !void {
         var tri_mesh = Mesh.init(gpa);
-        try tri_mesh.vertices.append(.{ .position = .{ 1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 1, 0 } });
-        try tri_mesh.vertices.append(.{ .position = .{ -1, 1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 0, 0 } });
-        try tri_mesh.vertices.append(.{ .position = .{ 0, -1, 0 }, .normal = .{ 0, 0, 0 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 0.5, 1 } });
+        try tri_mesh.vertices.append(.{ .position = .{ 1, 1, 0 }, .normal = .{ 0, 0, 1 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 1, 0 } });
+        try tri_mesh.vertices.append(.{ .position = .{ -1, 1, 0 }, .normal = .{ 0, 0, 1 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 0, 0 } });
+        try tri_mesh.vertices.append(.{ .position = .{ 0, -1, 0 }, .normal = .{ 0, 0, 1 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 0.5, 1 } });
         tri_mesh.recalculateBounds();
 
         // var monkey_mesh = try Mesh.initFromAsset(gpa, "/Users/desaro/zig-vulkan/zig-cache/baked_assets/monkey_flat.mesh");
@@ -826,7 +826,7 @@ pub const Engine = struct {
 
         var sphere = MeshObject{
             .mesh = self.meshes.getPtr("sphere").?,
-            .material = self.material_system.getMaterial("textured").?,
+            .material = self.material_system.getMaterial("white_tex").?,
             .custom_sort_key = 0,
             .transform_matrix = Mat4.createTranslation(.{ .x = 2, .y = 1.5, .z = 2 }),
             .bounds = self.meshes.getPtr("sphere").?.bounds,
