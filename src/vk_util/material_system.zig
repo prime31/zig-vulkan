@@ -77,6 +77,11 @@ pub const MaterialSystem = struct {
 
     // doesnt actually work because this seems to only update the template material i think
     pub fn hotReloadTexturedLitShader(self: *MaterialSystem) !void {
+        // reset blend state
+        self.forward_builder.color_blend_attachment = vkinit.pipelineColorBlendAttachmentState();
+        self.forward_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less);
+        self.forward_builder.rasterizer = vkinit.pipelineRasterizationStateCreateInfo(.fill);
+
         var textured_lit = try self.buildEffect("tri_mesh_ssbo_instanced_vert", "zig-cache/shaders/shaders/textured_lit.frag.spv");
         var textured_lit_pass = try self.buildShader(self.engine.render_pass, &self.forward_builder, textured_lit);
         try self.tmp_pass_cache.append(textured_lit_pass);
@@ -158,20 +163,29 @@ pub const MaterialSystem = struct {
     // HACK: attempt to get shader hot reload working
     pub fn replaceMaterial(self: *MaterialSystem, name: []const u8, info: MaterialData) !void {
         if (self.material_cache.getEntry(info)) |entry| {
-            // defer entry.key_ptr.deinit();
-            const old_mat = entry.value_ptr;
+            const old_material = entry.value_ptr.*;
+            defer old_material.deinit();
+
+            const old_material_info = entry.key_ptr.*;
+            defer old_material_info.deinit();
+
+            const old_material_set = entry.value_ptr.pass_sets.get(self.engine.render_scene.forward_pass.pass_type);
             _ = self.material_cache.remove(info);
             _ = self.materials.remove(name);
 
             std.debug.print("------------ replacing material\n", .{});
-            const new_mat = try self.buildMaterial(name, info); // mat.* = try self.buildMaterial(name, info);
+            const new_mat = try self.buildMaterial(name, info);
 
             for (self.engine.render_scene.forward_pass.batches.items) |*batch| {
+                if (batch.material.material_set != old_material_set) continue;
+
                 batch.material.material_set = new_mat.pass_sets.get(self.engine.render_scene.forward_pass.pass_type);
                 batch.material.shader_pass = new_mat.original.pass_shaders.get(self.engine.render_scene.forward_pass.pass_type);
             }
 
             for (self.engine.render_scene.forward_pass.objects.items) |*obj| {
+                if (obj.material.material_set != old_material_set) continue;
+
                 obj.material.material_set = new_mat.pass_sets.get(self.engine.render_scene.forward_pass.pass_type);
                 obj.material.shader_pass = new_mat.original.pass_shaders.get(self.engine.render_scene.forward_pass.pass_type);
             }
