@@ -13,6 +13,8 @@ pub const ShaderModule = struct {
     module: vk.ShaderModule = .null_handle,
 
     pub fn init(gc: *const GraphicsContext, comptime res_path: []const u8) !ShaderModule {
+        if (!@hasDecl(resources, res_path)) return initFromFile(gc, res_path);
+
         const data = @field(resources, res_path);
         const code = @alignCast(@alignOf(u32), std.mem.bytesAsSlice(u32, data));
 
@@ -21,6 +23,26 @@ pub const ShaderModule = struct {
             .module = try gc.vkd.createShaderModule(gc.dev, &.{
                 .flags = .{},
                 .code_size = data.len,
+                .p_code = code.ptr,
+            }, null),
+        };
+    }
+
+    pub fn initFromFile(gc: *const GraphicsContext, path: []const u8) !ShaderModule {
+        var handle = try std.fs.cwd().openFile(path, .{});
+        defer handle.close();
+
+        const file_size = try handle.getEndPos();
+        var buffer = try gc.scratch.alloc(u8, file_size);
+        _ = try handle.readAll(buffer);
+
+        const code = @alignCast(@alignOf(u32), std.mem.bytesAsSlice(u32, buffer));
+
+        return ShaderModule{
+            .code = code,
+            .module = try gc.vkd.createShaderModule(gc.dev, &.{
+                .flags = .{},
+                .code_size = file_size,
                 .p_code = code.ptr,
             }, null),
         };

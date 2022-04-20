@@ -840,7 +840,13 @@ pub const Engine = struct {
     fn draw(self: *Self, frame: *FrameData) !void {
         self.main_light.drawImGuiEditor();
 
-        if (ig.ogButton("Hot Reload Textured Lit Shader")) try self.material_system.hotReloadTexturedLitShader();
+        if (ig.ogButton("Hot Reload Textured Lit Shader")) {
+            try self.material_system.hotReloadTexturedLitShader();
+
+            var white_tex_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
+            try white_tex_data.addTexture(self.smooth_sampler, self.textures.get("white").?.view);
+            _ = try self.material_system.replaceMaterial("white_tex", white_tex_data);
+        }
 
         ig.igRender();
         if ((ig.igGetIO().*.ConfigFlags & ig.ImGuiConfigFlags_ViewportsEnable) != 0) {

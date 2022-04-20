@@ -77,7 +77,7 @@ pub const MaterialSystem = struct {
 
     // doesnt actually work because this seems to only update the template material i think
     pub fn hotReloadTexturedLitShader(self: *MaterialSystem) !void {
-        var textured_lit = try self.buildEffect("tri_mesh_ssbo_instanced_vert", "textured_lit_frag");
+        var textured_lit = try self.buildEffect("tri_mesh_ssbo_instanced_vert", "zig-cache/shaders/shaders/textured_lit.frag.spv");
         var textured_lit_pass = try self.buildShader(self.engine.render_pass, &self.forward_builder, textured_lit);
         try self.tmp_pass_cache.append(textured_lit_pass);
         self.template_cache.getPtr("texturedPBR_opaque").?.pass_shaders.set(.forward, textured_lit_pass);
@@ -153,6 +153,29 @@ pub const MaterialSystem = struct {
     fn buildShader(self: MaterialSystem, render_pass: vk.RenderPass, builder: *PipelineBuilder, effect: ShaderEffect) !ShaderPass {
         try builder.setShaders(&effect);
         return ShaderPass.init(effect, try builder.build(self.engine.gc, render_pass));
+    }
+
+    // HACK: attempt to get shader hot reload working
+    pub fn replaceMaterial(self: *MaterialSystem, name: []const u8, info: MaterialData) !void {
+        if (self.material_cache.getEntry(info)) |entry| {
+            // defer entry.key_ptr.deinit();
+            const old_mat = entry.value_ptr;
+            _ = self.material_cache.remove(info);
+            _ = self.materials.remove(name);
+
+            std.debug.print("------------ replacing material\n", .{});
+            const new_mat = try self.buildMaterial(name, info); // mat.* = try self.buildMaterial(name, info);
+
+            for (self.engine.render_scene.forward_pass.batches.items) |*batch| {
+                batch.material.material_set = new_mat.pass_sets.get(self.engine.render_scene.forward_pass.pass_type);
+                batch.material.shader_pass = new_mat.original.pass_shaders.get(self.engine.render_scene.forward_pass.pass_type);
+            }
+
+            for (self.engine.render_scene.forward_pass.objects.items) |*obj| {
+                obj.material.material_set = new_mat.pass_sets.get(self.engine.render_scene.forward_pass.pass_type);
+                obj.material.shader_pass = new_mat.original.pass_shaders.get(self.engine.render_scene.forward_pass.pass_type);
+            }
+        } else unreachable;
     }
 
     pub fn buildMaterial(self: *MaterialSystem, name: []const u8, info: MaterialData) !Material {
