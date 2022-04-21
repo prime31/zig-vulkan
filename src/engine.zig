@@ -59,15 +59,15 @@ const DirectionalLight = struct {
     autorotate: bool = true,
 
     pub fn getViewMatrix(self: DirectionalLight) Mat4 {
-        // return Mat4.createLookAt(self.light_pos, self.light_pos.add(self.light_dir), Vec3.new(0, 1, 0));
-        return Mat4.createLookAt(self.light_dir, Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
+        // adding the light_pos lets us choose a frustom to focus on while keeping the light angle the same
+        return Mat4.createLookAt(self.light_dir.add(self.light_pos), self.light_pos, Vec3.new(0, 1, 0));
+        // return Mat4.createLookAt(self.light_dir, Vec3.new(0, 0, 0), Vec3.new(0, 1, 0));
     }
 
     pub fn getProjMatrix(self: DirectionalLight) Mat4 {
         if (self.use_ortho) {
             const se = self.shadow_extent;
-            var proj = Mat4.createOrthographicLH_Z0(-se.x, se.x, se.y, -se.y, -se.z, se.z);
-            return proj;
+            return Mat4.createOrthographicLH_Z0(-se.x, se.x, se.y, -se.y, -se.z, se.z);
         } else {
             // Sascha uses a perspective cam for shadows
             var proj = Mat4.createPerspective(std.math.pi * 45.0 / 180.0, 1, 0.1, 96);

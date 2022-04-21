@@ -483,7 +483,6 @@ fn executeDrawCommandsNonIndexed(self: *Engine, cmd: vk.CommandBuffer, pass: *Me
     var offset: vk.DeviceSize = 0;
 
     for (pass.flat_batches.items) |rb, i| {
-        _ = i;
         const obj = pass.get(rb.object);
 
         const new_pip = obj.material.shader_pass.pip;
