@@ -150,13 +150,13 @@ bool IsVisibleAABB(uint objectIndex) {
 	vec4 sphereBounds = objectBuffer.objects[objectIndex].spherebounds;
 
 	vec3 center = sphereBounds.xyz;
-	center = (cullData.view * vec4(center, 1.f)).xyz;
+	// center = (cullData.view * vec4(center, 1.f)).xyz; // we DONT translate into the ortho camera space since we have world AABB of it
 	float radius = sphereBounds.w;
 
 	bool visible = true;
 
-	vec3 aabbmin = vec3(cullData.aabbmin_x,cullData.aabbmin_y,cullData.aabbmin_z) + vec3(radius);
-	vec3 aabbmax = vec3(cullData.aabbmax_x,cullData.aabbmax_y,cullData.aabbmax_z) - vec3(radius);
+	vec3 aabbmin = vec3(cullData.aabbmin_x, cullData.aabbmin_y, cullData.aabbmin_z) - vec3(radius);
+	vec3 aabbmax = vec3(cullData.aabbmax_x, cullData.aabbmax_y, cullData.aabbmax_z) + vec3(radius);
 
 	visible = visible && (center.x > aabbmin.x) && (center.x < aabbmax.x);
 	visible = visible && (center.y > aabbmin.y) && (center.y < aabbmax.y);

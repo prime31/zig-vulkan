@@ -921,8 +921,8 @@ pub const Engine = struct {
             .occlusion_cull = false,
             .draw_dist = 9999999,
             .aabb = if (self.main_light.use_ortho) true else false,
-            .aabbmax = aabb_center.add(aabb_extent),
             .aabbmin = aabb_center.sub(aabb_extent),
+            .aabbmax = aabb_center.add(aabb_extent),
         };
 
         if (config.shadowcast.get())
