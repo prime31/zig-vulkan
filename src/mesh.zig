@@ -178,6 +178,7 @@ pub const Mesh = struct {
         };
     }
 
+    /// has no texcoords
     pub fn initProcRock(gpa: std.mem.Allocator, seed: i32, num_subdivisions: i32) !Mesh {
         var mesh = shapes.initRock(seed, num_subdivisions);
         defer mesh.deinit();
@@ -217,7 +218,7 @@ pub const Mesh = struct {
             fn terrain(uv: *const [2]f32, position: *[3]f32, userdata: ?*anyopaque) callconv(.C) void {
                 _ = userdata;
                 position[0] = uv[0];
-                position[1] = 0.025 * gen.noise2(uv[0], uv[1]);
+                position[1] = 0.09 * gen.noise2(uv[0], uv[1]);
                 position[2] = uv[1];
             }
         };
@@ -225,10 +226,9 @@ pub const Mesh = struct {
         var mesh = shapes.initParametric(local.terrain, 40, 40, null);
         defer mesh.deinit();
         mesh.translate(-0.5, 0.01, -0.5);
-        mesh.invert(0, 0);
         mesh.rotate(1.5708, 1, 0, 0);
-        mesh.scale(2, 2, 2);
-        mesh.unweld();
+        mesh.scale(40, 40, 40);
+        // mesh.unweld();
         mesh.computeNormals();
 
         var vertices = try std.ArrayList(Vertex).initCapacity(gpa, mesh.positions.len);

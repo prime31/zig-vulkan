@@ -726,6 +726,14 @@ pub const Engine = struct {
         const white_tex = try loadTextureFromFile(self.gc, "src/chapters/white.jpg");
         self.deletion_queue.append(white_tex.image.default_view);
         try self.textures.put("white", white_tex);
+
+        const orange_tex = try loadTextureFromFile(self.gc, "src/chapters/proto_textures/orange_01.png");
+        self.deletion_queue.append(orange_tex.image.default_view);
+        try self.textures.put("orange", orange_tex);
+
+        const viking_tex = try loadTextureFromFile(self.gc, "src/chapters/viking_room.png");
+        self.deletion_queue.append(viking_tex.image.default_view);
+        try self.textures.put("viking", viking_tex);
     }
 
     fn loadMeshes(self: *Self) !void {
@@ -743,6 +751,7 @@ pub const Engine = struct {
         var rock = try Mesh.initProcRock(gpa, 123, 2);
         var sphere = try Mesh.initProcSphere(gpa, 20, 20);
         var terrain = try Mesh.initProcTerrain(gpa);
+        var viking_room = try Mesh.initFromObj(gpa, "src/chapters/viking_room.obj");
 
         try uploadMesh(self.gc, &tri_mesh);
         try uploadMesh(self.gc, &monkey_mesh);
@@ -752,6 +761,7 @@ pub const Engine = struct {
         try uploadMesh(self.gc, &rock);
         try uploadMesh(self.gc, &sphere);
         try uploadMesh(self.gc, &terrain);
+        try uploadMesh(self.gc, &viking_room);
 
         try self.meshes.put("triangle", tri_mesh);
         try self.meshes.put("monkey", monkey_mesh);
@@ -761,6 +771,7 @@ pub const Engine = struct {
         try self.meshes.put("rock", rock);
         try self.meshes.put("sphere", sphere);
         try self.meshes.put("terrain", terrain);
+        try self.meshes.put("viking_room", viking_room);
     }
 
     fn initScene(self: *Self) !void {
@@ -771,6 +782,14 @@ pub const Engine = struct {
         var white_tex_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
         try white_tex_data.addTexture(self.smooth_sampler, self.textures.get("white").?.view);
         _ = try self.material_system.buildMaterial("white_tex", white_tex_data);
+
+        var orange_tex_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
+        try orange_tex_data.addTexture(self.smooth_sampler, self.textures.get("orange").?.view);
+        _ = try self.material_system.buildMaterial("orange_tex", orange_tex_data);
+
+        var viking_tex_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
+        try viking_tex_data.addTexture(self.smooth_sampler, self.textures.get("viking").?.view);
+        _ = try self.material_system.buildMaterial("viking_tex", viking_tex_data);
 
         var mat_info = vkutil.MaterialData.init(self.gc.gpa, "colored_opaque");
         _ = try self.material_system.buildMaterial("opaque", mat_info);
@@ -797,12 +816,11 @@ pub const Engine = struct {
         }
 
         var mat = Mat4.createTranslation(.{ .x = 10, .y = -1, .z = 10 });
-        mat = mat.mul(Mat4.createScale(.{ .x = 20, .y = 20, .z = 20 }));
         mat = mat.mul(Mat4.createRotate(-1.5708, Vec3.new(1, 0, 0)));
 
         var tri_ground = MeshObject{
             .mesh = self.meshes.getPtr("terrain").?,
-            .material = self.material_system.getMaterial("white_tex").?,
+            .material = self.material_system.getMaterial("orange_tex").?,
             .custom_sort_key = 0,
             .transform_matrix = mat,
             .bounds = self.meshes.getPtr("terrain").?.bounds,
@@ -835,6 +853,18 @@ pub const Engine = struct {
         };
         sphere.refreshRenderBounds();
         _ = try self.render_scene.registerObject(sphere);
+
+        var viking_room = MeshObject{
+            .mesh = self.meshes.getPtr("viking_room").?,
+            .material = self.material_system.getMaterial("viking_tex").?,
+            .custom_sort_key = 0,
+            .transform_matrix = Mat4.createTranslation(.{ .x = 5, .y = 1.5, .z = 5 }),
+            .bounds = self.meshes.getPtr("viking_room").?.bounds,
+            .draw_forward_pass = true,
+            .draw_shadow_pass = true,
+        };
+        viking_room.refreshRenderBounds();
+        _ = try self.render_scene.registerObject(viking_room);
     }
 
     fn draw(self: *Self, frame: *FrameData) !void {

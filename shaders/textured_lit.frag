@@ -183,5 +183,5 @@ void main() {
 	vec3 L = normalize(sceneData.sunlightDirection.xyz);
 	vec3 diffuse2 = max(dot(N, L), 0.1 /* ambient define from above */) * color;
 
-	outFragColor = vec4(diffuse2 * shadow, 1.0);
+	outFragColor = vec4(diffuse2 * shadow * lightAngle, 1.0);
 }
