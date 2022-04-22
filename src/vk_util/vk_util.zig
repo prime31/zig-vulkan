@@ -25,6 +25,7 @@ pub const GpuObjectData = extern struct {
 };
 
 pub const GpuSceneData = extern struct {
+    cam_pos: Vec4 = Vec4.new(0, 0, 0, 0),
     fog_color: Vec4 = Vec4.new(1, 0, 0, 1),
     fog_distance: Vec4 = Vec4.new(1, 0, 0, 1),
     ambient_color: Vec4 = Vec4.new(1, 0, 0, 1),

@@ -6,7 +6,6 @@
 - why doesnt znear/zfar clip anything?
 - distance culling is fucked up. Seems inverse view matrix is required?
 - occlusion culling is jacked up
-- shadows are fucked
 
 
 - other math lib [cglm](https://github.com/recp/cglm)

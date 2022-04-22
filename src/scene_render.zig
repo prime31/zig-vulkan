@@ -207,6 +207,7 @@ pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass)
 
     // push data to dynmem
     const framed = self.frame_num / 120;
+    self.scene_params.cam_pos = Vec4.fromVec3(self.camera.pos, 1);
     self.scene_params.ambient_color = Vec4.new((std.math.sin(framed) + 1) * 0.5, 1, (std.math.cos(framed) + 1) * 0.5, 1);
     self.scene_params.sun_shadow_mat = self.main_light.getProjMatrix().mul(self.main_light.getViewMatrix());
     self.scene_params.sun_dir = Vec4.fromVec3(self.main_light.light_dir, 1);

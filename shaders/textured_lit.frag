@@ -5,9 +5,11 @@ layout (location = 0) out vec4 outFragColor;
 layout (location = 0) in vec3 inColor;
 layout (location = 1) in vec2 texCoord;
 layout (location = 2) in vec3 inNormal;
-layout (location = 3) in vec4 inShadowCoord;
+layout (location = 3) in vec3 inWorldPos;
+layout (location = 4) in vec4 inShadowCoord;
 
 layout (set = 0, binding = 1) uniform SceneData {
+	vec4 cameraPos;
     vec4 fogColor; // w is for exponent
 	vec4 fogDistances; // x for min, y for max, zw unused.
 	vec4 ambientColor;
@@ -89,7 +91,7 @@ float textureProj2(vec4 shadowCoord, vec2 off) {
 
 	shadowCoord.st = shadowCoord.st * 0.5 + 0.5;
 	if (shadowCoord.z > -1.0 && shadowCoord.z < 1.0) {
-		float dist = texture(shadowSampler, shadowCoord.st + off).r;//texture(shadowSampler, vec3(vec2(shadowCoord.st + off), shadowCoord.z));
+		float dist = texture(shadowSampler, shadowCoord.st + off).r; //texture(shadowSampler, vec3(vec2(shadowCoord.st + off), shadowCoord.z));
 		if (shadowCoord.w > 0.0 && dist < shadowCoord.z) 
 			shadow = 0.1; // #define ambient 0.1
 	}
@@ -134,6 +136,94 @@ float shadowCalculation(vec4 fragPosLightSpace) {
 	float shadow = currentDepth - bias > closestDepth  ? 0.8 : 0.0;
 
 	return shadow;
+}
+
+
+
+const float pi = 3.1415926;
+
+float saturate(float value) { return clamp(value, 0, 1); }
+
+// Trowbridge-Reitz GGX normal distribution function.
+float distributionGgx(vec3 n, vec3 h, float alpha) {
+    float alpha_sq = alpha * alpha;
+    float n_dot_h = clamp(dot(n, h), 0, 1);
+    float k = n_dot_h * n_dot_h * (alpha_sq - 1.0) + 1.0;
+    return alpha_sq / (pi * k * k);
+}
+
+float geometrySchlickGgx(float x, float k) {
+    return x / (x * (1.0 - k) + k);
+}
+
+float geometrySmith(vec3 n, vec3 v, vec3 l, float k) {
+    float n_dot_v = clamp(dot(n, v), 0, 1);
+    float n_dot_l = clamp(dot(n, l), 0, 1);
+    return geometrySchlickGgx(n_dot_v, k) * geometrySchlickGgx(n_dot_l, k);
+}
+
+vec3 fresnelSchlick(float h_dot_v, vec3 f0) {
+    return f0 + (vec3(1.0, 1.0, 1.0) - f0) * pow(1.0 - h_dot_v, 5.0);
+}
+
+vec4 pbrBitch() {
+	vec4 basecolor_roughness = vec4(texture(tex1, texCoord).xyz, -1.0); // TODO: material property
+
+	vec3 v = normalize(sceneData.cameraPos.xyz - inWorldPos);
+	vec3 n = normalize(inNormal);
+	vec3 base_color = basecolor_roughness.xyz;
+	float ao = 1.0;
+	float roughness = basecolor_roughness.a;
+	float metallic;
+	if (roughness < 0.0) { metallic = 1.0; } else { metallic = 0.0; }
+	roughness = abs(roughness);
+
+	float alpha = roughness * roughness;
+	float k = alpha + 1.0;
+	k = (k * k) / 8.0;
+	vec3 f0 = vec3(0.04);
+	f0 = mix(f0, base_color, metallic);
+
+	vec3[] light_positions = vec3[](
+		vec3(0.0, 1.0, 0.0),
+		vec3(25.0, 15.0, 25.0),
+		vec3(-25.0, 15.0, 25.0),
+		vec3(25.0, 15.0, -25.0),
+		vec3(-25.0, 15.0, -25.0)
+	);
+	vec3[] light_radiance = vec3[](
+		4.0 * vec3(255.0, 10.0, 20.0),
+		4.0 * vec3(0.0, 100.0, 250.0),
+		8.0 * vec3(200.0, 150.0, 250.0),
+		3.0 * vec3(200.0, 0.0, 0.0),
+		9.0 * vec3(200.0, 150.0, 0.0)
+	);
+	vec3 lo = vec3(0.0);
+
+	for (int light_index = 0; light_index < 4; light_index = light_index + 1) {
+		vec3 lvec = light_positions[light_index] - inWorldPos;
+		vec3 l = normalize(lvec);
+		vec3 h = normalize(l + v);
+		float distance_sq = dot(lvec, lvec);
+		float attenuation = 1.0 / distance_sq;
+		vec3 radiance = light_radiance[light_index] * attenuation;
+		vec3 f = fresnelSchlick(saturate(dot(h, v)), f0);
+		float ndf = distributionGgx(n, h, alpha);
+		float g = geometrySmith(n, v, l, k);
+		vec3 numerator = ndf * g * f;
+		float denominator = 4.0 * saturate(dot(n, v)) * saturate(dot(n, l));
+		vec3 specular = numerator / max(denominator, 0.001);
+		vec3 ks = f;
+		vec3 kd = (vec3(1.0) - ks) * (1.0 - metallic);
+		float n_dot_l = saturate(dot(n, l));
+		lo = lo + (kd * base_color / pi + specular) * radiance * n_dot_l;
+	}
+
+	vec3 ambient = vec3(0.03) * base_color * ao;
+	vec3 color = ambient + lo;
+	color = color / (color + 1.0);
+	color = pow(color, vec3(1.0 / 2.2));
+	return vec4(color, 1.0);
 }
 
 
@@ -184,4 +274,5 @@ void main() {
 	vec3 diffuse2 = max(dot(N, L), 0.1 /* ambient define from above */) * color;
 
 	outFragColor = vec4(diffuse2 * shadow * lightAngle, 1.0);
+	// outFragColor = pbrBitch();
 }

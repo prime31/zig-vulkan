@@ -5,9 +5,11 @@ layout (location = 0) out vec4 outFragColor;
 layout (location = 0) in vec3 inColor;
 layout (location = 1) in vec2 texCoord;
 layout (location = 2) in vec3 inNormal;
-layout (location = 3) in vec4 inShadowCoord;
+layout (location = 3) in vec3 inWorldPos;
+layout (location = 4) in vec4 inShadowCoord;
 
 layout (set = 0, binding = 1) uniform SceneData {
+	vec4 cameraPos;
     vec4 fogColor; // w is for exponent
 	vec4 fogDistances; // x for min, y for max, zw unused.
 	vec4 ambientColor;
