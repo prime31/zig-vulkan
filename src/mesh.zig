@@ -2,7 +2,7 @@ const std = @import("std");
 const vk = @import("vulkan");
 const vma = @import("vma");
 const tiny = @import("tiny");
-const shapes = @import("shapes");
+const zmesh = @import("zmesh");
 const znoise = @import("znoise");
 const assets = @import("assetlib/assets.zig");
 
@@ -151,7 +151,7 @@ pub const Mesh = struct {
     }
 
     pub fn initProcSphere(gpa: std.mem.Allocator, slices: i32, stacks: i32) !Mesh {
-        var mesh = shapes.initParametricSphere(slices, stacks);
+        var mesh = zmesh.Shape.initParametricSphere(slices, stacks);
         defer mesh.deinit();
 
         mesh.unweld();
@@ -180,7 +180,7 @@ pub const Mesh = struct {
 
     /// has no texcoords
     pub fn initProcRock(gpa: std.mem.Allocator, seed: i32, num_subdivisions: i32) !Mesh {
-        var mesh = shapes.initRock(seed, num_subdivisions);
+        var mesh = zmesh.Shape.initRock(seed, num_subdivisions);
         defer mesh.deinit();
 
         mesh.unweld();
@@ -223,7 +223,7 @@ pub const Mesh = struct {
             }
         };
 
-        var mesh = shapes.initParametric(local.terrain, 40, 40, null);
+        var mesh = zmesh.Shape.initParametric(local.terrain, 40, 40, null);
         defer mesh.deinit();
         mesh.translate(-0.5, 0.01, -0.5);
         mesh.rotate(1.5708, 1, 0, 0);

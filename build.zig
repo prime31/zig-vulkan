@@ -11,7 +11,7 @@ const stb_build = @import("libs/stb/build.zig");
 const lz4_build = @import("libs/lz4/build.zig");
 const vma_build = @import("libs/vma/build.zig");
 const tinyobj_build = @import("libs/tinyobjloader/build.zig");
-const shapes_build = @import("libs/shapes/build.zig");
+const zmesh_build = @import("libs/zmesh/build.zig");
 const znoise_build = @import("libs/znoise/build.zig");
 const imgui_build = @import("libs/imgui/build.zig");
 const spirv_build = @import("libs/spirv_reflect/build.zig");
@@ -47,7 +47,7 @@ pub fn build(b: *Builder) void {
         exe.addPackage(.{
             .name = "vengine",
             .path = .{ .path = "src/v.zig" },
-            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobj_build.pkg, shapes_build.pkg, znoise_build.pkg, vma_pkg, stb_build.pkg, imgui_build.pkg, imgui_vk_pkg, spirv_build.pkg, lz4_build.pkg },
+            .dependencies = &[_]std.build.Pkg{ glfw_pkg, vulkan_pkg, resources_pkg, tinyobj_build.pkg, zmesh_build.pkg, znoise_build.pkg, vma_pkg, stb_build.pkg, imgui_build.pkg, imgui_vk_pkg, spirv_build.pkg, lz4_build.pkg },
         });
 
         const run_cmd = exe.run();
@@ -118,8 +118,8 @@ fn linkExeDeps(exe: *std.build.LibExeObjStep, b: *Builder, target: std.zig.Cross
     exe.addPackage(tinyobj_build.pkg);
 
     // shapes
-    shapes_build.link(exe);
-    exe.addPackage(shapes_build.pkg);
+    zmesh_build.link(exe);
+    exe.addPackage(zmesh_build.pkg);
 
     // znoise
     znoise_build.link(exe);

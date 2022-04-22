@@ -290,6 +290,7 @@ pub const Engine = struct {
     }
 
     pub fn deinit(self: *Self) void {
+         @import("zmesh").deinit();
         self.gc.vkd.deviceWaitIdle(self.gc.dev) catch unreachable;
 
         igvk.shutdown();
@@ -737,6 +738,8 @@ pub const Engine = struct {
     }
 
     fn loadMeshes(self: *Self) !void {
+        @import("zmesh").init(gpa);
+
         var tri_mesh = Mesh.init(gpa);
         try tri_mesh.vertices.append(.{ .position = .{ 1, 1, 0 }, .normal = .{ 0, 0, 1 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 1, 0 } });
         try tri_mesh.vertices.append(.{ .position = .{ -1, 1, 0 }, .normal = .{ 0, 0, 1 }, .color = .{ 0.6, 0.6, 0.6 }, .uv = .{ 0, 0 } });
