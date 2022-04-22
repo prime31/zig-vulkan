@@ -166,6 +166,7 @@ vec3 fresnelSchlick(float h_dot_v, vec3 f0) {
     return f0 + (vec3(1.0, 1.0, 1.0) - f0) * pow(1.0 - h_dot_v, 5.0);
 }
 
+// https://github.com/michal-z/zig-gamedev/blob/main/samples/procedural_mesh_wgpu/src/procedural_mesh_wgsl.zig
 vec4 pbrBitch() {
 	vec4 basecolor_roughness = vec4(texture(tex1, texCoord).xyz, -1.0); // TODO: material property
 
