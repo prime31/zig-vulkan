@@ -21,7 +21,6 @@ struct DrawCullData {
 	int cullingEnabled;
 	int frustumCullingEnabled;
 	int occlusionEnabled;
-	int distCull;
 	int AABBcheck;
 	float aabbmin_x;
 	float aabbmin_y;
@@ -81,8 +80,7 @@ layout (set = 0, binding = 3) buffer InstanceBuffer3 {
 
 // 2D Polyhedral Bounds of a Clipped, Perspective-Projected 3D Sphere. Michael Mara, Morgan McGuire. 2013
 bool projectSphere(vec3 C, float r, float znear, float P00, float P11, out vec4 aabb) {
-	float da_fook = C.z;
-	if (da_fook < r + znear)
+	if (C.z < r + znear)
 		return false;
 
 	vec2 cx = -C.xz;
@@ -110,17 +108,22 @@ bool IsVisible(uint objectIndex) {
 	center = (cullData.view * vec4(center, 1.f)).xyz;
 	float radius = sphereBounds.w;
 
+	float da_fook_z = sphereBounds.z;
+	float fooker_z = center.z;
+
 	bool visible = true;
 
 	// the left/top/right/bottom plane culling utilizes frustum symmetry to cull against two planes at the same time
 	visible = visible && center.z * cullData.frustum[1] - abs(center.x) * cullData.frustum[0] > -radius;
 	visible = visible && center.z * cullData.frustum[3] - abs(center.y) * cullData.frustum[2] > -radius;
 
-	// TODO: fix this
-	if (cullData.distCull != 0 && visible) {
+	// TODO: fix this. why does z end up being negative after view transformation
+	center.z *= -1;
+	if (visible) {
 		// the near/far plane culling uses camera space Z directly
 		visible = center.z + radius > cullData.znear && center.z - radius < cullData.zfar;
 	}
+	center.z *= -1;
 
 
 	visible = visible || cullData.frustumCullingEnabled == 0;

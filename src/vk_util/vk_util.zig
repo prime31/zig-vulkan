@@ -39,7 +39,6 @@ pub const CullParams = extern struct {
     projmat: Mat4,
     occlusion_cull: bool,
     frustum_cull: bool,
-    draw_dist: f32,
     aabb: bool,
     aabbmin: Vec3 = Vec3.new(0, 0, 0),
     aabbmax: Vec3 = Vec3.new(0, 0, 0),

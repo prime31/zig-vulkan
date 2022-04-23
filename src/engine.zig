@@ -907,7 +907,6 @@ pub const Engine = struct {
             .viewmat = self.camera.getViewMatrix(),
             .frustum_cull = true,
             .occlusion_cull = true,
-            .draw_dist = config.draw_distance.get(),
             .aabb = false,
         };
         try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.forward_pass, forward_cull);
@@ -922,7 +921,6 @@ pub const Engine = struct {
             .viewmat = self.main_light.getViewMatrix(),
             .frustum_cull = true,
             .occlusion_cull = false,
-            .draw_dist = 9999999,
             .aabb = if (self.main_light.use_ortho) true else false,
             .aabbmin = aabb_center.sub(aabb_extent),
             .aabbmax = aabb_center.add(aabb_extent),
