@@ -63,12 +63,12 @@ void main() {
 
 	mat4 modelMatrix = objectBuffer.objects[index].model;
 	mat4 transformMatrix = cameraData.viewproj * modelMatrix;
-	gl_Position = transformMatrix * vec4(vPosition, 1.0f);
-	outWorldPos = gl_Position.xyz;
+	gl_Position = transformMatrix * vec4(vPosition, 1.0);
+	outWorldPos = (modelMatrix * vec4(vPosition, 1.0)).xyz;
 
-	outNormal = normalize((modelMatrix * vec4(vNormal, 0.f)).xyz);
+	outNormal = normalize((modelMatrix * vec4(vNormal, 0.0)).xyz);
 	outColor = vColor;
 	texCoord = vTexCoord;
 
-	ShadowCoord = sceneData.sunlightShadowMatrix * (modelMatrix * vec4(vPosition, 1.0f));
+	ShadowCoord = sceneData.sunlightShadowMatrix * (modelMatrix * vec4(vPosition, 1.0));
 }

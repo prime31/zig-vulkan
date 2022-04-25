@@ -187,16 +187,16 @@ vec4 pbrBitch() {
 
 	vec3[] light_positions = vec3[](
 		vec3(0.0, 1.0, 0.0),
-		vec3(25.0, 15.0, 25.0),
-		vec3(-25.0, 15.0, 25.0),
-		vec3(25.0, 15.0, -25.0),
-		vec3(-25.0, 15.0, -25.0)
+		vec3(1.0, 2.0, 1.0),
+		vec3(5.0, 3.0, 5.0),
+		vec3(7.0, 4.0, 2.0),
+		vec3(-8.5, 1.0, 2.0)
 	);
 	vec3[] light_radiance = vec3[](
-		4.0 * vec3(255.0, 10.0, 20.0),
-		4.0 * vec3(0.0, 100.0, 250.0),
+		4.0 * vec3(255.0, 110.0, 120.0),
+		4.0 * vec3(10.0, 100.0, 250.0),
 		8.0 * vec3(200.0, 150.0, 250.0),
-		3.0 * vec3(200.0, 0.0, 0.0),
+		3.0 * vec3(200.0, 10.0, 0.0),
 		9.0 * vec3(200.0, 150.0, 0.0)
 	);
 	vec3 lo = vec3(0.0);
@@ -229,8 +229,11 @@ vec4 pbrBitch() {
 
 
 void main() {
+	vec3 N = normalize(inNormal);
+	vec3 L = normalize(sceneData.sunlightDirection.xyz);
 	vec3 color = texture(tex1, texCoord).xyz;
-	float lightAngle = clamp(dot(inNormal, -sceneData.sunlightDirection.xyz), 0.f, 1.f);
+	// float lightAngle = clamp(dot(inNormal, -sceneData.sunlightDirection.xyz), 0.f, 1.f);
+	float lightAngle = clamp(dot(N, -L), 0.f, 1.f);
 
 	float shadow = 0;
 	if (sceneData.sunlightColor.w > 0.01)
@@ -270,9 +273,9 @@ void main() {
 	shadow = filterPCF2(inShadowCoord / inShadowCoord.w);
 	// shadow = shadowCalculation(inShadowCoord);
 
-	vec3 N = normalize(inNormal);
-	vec3 L = normalize(sceneData.sunlightDirection.xyz);
-	vec3 diffuse2 = max(dot(N, L), 0.1 /* ambient define from above */) * color;
+	// vec3 N = normalize(inNormal);
+	// vec3 L = normalize(sceneData.sunlightDirection.xyz);
+	vec3 diffuse2 = max(dot(N, -L), 0.1 /* ambient define from above */) * color;
 
 	outFragColor = vec4(diffuse2 * shadow * lightAngle, 1.0);
 	// outFragColor = pbrBitch();
