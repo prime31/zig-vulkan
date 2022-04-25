@@ -9,6 +9,8 @@ layout (push_constant) uniform block {
 	vec2 imageSize;
 };
 
+// TODO: we dont have access to filter minmax on macos so switch this to use textureGather
+// https://interplayoflight.wordpress.com/2017/11/15/experiments-in-gpu-based-occlusion-culling/
 void main() {
 	uvec2 pos = gl_GlobalInvocationID.xy;
 

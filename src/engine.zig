@@ -868,6 +868,31 @@ pub const Engine = struct {
         };
         viking_room.refreshRenderBounds();
         _ = try self.render_scene.registerObject(viking_room);
+
+
+        sphere = MeshObject{
+            .mesh = self.meshes.getPtr("sphere").?,
+            .material = self.material_system.getMaterial("white_tex").?,
+            .custom_sort_key = 0,
+            .transform_matrix = Mat4.createTranslation(.{ .x = 0, .y = 0, .z = 0 }),
+            .bounds = self.meshes.getPtr("sphere").?.bounds,
+            .draw_forward_pass = true,
+            .draw_shadow_pass = true,
+        };
+        sphere.refreshRenderBounds();
+        _ = try self.render_scene.registerObject(sphere);
+
+        sphere = MeshObject{
+            .mesh = self.meshes.getPtr("sphere").?,
+            .material = self.material_system.getMaterial("white_tex").?,
+            .custom_sort_key = 0,
+            .transform_matrix = Mat4.createTranslation(.{ .x = 0, .y = 0, .z = 5 }),
+            .bounds = self.meshes.getPtr("sphere").?.bounds,
+            .draw_forward_pass = true,
+            .draw_shadow_pass = true,
+        };
+        sphere.refreshRenderBounds();
+        _ = try self.render_scene.registerObject(sphere);
     }
 
     fn draw(self: *Self, frame: *FrameData) !void {
@@ -906,7 +931,7 @@ pub const Engine = struct {
             .projmat = self.camera.getProjMatrix(self.swapchain.extent),
             .viewmat = self.camera.getViewMatrix(),
             .frustum_cull = true,
-            .occlusion_cull = true,
+            .occlusion_cull = false,
             .aabb = false,
         };
         try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.forward_pass, forward_cull);

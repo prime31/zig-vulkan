@@ -196,6 +196,24 @@ pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass)
     const proj = self.camera.getProjMatrix(self.swapchain.extent);
     const view_proj = Mat4.mul(proj, view);
 
+
+    // std.debug.print("cam pos: {}, cam dir: {}\n", .{ self.camera.pos, self.camera.front });
+    // const cam_inv_view = view.inv();
+    // std.debug.print("cam inv pos: {}\n", .{ Vec3.new(0, 0, 0).transform(cam_inv_view) });
+
+    // const pt1 = Vec3.new(0, 0, 0);
+    // const pt1v = pt1.transform(view);
+    // std.debug.print("pt1: {} -> v: {}. da fook: {}\n", .{ pt1, pt1v, self.camera.pos.z + pt1v.z });
+
+    // const pt2 = Vec3.new(0, 0, -5);
+    // const pt2v = pt2.transform(view);
+    // std.debug.print("pt2: {} -> v: {}. da fook: {}\n", .{ pt2, pt2v, self.camera.pos.z + pt2v.z });
+
+    // const pt3 = Vec3.new(0, 0, 3);
+    // const pt3v = pt3.transform(view);
+    // std.debug.print("pt3: {} -> v: {}. da fook: {}\n", .{ pt3, pt3v, self.camera.pos.z + pt3v.z });
+
+
     // fill a GPU camera data struct
     const cam_data = vkutil.GpuCameraData{
         .view = view,

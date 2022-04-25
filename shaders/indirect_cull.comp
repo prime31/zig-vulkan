@@ -80,7 +80,8 @@ layout (set = 0, binding = 3) buffer InstanceBuffer3 {
 
 // 2D Polyhedral Bounds of a Clipped, Perspective-Projected 3D Sphere. Michael Mara, Morgan McGuire. 2013
 bool projectSphere(vec3 C, float r, float znear, float P00, float P11, out vec4 aabb) {
-	if (C.z < r + znear)
+	// if we intersect the near plane consider it visible
+	if (C.z + r < znear)
 		return false;
 
 	vec2 cx = -C.xz;
@@ -114,7 +115,7 @@ bool IsVisible(uint objectIndex) {
 	bool visible = true;
 
 	// the left/top/right/bottom plane culling utilizes frustum symmetry to cull against two planes at the same time
-	visible = visible && center.z * cullData.frustum[1] - abs(center.x) * cullData.frustum[0] > -radius;
+	visible = center.z * cullData.frustum[1] - abs(center.x) * cullData.frustum[0] > -radius;
 	visible = visible && center.z * cullData.frustum[3] - abs(center.y) * cullData.frustum[2] > -radius;
 
 	// TODO: fix this. why does z end up being negative after view transformation
@@ -123,19 +124,19 @@ bool IsVisible(uint objectIndex) {
 		// the near/far plane culling uses camera space Z directly
 		visible = center.z + radius > cullData.znear && center.z - radius < cullData.zfar;
 	}
-	center.z *= -1;
+	// center.z *= -1;
 
 
 	visible = visible || cullData.frustumCullingEnabled == 0;
 
 	// flip Y because we access depth texture that way
-	// center.y *= -1;
+	center.y *= -1;
 
 	if (visible && cullData.occlusionEnabled != 0) {
 		vec4 aabb;
 		if (projectSphere(center, radius, cullData.znear, cullData.P00, cullData.P11, aabb)) {
 			float width = (aabb.z - aabb.x) * cullData.pyramidWidth;
-			float height = (aabb.w - aabb.y) * cullData.pyramidHeight;
+			float height = (aabb.y - aabb.w) * cullData.pyramidHeight;
 
 			float level = floor(log2(max(width, height)));
 
@@ -143,7 +144,7 @@ bool IsVisible(uint objectIndex) {
 			float depth = textureLod(depthPyramid, (aabb.xy + aabb.zw) * 0.5, level).x;
 			float depthSphere = cullData.znear / (center.z - radius);
 
-			visible = visible && depthSphere >= depth;
+			visible = visible && depthSphere >= 1.0 - depth;
 		}
 	}
 
