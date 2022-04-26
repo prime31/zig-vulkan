@@ -4,8 +4,8 @@
 
 ## TODO
 - why doesnt znear/zfar clip anything?
-- distance culling is fucked up. Seems inverse view matrix is required?
 - occlusion culling is jacked up
+- x64 indirect draw calls dont work until the Metal debugger captures frames...
 
 
 - other math lib [cglm](https://github.com/recp/cglm)

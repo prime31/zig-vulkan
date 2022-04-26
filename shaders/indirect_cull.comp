@@ -81,7 +81,7 @@ layout (set = 0, binding = 3) buffer InstanceBuffer3 {
 // 2D Polyhedral Bounds of a Clipped, Perspective-Projected 3D Sphere. Michael Mara, Morgan McGuire. 2013
 bool projectSphere(vec3 C, float r, float znear, float P00, float P11, out vec4 aabb) {
 	// if we intersect the near plane consider it visible
-	if (C.z + r < znear)
+	if (C.z - r < znear)
 		return false;
 
 	vec2 cx = -C.xz;
@@ -150,7 +150,7 @@ bool IsVisible(uint objectIndex) {
 			float d3 = textureLod(depthPyramid, aabb.xw, level).x;
 			float d4 = textureLod(depthPyramid, aabb.zw, level).x;
 			float depth = max(max(d1, d2), max(d3, d4));
-			
+
 			float depthSphere = cullData.znear / (center.z - radius);
 
 			visible = visible && depthSphere >= 1.0 - depth;
