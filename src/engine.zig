@@ -931,7 +931,7 @@ pub const Engine = struct {
             .projmat = self.camera.getProjMatrix(self.swapchain.extent),
             .viewmat = self.camera.getViewMatrix(),
             .frustum_cull = true,
-            .occlusion_cull = false,
+            .occlusion_cull = true,
             .aabb = false,
         };
         try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.forward_pass, forward_cull);

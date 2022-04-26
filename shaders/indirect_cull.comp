@@ -138,10 +138,19 @@ bool IsVisible(uint objectIndex) {
 			float width = (aabb.z - aabb.x) * cullData.pyramidWidth;
 			float height = (aabb.y - aabb.w) * cullData.pyramidHeight;
 
+			// TODO: ceil results in less flicker but doesnt seem to cull as much as floor
 			float level = floor(log2(max(width, height)));
 
+			// we dont have access to filter minmax on macos so we cant use this technique
 			// Sampler is set up to do min reduction, so this computes the minimum depth of a 2x2 texel quad
-			float depth = textureLod(depthPyramid, (aabb.xy + aabb.zw) * 0.5, level).x;
+			// float depth = textureLod(depthPyramid, (aabb.xy + aabb.zw) * 0.5, level).x;
+
+			float d1 = textureLod(depthPyramid, aabb.xy, level).x;
+			float d2 = textureLod(depthPyramid, aabb.zy, level).x;
+			float d3 = textureLod(depthPyramid, aabb.xw, level).x;
+			float d4 = textureLod(depthPyramid, aabb.zw, level).x;
+			float depth = max(max(d1, d2), max(d3, d4));
+			
 			float depthSphere = cullData.znear / (center.z - radius);
 
 			visible = visible && depthSphere >= 1.0 - depth;
