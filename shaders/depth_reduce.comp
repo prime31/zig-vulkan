@@ -18,6 +18,6 @@ void main() {
 	// float depth = texture(inImage, (vec2(pos) + vec2(0.5)) / imageSize).x;
 
 	vec4 depths = textureGather(inImage, (vec2(pos) + vec2(0.5)) / imageSize);
-	float max_depth = max(max(depths.x, depths.y), max(depths.z, depths.w));
+	float max_depth = min(min(depths.x, depths.y), min(depths.z, depths.w));
 	imageStore(outImage, ivec2(pos), vec4(max_depth));
 }

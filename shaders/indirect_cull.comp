@@ -78,10 +78,29 @@ layout (set = 0, binding = 3) buffer InstanceBuffer3 {
 } finalInstanceBuffer;
 
 
+float linearizeDepth(float depth) {
+    float z = depth * 2.0 - 1.0; // back to NDC
+    return (2.0 * cullData.znear * cullData.zfar) / (cullData.zfar + cullData.znear - z * (cullData.zfar - cullData.znear));
+}
+
+// depthSample from depthTexture.r, for instance
+float linearDepth(float depthSample) {
+    depthSample = 2.0 * depthSample - 1.0;
+    float zLinear = 2.0 * cullData.znear * cullData.zfar / (cullData.zfar + cullData.znear - depthSample * (cullData.zfar - cullData.znear));
+    return zLinear;
+}
+
+// result suitable for assigning to gl_FragDepth
+float depthSample(float linearDepth) {
+    float nonLinearDepth = (cullData.zfar + cullData.znear - 2.0 * cullData.znear * cullData.zfar / linearDepth) / (cullData.zfar - cullData.znear);
+    nonLinearDepth = (nonLinearDepth + 1.0) / 2.0;
+    return nonLinearDepth;
+}
+
 // 2D Polyhedral Bounds of a Clipped, Perspective-Projected 3D Sphere. Michael Mara, Morgan McGuire. 2013
 bool projectSphere(vec3 C, float r, float znear, float P00, float P11, out vec4 aabb) {
 	// if we intersect the near plane consider it visible
-	if (C.z + r < znear) // TODO: this culls objects that intersect znear like the terrain
+	if (C.z < r + znear) // TODO: this culls objects that intersect znear like the terrain
 		return false;
 
 	vec2 cx = -C.xz;
@@ -144,11 +163,28 @@ bool IsVisible(uint objectIndex) {
 			float d2 = textureLod(depthPyramid, aabb.zy, level).x;
 			float d3 = textureLod(depthPyramid, aabb.xw, level).x;
 			float d4 = textureLod(depthPyramid, aabb.zw, level).x;
-			float depth = max(max(d1, d2), max(d3, d4));
+			float depth = max(max(d1, d2), max(d3, d4)); // TODO: should this be a min?
 
 			float depthSphere = cullData.znear / (center.z - radius);
 
-			visible = visible && depthSphere >= 1.0 - depth;
+			// linearize the depth value. attempt to get depth into camera space
+			float n = cullData.znear;
+			float f = cullData.zfar;
+			float z = (2 * n * f) / (f + n - depth * (f - n));
+			float z2 = (n * f) / (f - depth * (f - n));
+
+			float otherZ = linearizeDepth(depth);
+
+			float depthToCamera = linearDepth(depth);
+
+			// ??? center - radius is closest point in z-dir. If that is closer then depth we are visible. Probably the maxes above should be mins for that?
+			float glFragDepth = depthSample(center.z - radius);
+
+			// TODO: fix all this shit
+			// visible = visible && depthSphere >= 1.0 - depth;
+			// visible = visible && z >= depthSphere;
+			// visible = visible && otherZ <= z || depthSphere >= 1.0 - depth;
+			visible = visible && glFragDepth < depth;
 		}
 	}
 

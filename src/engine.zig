@@ -551,8 +551,8 @@ pub const Engine = struct {
 
         const reduction_mode: vk.SamplerReductionMode = .min;
         const create_info = std.mem.zeroInit(vk.SamplerCreateInfo, .{
-            .mag_filter = .linear,
-            .min_filter = .linear,
+            .mag_filter = .nearest,
+            .min_filter = .nearest,
             .mipmap_mode = .nearest,
             .address_mode_u = .clamp_to_edge,
             .address_mode_v = .clamp_to_edge,
