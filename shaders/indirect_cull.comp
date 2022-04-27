@@ -81,7 +81,7 @@ layout (set = 0, binding = 3) buffer InstanceBuffer3 {
 // 2D Polyhedral Bounds of a Clipped, Perspective-Projected 3D Sphere. Michael Mara, Morgan McGuire. 2013
 bool projectSphere(vec3 C, float r, float znear, float P00, float P11, out vec4 aabb) {
 	// if we intersect the near plane consider it visible
-	if (C.z - r < znear)
+	if (C.z + r < znear) // TODO: this culls objects that intersect znear like the terrain
 		return false;
 
 	vec2 cx = -C.xz;
@@ -93,7 +93,6 @@ bool projectSphere(vec3 C, float r, float znear, float P00, float P11, out vec4 
 	vec2 vy = vec2(sqrt(dot(cy, cy) - r * r), r);
 	vec2 miny = mat2(vy.x, vy.y, -vy.y, vy.x) * cy;
 	vec2 maxy = mat2(vy.x, -vy.y, vy.y, vy.x) * cy;
-
 	aabb = vec4(minx.x / minx.y * P00, miny.x / miny.y * P11, maxx.x / maxx.y * P00, maxy.x / maxy.y * P11);
 	aabb = aabb.xwzy * vec4(0.5f, -0.5f, 0.5f, -0.5f) + vec4(0.5f); // clip space -> uv space
 
@@ -109,9 +108,6 @@ bool IsVisible(uint objectIndex) {
 	center = (cullData.view * vec4(center, 1.f)).xyz;
 	float radius = sphereBounds.w;
 
-	float da_fook_z = sphereBounds.z;
-	float fooker_z = center.z;
-
 	bool visible = true;
 
 	// the left/top/right/bottom plane culling utilizes frustum symmetry to cull against two planes at the same time
@@ -124,13 +120,12 @@ bool IsVisible(uint objectIndex) {
 		// the near/far plane culling uses camera space Z directly
 		visible = center.z + radius > cullData.znear && center.z - radius < cullData.zfar;
 	}
-	// center.z *= -1;
 
 
 	visible = visible || cullData.frustumCullingEnabled == 0;
 
 	// flip Y because we access depth texture that way
-	center.y *= -1;
+	center.y *= -1; // TODO: really?
 
 	if (visible && cullData.occlusionEnabled != 0) {
 		vec4 aabb;
