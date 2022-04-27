@@ -747,7 +747,7 @@ pub const Engine = struct {
         tri_mesh.recalculateBounds();
 
         // var monkey_mesh = try Mesh.initFromAsset(gpa, "/Users/desaro/zig-vulkan/zig-cache/baked_assets/monkey_flat.mesh");
-        var monkey_mesh = try Mesh.initFromObj(gpa, "src/chapters/monkey_flat.obj");
+        var monkey_mesh = try Mesh.initFromObj(gpa, "src/chapters/monkey_smooth.obj");
         var cube_thing_mesh = try Mesh.initFromObj(gpa, "src/chapters/cube_thing.obj");
         var cube = try Mesh.initFromObj(gpa, "src/chapters/cube.obj");
         var lost_empire = try Mesh.initFromObj(gpa, "src/chapters/lost_empire.obj");
