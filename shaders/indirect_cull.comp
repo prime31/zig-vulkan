@@ -100,7 +100,7 @@ float depthSample(float linearDepth) {
 // 2D Polyhedral Bounds of a Clipped, Perspective-Projected 3D Sphere. Michael Mara, Morgan McGuire. 2013
 bool projectSphere(vec3 C, float r, float znear, float P00, float P11, out vec4 aabb) {
 	// if we intersect the near plane consider it visible
-	if (C.z < r + znear) // TODO: this culls objects that intersect znear like the terrain
+	if (C.z + r < znear) //if (C.z < r + znear) // TODO: this culls objects that intersect znear like the terrain
 		return false;
 
 	vec2 cx = -C.xz;
@@ -167,6 +167,7 @@ bool IsVisible(uint objectIndex) {
 			float depthMin = min(min(d1, d2), min(d3, d4));
 
 			float depthSphere = cullData.znear / (center.z - radius);
+			visible = visible && depthSphere >= 1.0 - depth;
 
 			// linearize the depth value. attempt to get depth into camera space
 			float n = cullData.znear;
@@ -182,20 +183,20 @@ bool IsVisible(uint objectIndex) {
 			float glFragDepth = depthSample(center.z - radius);
 
 			// TODO: fix all this shit
-			visible = visible && depthSphere >= 1.0 - depth;
+			// visible = visible && depthSphere >= 1.0 - depth;
 			// visible = visible && z >= depthSphere;
 			// visible = visible && otherZ <= z || depthSphere >= 1.0 - depth;
 			// visible = visible && glFragDepth < depth;
 
 			// float sphereCenterToClip = glFragDepth;
-			// float clipDepthToCamera = linearDepth(depthMin);
+			float clipDepthToCamera = linearDepth(depthMin);
 
-			// float clipFragMin = depthSample(center.z - radius);
-			// float clipFragMax = depthSample(center.z + radius);
-			// bool passes1 = clipFragMin < depthMin;
+			float clipFragMin = depthSample(center.z - radius);
+			float clipFragMax = depthSample(center.z + radius);
+			bool passes1 = clipFragMin < depthMin;
 
-			// bool passes2 = (center.z - radius) < clipDepthToCamera;
-			// bool passes3 = depthSphere >= 1.0 - depth;
+			bool passes2 = (center.z - radius) < clipDepthToCamera;
+			bool passes3 = depthSphere >= 1.0 - depth;
 			// visible = visible && depthSphere >= 1.0 - depth;
 
 			// float throwaway = clipFragMax - clipFragMin;

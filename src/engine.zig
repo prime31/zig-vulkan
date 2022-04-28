@@ -550,7 +550,7 @@ pub const Engine = struct {
         try self.gc.endOneTimeCommandBuffer();
 
         const reduction_mode: vk.SamplerReductionMode = .min;
-        const create_info = std.mem.zeroInit(vk.SamplerCreateInfo, .{
+        var create_info = std.mem.zeroInit(vk.SamplerCreateInfo, .{
             .mag_filter = .nearest,
             .min_filter = .nearest,
             .mipmap_mode = .nearest,
@@ -561,6 +561,7 @@ pub const Engine = struct {
             .max_lod = 16,
         });
 
+        // TODO: cant use this on macos due to no VK_EXT_sampler_filter_minmax
         if (reduction_mode != .min) {
             const create_info_reduction = vk.SamplerReductionModeCreateInfoEXT{ .reduction_mode = vk.SamplerReductionMode.weighted_average };
             create_info.p_next = &create_info_reduction;
