@@ -164,6 +164,7 @@ bool IsVisible(uint objectIndex) {
 			float d3 = textureLod(depthPyramid, aabb.xw, level).x;
 			float d4 = textureLod(depthPyramid, aabb.zw, level).x;
 			float depth = max(max(d1, d2), max(d3, d4)); // TODO: should this be a min?
+			float depthMin = min(min(d1, d2), min(d3, d4));
 
 			float depthSphere = cullData.znear / (center.z - radius);
 
@@ -181,10 +182,23 @@ bool IsVisible(uint objectIndex) {
 			float glFragDepth = depthSample(center.z - radius);
 
 			// TODO: fix all this shit
-			// visible = visible && depthSphere >= 1.0 - depth;
+			visible = visible && depthSphere >= 1.0 - depth;
 			// visible = visible && z >= depthSphere;
 			// visible = visible && otherZ <= z || depthSphere >= 1.0 - depth;
-			visible = visible && glFragDepth < depth;
+			// visible = visible && glFragDepth < depth;
+
+			// float sphereCenterToClip = glFragDepth;
+			// float clipDepthToCamera = linearDepth(depthMin);
+
+			// float clipFragMin = depthSample(center.z - radius);
+			// float clipFragMax = depthSample(center.z + radius);
+			// bool passes1 = clipFragMin < depthMin;
+
+			// bool passes2 = (center.z - radius) < clipDepthToCamera;
+			// bool passes3 = depthSphere >= 1.0 - depth;
+			// visible = visible && depthSphere >= 1.0 - depth;
+
+			// float throwaway = clipFragMax - clipFragMin;
 		}
 	}
 
