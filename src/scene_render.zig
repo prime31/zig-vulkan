@@ -341,7 +341,7 @@ fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, ob
             // bind the mesh vertex buffer with offset 0
             offset = 0;
             self.gc.vkd.cmdBindVertexBuffers(cmd, 0, 1, vkutil.ptrToMany(&lm.vert_buffer.buffer), vkutil.ptrToMany(&offset));
-            if (lm.vert_buffer.buffer != .null_handle)
+            if (lm.index_buffer.buffer != .null_handle)
                 self.gc.vkd.cmdBindIndexBuffer(cmd, lm.index_buffer.buffer, 0, .uint32);
             last_mesh = draw_mesh;
         };
@@ -510,7 +510,7 @@ fn executeDrawCommandsNonIndexed(self: *Engine, cmd: vk.CommandBuffer, pass: *Me
             // bind the mesh vertex buffer with offset 0
             offset = 0;
             self.gc.vkd.cmdBindVertexBuffers(cmd, 0, 1, vkutil.ptrToMany(&draw_mesh.vert_buffer.buffer), vkutil.ptrToMany(&offset));
-            if (draw_mesh.vert_buffer.buffer != .null_handle)
+            if (draw_mesh.index_buffer.buffer != .null_handle)
                 self.gc.vkd.cmdBindIndexBuffer(cmd, draw_mesh.index_buffer.buffer, 0, .uint32);
             last_mesh = draw_mesh;
         }
