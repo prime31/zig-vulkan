@@ -20,8 +20,10 @@ const RenderBounds = @import("mesh.zig").RenderBounds;
 const Vertex = @import("mesh.zig").Vertex;
 const Allocator = std.mem.Allocator;
 
-const MeshObject = @import("render_scene.zig").MeshObject;
+const Handle = @import("render_scene.zig").Handle;
 const MeshPass = @import("render_scene.zig").MeshPass;
+const MeshObject = @import("render_scene.zig").MeshObject;
+const RenderObject = @import("render_scene.zig").RenderObject;
 const GpuIndirectObject = @import("render_scene.zig").GpuIndirectObject;
 const FlyCamera = @import("chapters/FlyCamera.zig");
 const GpuCameraData = vkutil.GpuCameraData;
@@ -154,6 +156,23 @@ pub const FrameData = struct {
 
 var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
 const gpa = general_purpose_allocator.allocator();
+
+
+const ObjectShit = struct {
+    handle: Handle(RenderObject),
+    pos: Vec3,
+    scale: f32,
+
+    pub fn init(handle: Handle(RenderObject), posx: f32, posy: f32, posz: f32, scale: f32) ObjectShit {
+        return .{ .handle = handle, .pos = Vec3.new(posx, posy, posz), .scale = scale };
+    }
+
+    pub fn getTransform(self: ObjectShit) Mat4 {
+        const mat = Mat4.createTranslation(self.pos);
+        return mat.mul(Mat4.createScale(Vec3.new(self.scale, self.scale, self.scale)));
+    }
+};
+var objects: std.ArrayList(ObjectShit) = undefined;
 
 pub const Engine = struct {
     const Self = @This();
@@ -798,6 +817,8 @@ pub const Engine = struct {
         var mat_info = vkutil.MaterialData.init(self.gc.gpa, "colored_opaque");
         _ = try self.material_system.buildMaterial("opaque", mat_info);
 
+        objects = std.ArrayList(ObjectShit).init(gpa);
+
         var x: f32 = 0;
         while (x < 20) : (x += 1) {
             var y: f32 = 0;
@@ -815,7 +836,8 @@ pub const Engine = struct {
                     .draw_shadow_pass = true,
                 };
                 tri.refreshRenderBounds();
-                _ = try self.render_scene.registerObject(tri);
+                // _ = try self.render_scene.registerObject(tri);
+                try objects.append(ObjectShit.init(try self.render_scene.registerObject(tri), x, 0, y, 0.3));
             }
         }
 
@@ -897,6 +919,11 @@ pub const Engine = struct {
     }
 
     fn draw(self: *Self, frame: *FrameData) !void {
+        for (objects.items) |*obj| {
+            obj.pos.y += 0.01;
+            self.render_scene.updateTransform(obj.handle, obj.getTransform());
+        }
+
         self.main_light.drawImGuiEditor();
 
         if (ig.ogButton("Hot Reload Textured Lit Shader")) {

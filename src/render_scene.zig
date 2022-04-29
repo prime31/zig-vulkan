@@ -106,7 +106,7 @@ pub const RenderScene = struct {
 
     pub fn updateTransform(self: *Self, object_id: Handle(RenderObject), local_to_world: Mat4) void {
         self.getObject(object_id).*.transform_matrix = local_to_world;
-        self.updateObject(object_id);
+        self.updateObject(object_id) catch unreachable;
     }
 
     pub fn updateObject(self: *Self, object_id: Handle(RenderObject)) !void {
@@ -275,7 +275,8 @@ pub const RenderScene = struct {
                 const contains_closure = struct {
                     pub fn contains(slice: []RenderBatch, value: RenderBatch) bool {
                         for (slice) |rb| {
-                            if (rb.eql(value)) return true;
+                            // if (rb.eql(value)) return true; // TODO: why is sort_key not matching here?
+                            if (rb.object.handle == value.object.handle) return true;
                         }
                         return false;
                     }
@@ -288,6 +289,7 @@ pub const RenderScene = struct {
                     if (!contains_closure(deletion_batches.items, fb_batch))
                         try new_batches.append(fb_batch);
                 }
+
                 pass.flat_batches.deinit();
                 pass.flat_batches = new_batches;
             }

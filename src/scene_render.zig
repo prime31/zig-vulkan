@@ -86,7 +86,7 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
     if (self.render_scene.dirty_objects.items.len > 0) {
         const copy_size = self.render_scene.renderables.items.len * @sizeOf(GpuObjectData);
         if (self.render_scene.object_data_buffer.size < copy_size) {
-            self.render_scene.object_data_buffer.deinit(self.gc.vma);
+            frame.deletion_queue.append(self.render_scene.object_data_buffer.asUntypedBuffer());
             self.render_scene.object_data_buffer = try self.gc.vma.createBuffer(GpuObjectData, copy_size, .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .auto_prefer_host, .{});
         }
 
@@ -126,17 +126,18 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
     for (passes) |pass| {
         // reallocate the gpu side buffers if needed
         if (pass.draw_indirect_buffer.size < pass.batches.items.len * @sizeOf(GpuIndirectObject)) {
-            pass.draw_indirect_buffer.deinit(self.gc.vma);
+            frame.deletion_queue.append(pass.draw_indirect_buffer.asUntypedBuffer());
             pass.draw_indirect_buffer = try self.gc.vma.createBuffer(GpuIndirectObject, pass.batches.items.len * @sizeOf(GpuIndirectObject), .{ .transfer_dst_bit = true, .storage_buffer_bit = true, .indirect_buffer_bit = true }, .auto_prefer_device, .{});
         }
 
         if (pass.compacted_instance_buffer.size < pass.flat_batches.items.len * @sizeOf(u32)) {
-            pass.compacted_instance_buffer.deinit(self.gc.vma);
+            frame.deletion_queue.append(pass.compacted_instance_buffer.asUntypedBuffer());
             pass.compacted_instance_buffer = try self.gc.vma.createBuffer(u32, pass.flat_batches.items.len * @sizeOf(u32), .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .auto_prefer_device, .{});
         }
 
         if (pass.pass_objects_buffer.size < pass.flat_batches.items.len * @sizeOf(GpuInstance)) {
-            pass.pass_objects_buffer.deinit(self.gc.vma);
+            // pass.pass_objects_buffer.deinit(self.gc.vma);
+            frame.deletion_queue.append(pass.pass_objects_buffer.asUntypedBuffer());
             pass.pass_objects_buffer = try self.gc.vma.createBuffer(GpuInstance, pass.flat_batches.items.len * @sizeOf(GpuInstance), .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .auto_prefer_device, .{});
         }
     }
@@ -291,7 +292,7 @@ pub fn drawObjectsShadow(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass) 
 fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, obj_data_set: vk.DescriptorSet, dyn_offsets: []const u32, global_set: vk.DescriptorSet) !void {
     if (pass.batches.items.len == 0) return;
 
-    // HACK: just to get x64 functional
+    // HACK: just to get x64 functional for now since it gets confused with indirect drawing.
     if (@import("builtin").os.tag == .macos and @import("builtin").target.cpu.arch == std.Target.Cpu.Arch.x86_64) {
         try executeDrawCommandsNonIndexed(self, cmd, pass, obj_data_set, dyn_offsets, global_set);
         return;
