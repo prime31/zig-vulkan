@@ -157,14 +157,19 @@ pub const FrameData = struct {
 var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
 const gpa = general_purpose_allocator.allocator();
 
-
 const ObjectShit = struct {
     handle: Handle(RenderObject),
+    vel: f32 = 0.01,
     pos: Vec3,
     scale: f32,
 
     pub fn init(handle: Handle(RenderObject), posx: f32, posy: f32, posz: f32, scale: f32) ObjectShit {
         return .{ .handle = handle, .pos = Vec3.new(posx, posy, posz), .scale = scale };
+    }
+
+    pub fn update(self: *ObjectShit) void {
+        self.pos.y += self.vel;
+        if (self.pos.y > 2 or self.pos.y < 0) self.vel *= -1;
     }
 
     pub fn getTransform(self: ObjectShit) Mat4 {
@@ -309,7 +314,7 @@ pub const Engine = struct {
     }
 
     pub fn deinit(self: *Self) void {
-         @import("zmesh").deinit();
+        @import("zmesh").deinit();
         self.gc.vkd.deviceWaitIdle(self.gc.dev) catch unreachable;
 
         igvk.shutdown();
@@ -892,7 +897,6 @@ pub const Engine = struct {
         viking_room.refreshRenderBounds();
         _ = try self.render_scene.registerObject(viking_room);
 
-
         sphere = MeshObject{
             .mesh = self.meshes.getPtr("sphere").?,
             .material = self.material_system.getMaterial("white_tex").?,
@@ -919,9 +923,11 @@ pub const Engine = struct {
     }
 
     fn draw(self: *Self, frame: *FrameData) !void {
-        for (objects.items) |*obj| {
-            obj.pos.y += 0.01;
-            self.render_scene.updateTransform(obj.handle, obj.getTransform());
+        if (self.window.getKey(.b) == .press) {
+            for (objects.items) |*obj| {
+                obj.update();
+                self.render_scene.updateTransform(obj.handle, obj.getTransform());
+            }
         }
 
         self.main_light.drawImGuiEditor();
