@@ -147,6 +147,7 @@ bool IsVisible(uint objectIndex) {
 	center.y *= -1; // TODO: really?
 
 	if (visible && cullData.occlusionEnabled != 0) {
+		// TODO: perhaps try using AABB directly: https://interplayoflight.wordpress.com/2017/11/15/experiments-in-gpu-based-occlusion-culling/
 		vec4 aabb;
 		if (projectSphere(center, radius, cullData.znear, cullData.P00, cullData.P11, aabb)) {
 			float width = (aabb.z - aabb.x) * cullData.pyramidWidth;
