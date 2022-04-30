@@ -136,7 +136,6 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
         }
 
         if (pass.pass_objects_buffer.size < pass.flat_batches.items.len * @sizeOf(GpuInstance)) {
-            // pass.pass_objects_buffer.deinit(self.gc.vma);
             frame.deletion_queue.append(pass.pass_objects_buffer.asUntypedBuffer());
             pass.pass_objects_buffer = try self.gc.vma.createBuffer(GpuInstance, pass.flat_batches.items.len * @sizeOf(GpuInstance), .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .auto_prefer_device, .{});
         }
@@ -294,7 +293,7 @@ fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, ob
 
     // HACK: just to get x64 functional for now since it gets confused with indirect drawing.
     if (@import("builtin").os.tag == .macos and @import("builtin").target.cpu.arch == std.Target.Cpu.Arch.x86_64) {
-        try executeDrawCommandsNonIndexed(self, cmd, pass, obj_data_set, dyn_offsets, global_set);
+        try executeDrawCommandsIndexedNonIndirect(self, cmd, pass, obj_data_set, dyn_offsets, global_set);
         return;
     }
 
@@ -346,9 +345,9 @@ fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, ob
             last_mesh = draw_mesh;
         };
 
-        // TODO: why would we ever have 0 indices and wouldnt that cause issues with mesh merging method?
+        // TODO: why would we ever have 0 indices and wouldnt that cause issues with mesh merging method? Also, this draw call isnt right. Probably object data index is off...
         if (draw_mesh.indices.len == 0) {
-            self.gc.vkd.cmdDraw(cmd, @intCast(u32, draw_mesh.vertices.items.len), instance_draw.count, 0, instance_draw.first);
+            self.gc.vkd.cmdDrawIndexed(cmd, @intCast(u32, draw_mesh.indices.len), instance_draw.count, 0, 0, instance_draw.first);
         } else {
             self.gc.vkd.cmdDrawIndexedIndirect(cmd, pass.draw_indirect_buffer.buffer, multibatch.first * @sizeOf(GpuIndirectObject), multibatch.count, @sizeOf(GpuIndirectObject));
         }
@@ -516,5 +515,76 @@ fn executeDrawCommandsNonIndexed(self: *Engine, cmd: vk.CommandBuffer, pass: *Me
         }
 
         self.gc.vkd.cmdDrawIndexed(cmd, @intCast(u32, draw_mesh.indices.len), 1, 0, 0, @intCast(u32, i));
+    }
+}
+
+fn executeDrawCommandsIndexedNonIndirect(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, obj_data_set: vk.DescriptorSet, dyn_offsets: []const u32, global_set: vk.DescriptorSet) !void {
+    if (pass.batches.items.len == 0) return;
+
+    var da_fook = try pass.draw_indirect_buffer.mapMemory(self.gc.vma);
+    defer pass.draw_indirect_buffer.unmapMemory(self.gc.vma);
+
+    for (da_fook[0..pass.batches.items.len]) |indirect_obj| {
+        _ = indirect_obj;
+    }
+
+    var last_mesh: ?*Mesh = null;
+    var last_pip: vk.Pipeline = .null_handle;
+    var last_material_set: vk.DescriptorSet = .null_handle;
+
+    var offset: vk.DeviceSize = 0;
+    self.gc.vkd.cmdBindVertexBuffers(cmd, 0, 1, vkutil.ptrToMany(&self.render_scene.merged_vert_buffer.buffer), vkutil.ptrToMany(&offset));
+    self.gc.vkd.cmdBindIndexBuffer(cmd, self.render_scene.merged_index_buffer.buffer, 0, .uint32);
+
+    for (pass.multibatches.items) |*multibatch| {
+        const instance_draw = pass.batches.items[multibatch.first];
+
+        const new_pip = instance_draw.material.shader_pass.pip;
+        const new_layout = instance_draw.material.shader_pass.pip_layout;
+        const new_material_set = instance_draw.material.material_set;
+
+        var draw_mesh = self.render_scene.getMesh(instance_draw.mesh_id).original;
+
+        if (new_pip != last_pip) {
+            last_pip = new_pip;
+            self.gc.vkd.cmdBindPipeline(cmd, .graphics, last_pip);
+            self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, new_layout, 1, 1, vkutil.ptrToMany(&obj_data_set), 0, undefined);
+
+            // update dynamic binds
+            self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, new_layout, 0, 1, vkutil.ptrToMany(&global_set), @intCast(u32, dyn_offsets.len), dyn_offsets.ptr);
+        }
+
+        // set 3 is optional, not defined by the system
+        if (new_material_set != last_material_set and new_material_set != .null_handle) {
+            last_material_set = new_material_set;
+            self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, new_layout, 2, 1, vkutil.ptrToMany(&new_material_set), 0, undefined);
+        }
+
+        if (self.render_scene.getMesh(instance_draw.mesh_id).is_merged) {
+            if (last_mesh != null) {
+                offset = 0;
+                self.gc.vkd.cmdBindVertexBuffers(cmd, 0, 1, vkutil.ptrToMany(&self.render_scene.merged_vert_buffer.buffer), vkutil.ptrToMany(&offset));
+                self.gc.vkd.cmdBindIndexBuffer(cmd, self.render_scene.merged_index_buffer.buffer, 0, .uint32);
+                last_mesh = null;
+            }
+        } else if (last_mesh) |lm| if (lm != draw_mesh) {
+            // bind the mesh vertex buffer with offset 0
+            offset = 0;
+            self.gc.vkd.cmdBindVertexBuffers(cmd, 0, 1, vkutil.ptrToMany(&lm.vert_buffer.buffer), vkutil.ptrToMany(&offset));
+            if (lm.index_buffer.buffer != .null_handle)
+                self.gc.vkd.cmdBindIndexBuffer(cmd, lm.index_buffer.buffer, 0, .uint32);
+            last_mesh = draw_mesh;
+        };
+
+        // TODO: why would we ever have 0 indices and wouldnt that cause issues with mesh merging method? Also, this draw call isnt right. Probably object data index is off...
+        if (draw_mesh.indices.len == 0) {
+            self.gc.vkd.cmdDrawIndexed(cmd, @intCast(u32, draw_mesh.indices.len), instance_draw.count, 0, 0, instance_draw.first);
+        } else {
+            for (da_fook[multibatch.first..multibatch.first + multibatch.count]) |indirect_batch| {
+                if (indirect_batch.command.instance_count == 0) continue;
+                // std.debug.print("indirect_batch: {}\n", .{ indirect_batch });
+                self.gc.vkd.cmdDrawIndexed(cmd, indirect_batch.command.index_count, indirect_batch.command.instance_count, indirect_batch.command.first_index, indirect_batch.command.vertex_offset, indirect_batch.command.first_instance);
+            }
+        }
     }
 }

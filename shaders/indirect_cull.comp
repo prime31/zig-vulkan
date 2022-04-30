@@ -133,7 +133,7 @@ bool IsVisible(uint objectIndex) {
 	visible = center.z * cullData.frustum[1] - abs(center.x) * cullData.frustum[0] > -radius;
 	visible = visible && center.z * cullData.frustum[3] - abs(center.y) * cullData.frustum[2] > -radius;
 
-	// TODO: fix this. why does z end up being negative after view transformation
+	// TODO: fix this. why does z end up being negative after view transformation. Is this just OpenGL camera looking down -z?
 	center.z *= -1;
 	if (visible) {
 		// the near/far plane culling uses camera space Z directly
