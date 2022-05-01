@@ -2,7 +2,6 @@ const std = @import("std");
 
 // include all files with tests
 comptime {
-    _ = @import("utils/cvars.zig");
     _ = @import("utils/scratch_allocator.zig");
 
     _ = @import("vk_util/deletion_queue.zig");

@@ -59,7 +59,7 @@ const DrawCullData = extern struct {
             .p00 = params.projmat.fields[0][0],
             .p11 = params.projmat.fields[1][1],
             .znear = 0.1,
-            .zfar = config.draw_distance.get(),
+            .zfar = config.draw_distance,
             .frustum = [4]f32{ frustum_x.x, frustum_x.z, frustum_y.y, frustum_y.z },
             .pyramid_width = undefined,
             .pyramid_height = undefined,
@@ -210,7 +210,7 @@ pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass)
     self.scene_params.sun_shadow_mat = self.main_light.getProjMatrix().mul(self.main_light.getViewMatrix());
     self.scene_params.sun_dir = Vec4.fromVec3(self.main_light.light_dir, 1);
     self.scene_params.sun_color = Vec4.new(1, 1, 1, 1);
-    self.scene_params.sun_color.w = if (config.shadowcast.get()) 0 else 1;
+    self.scene_params.sun_color.w = if (config.shadowcast) 0 else 1;
 
     const scene_data_offset = frame.dynamic_data.push(@TypeOf(self.scene_params), self.scene_params);
     const camera_data_offset = frame.dynamic_data.push(vkutil.GpuCameraData, cam_data);
@@ -355,7 +355,7 @@ fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, ob
 }
 
 pub fn executeComputeCull(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, params: vkutil.CullParams) !void {
-    if (config.freeze_cull.get()) return;
+    if (config.freeze_cull) return;
     if (pass.batches.items.len == 0) return;
 
     var dynamic_info = self.getCurrentFrameData().dynamic_data.source.getInfo(0);
@@ -385,7 +385,7 @@ pub fn executeComputeCull(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass,
 
     var cull_data = DrawCullData.init(params);
     cull_data.draw_count = @intCast(u32, pass.flat_batches.items.len);
-    if (config.disable_cull.get()) cull_data.culling_enabled = 0;
+    if (config.disable_cull) cull_data.culling_enabled = 0;
 
     cull_data.pyramid_width = @intToFloat(f32, self.depth_pyramid_width);
     cull_data.pyramid_height = @intToFloat(f32, self.depth_pyramid_height);

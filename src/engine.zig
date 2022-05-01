@@ -101,8 +101,8 @@ const DirectionalLight = struct {
         // rotate
         if (self.autorotate) {
             self.light_pos = Vec3.new(0, 10, 0);
-            self.light_pos.x = self.radius * @cos(self.angle) - self.radius * @sin(self.angle);
-            self.light_pos.z = self.radius * @sin(self.angle) + self.radius * @cos(self.angle);
+            self.light_pos.x = self.radius * std.math.cos(self.angle) - self.radius * std.math.sin(self.angle);
+            self.light_pos.z = self.radius * std.math.sin(self.angle) + self.radius * std.math.cos(self.angle);
 
             self.light_dir = Vec3.sub(Vec3.new(0, 0, 0), self.light_pos);
             // self.light_dir.y = -0.3 * self.radius;
@@ -314,6 +314,7 @@ pub const Engine = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        objects.deinit();
         @import("zmesh").deinit();
         self.gc.vkd.deviceWaitIdle(self.gc.dev) catch unreachable;
 
@@ -403,13 +404,12 @@ pub const Engine = struct {
             frame.dynamic_data.reset();
             frame.deletion_queue.flush();
             try frame.dynamic_descriptor_allocator.reset();
+
             try self.render_scene.buildBatches();
 
             // now that we are sure that the commands finished executing, we can safely reset the command buffer to begin recording again
             try self.gc.vkd.resetCommandBuffer(frame.cmd_buffer, .{});
-
             try self.draw(frame);
-
             try self.swapchain.present(frame.cmd_buffer);
 
             // TODO: why does this have to be after present?
@@ -955,6 +955,7 @@ pub const Engine = struct {
         });
 
         try self.readyMeshDraw(frame);
+
         try self.readyCullData(&self.render_scene.forward_pass, frame.cmd_buffer);
         // try self.readyCullData(&self.render_scene.transparent_forward_pass, frame.cmd_buffer);
         try self.readyCullData(&self.render_scene.shadow_pass, frame.cmd_buffer);
@@ -965,9 +966,10 @@ pub const Engine = struct {
             .projmat = self.camera.getProjMatrix(self.swapchain.extent),
             .viewmat = self.camera.getViewMatrix(),
             .frustum_cull = true,
-            .occlusion_cull = config.occlusion_cull.get(),
+            .occlusion_cull = config.occlusion_cull,
             .aabb = false,
         };
+
         try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.forward_pass, forward_cull);
         // try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.transparent_forward_pass, forward_cull);
 
@@ -985,7 +987,7 @@ pub const Engine = struct {
             .aabbmax = aabb_center.add(aabb_extent),
         };
 
-        if (config.shadowcast.get())
+        if (config.shadowcast)
             try self.executeComputeCull(frame.cmd_buffer, &self.render_scene.shadow_pass, shadow_cull);
 
         self.gc.vkd.cmdPipelineBarrier(frame.cmd_buffer, .{ .compute_shader_bit = true }, .{ .draw_indirect_bit = true }, .{}, 0, undefined, @intCast(u32, self.post_cull_barriers.items.len), self.post_cull_barriers.items.ptr, 0, undefined);
@@ -995,7 +997,7 @@ pub const Engine = struct {
         try self.reduceDepth(frame.cmd_buffer);
 
         try self.copyRenderToSwapchain(frame.cmd_buffer);
-        if (config.blit_shadow_buffer.get())
+        if (config.blit_shadow_buffer)
             try self.copyShadowMapToSwapchain(frame.cmd_buffer);
 
         try self.gc.vkd.endCommandBuffer(frame.cmd_buffer);
@@ -1003,7 +1005,7 @@ pub const Engine = struct {
 
     fn readyCullData(self: *Self, pass: *MeshPass, cmd: vk.CommandBuffer) !void {
         // if cull is frozen we want to make sure not to overwrite our draw_indirect_buffer with the clear_indirect_buffer
-        if (config.freeze_cull.get()) return;
+        if (config.freeze_cull) return;
         if (pass.clear_indirect_buffer.buffer == .null_handle) return;
 
         // copy from the cleared indirect buffer into the one we will use on rendering
@@ -1021,8 +1023,8 @@ pub const Engine = struct {
     }
 
     fn shadowPass(self: *Self, cmd: vk.CommandBuffer) !void {
-        if (!config.shadowcast.get()) return;
-        if (config.freeze_shadows.get()) return;
+        if (!config.shadowcast) return;
+        if (config.freeze_shadows) return;
 
         const depth_clear = vk.ClearValue{
             .depth_stencil = .{ .depth = 1, .stencil = 0 },
@@ -1045,7 +1047,7 @@ pub const Engine = struct {
 
         self.gc.vkd.cmdSetViewport(cmd, 0, 1, @ptrCast([*]const vk.Viewport, &viewport));
         self.gc.vkd.cmdSetScissor(cmd, 0, 1, @ptrCast([*]const vk.Rect2D, &render_area));
-        self.gc.vkd.cmdSetDepthBias(cmd, config.shadow_bias.get(), 0, config.shadow_slope_bias.get());
+        self.gc.vkd.cmdSetDepthBias(cmd, config.shadow_bias, 0, config.shadow_slope_bias);
 
         self.gc.vkd.cmdBeginRenderPass(cmd, &.{
             .render_pass = self.shadow_pass,

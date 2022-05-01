@@ -32,7 +32,7 @@ pub fn init(window: glfw.Window) Self {
 }
 
 pub fn update(self: *Self, dt: f64) void {
-    if (!config.cam_lock.get()) {
+    if (!config.cam_lock) {
         var cursor_pos = self.window.getCursorPos() catch unreachable;
         var x_offset = self.last_mouse_x - @floatCast(f32, cursor_pos.xpos);
         var y_offset = self.last_mouse_y - @floatCast(f32, cursor_pos.ypos); // reversed since y-coordinates range from bottom to top
