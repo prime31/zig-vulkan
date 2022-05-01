@@ -154,7 +154,7 @@ pub const FrameData = struct {
     }
 };
 
-var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{ .thread_safe = false }){};
+var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
 const gpa = general_purpose_allocator.allocator();
 
 const ObjectShit = struct {
@@ -823,11 +823,12 @@ pub const Engine = struct {
         _ = try self.material_system.buildMaterial("opaque", mat_info);
 
         objects = std.ArrayList(ObjectShit).init(gpa);
+        try objects.ensureTotalCapacity(100 * 100);
 
         var x: f32 = 0;
-        while (x < 20) : (x += 1) {
+        while (x < 50) : (x += 1) {
             var y: f32 = 0;
-            while (y < 20) : (y += 1) {
+            while (y < 50) : (y += 1) {
                 const mesh = if (@mod(x, 2) == 0) self.meshes.getPtr("triangle").? else self.meshes.getPtr("monkey").?;
                 const material = if (@mod(x, 2) == 0) self.material_system.getMaterial("white_tex").? else self.material_system.getMaterial("white_tex").?;
 

@@ -186,10 +186,19 @@ pub const RenderScene = struct {
     }
 
     pub fn buildBatches(self: *Self) !void {
-        // TODO: thread this
-        try self.refreshPass(&self.forward_pass);
-        try self.refreshPass(&self.transparent_forward_pass);
-        try self.refreshPass(&self.shadow_pass);
+        if (true) {
+            var t1 = try std.Thread.spawn(.{}, refreshPass, .{ self, &self.forward_pass });
+            var t2 = try std.Thread.spawn(.{}, refreshPass, .{ self, &self.transparent_forward_pass });
+            var t3 = try std.Thread.spawn(.{}, refreshPass, .{ self, &self.shadow_pass });
+
+            t1.join();
+            t2.join();
+            t3.join();
+        } else {
+            try self.refreshPass(&self.forward_pass);
+            try self.refreshPass(&self.transparent_forward_pass);
+            try self.refreshPass(&self.shadow_pass);
+        }
     }
 
     pub fn mergeMeshes(self: *Self) !void {
@@ -228,7 +237,7 @@ pub const RenderScene = struct {
         try self.gc.endOneTimeCommandBuffer();
     }
 
-    pub fn refreshPass(self: Self, pass: *MeshPass) !void {
+    pub fn refreshPass(self: *const Self, pass: *MeshPass) !void {
         // early out for no changes
         if (pass.objects_to_delete.items.len == 0 and pass.unbatched_objects.items.len == 0)
             return;
@@ -236,15 +245,15 @@ pub const RenderScene = struct {
         pass.needs_indirect_refresh = true;
         pass.needs_instance_refresh = true;
 
-        var new_objects = std.ArrayList(u32).init(self.gc.scratch);
-
         // delete objects
         if (pass.objects_to_delete.items.len > 0) {
             // create the render batches so that then we can do the deletion on the flat-array directly
-            var deletion_batches = std.ArrayList(RenderBatch).init(self.gc.scratch);
+            var deletion_batches = try std.ArrayList(RenderBatch).initCapacity(self.gc.gpa, pass.objects_to_delete.items.len);
+            defer deletion_batches.deinit();
 
+            try pass.reusable_objects.ensureUnusedCapacity(pass.objects_to_delete.items.len);
             for (pass.objects_to_delete.items) |pass_obj| {
-                try pass.reusable_objects.append(pass_obj);
+                pass.reusable_objects.appendAssumeCapacity(pass_obj);
 
                 var new_command = RenderBatch{
                     .object = pass_obj,
@@ -252,9 +261,11 @@ pub const RenderScene = struct {
                 };
 
                 var obj = pass.objects.items[pass_obj.handle];
-                const pip_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.shader_pass.pip));
-                const set_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.material_set));
-                const mathash = pip_hash ^ set_hash;
+                // const pip_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.shader_pass.pip));
+                // const set_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.material_set));
+                const pip_hash = @enumToInt(obj.material.shader_pass.pip);
+                const set_hash = @enumToInt(obj.material.material_set);
+                const mathash = @truncate(u32, pip_hash ^ set_hash);
                 const meshmat = @intCast(u64, mathash) ^ @intCast(u64, obj.mesh_id.handle);
 
                 // pack mesh id and material into 64 bits
@@ -265,29 +276,28 @@ pub const RenderScene = struct {
                 pass.objects.items[pass_obj.handle].mesh_id.handle = std.math.maxInt(u32);
                 pass.objects.items[pass_obj.handle].original.handle = std.math.maxInt(u32);
 
-                try deletion_batches.append(new_command);
+                deletion_batches.appendAssumeCapacity(new_command);
             }
 
             pass.objects_to_delete.clearRetainingCapacity();
             std.sort.sort(RenderBatch, deletion_batches.items, {}, sortRenderBatches);
 
+            // removal
             {
-                const contains_closure = struct {
-                    pub fn contains(slice: []RenderBatch, value: RenderBatch) bool {
-                        for (slice) |rb| {
-                            // if (rb.eql(value)) return true; // TODO: why is sort_key not matching here?
-                            if (rb.object.handle == value.object.handle) return true;
-                        }
-                        return false;
+                const search_closure = struct {
+                    fn contains(_: void, a: RenderBatch, b: RenderBatch) std.math.Order {
+                        if (a.sort_key < b.sort_key) return .lt;
+                        if (a.sort_key > b.sort_key) return .gt;
+                        if (a.sort_key == b.sort_key) return std.math.order(a.object.handle, b.object.handle);
+                        unreachable;
                     }
                 }.contains;
 
-                // removal. get all the elements from flat_batches that are not in deletion_batches
+                // get all the elements from flat_batches that are not in deletion_batches. We can use a binary search here because deletion_batches is sorted
                 var new_batches = try ArrayList(RenderBatch).initCapacity(self.gc.gpa, pass.flat_batches.items.len);
-
                 for (pass.flat_batches.items) |fb_batch| {
-                    if (!contains_closure(deletion_batches.items, fb_batch))
-                        try new_batches.append(fb_batch);
+                    if (std.sort.binarySearch(RenderBatch, fb_batch, deletion_batches.items, {}, search_closure) == null)
+                        new_batches.appendAssumeCapacity(fb_batch);
                 }
 
                 pass.flat_batches.deinit();
@@ -295,9 +305,14 @@ pub const RenderScene = struct {
             }
         }
 
+        var new_objects = std.ArrayList(u32).init(self.gc.scratch);
+
         // fill object list
         if (pass.unbatched_objects.items.len > 0) {
+            const total_new_objects_required = pass.unbatched_objects.items.len - pass.reusable_objects.items.len;
+            try pass.objects.ensureUnusedCapacity(total_new_objects_required);
             try new_objects.ensureUnusedCapacity(pass.unbatched_objects.items.len);
+
             for (pass.unbatched_objects.items) |o| {
                 const mt = self.getMaterial(self.getObject(o).material);
                 var new_obj = PassObject{
@@ -321,39 +336,41 @@ pub const RenderScene = struct {
                     try pass.objects.append(new_obj);
                 }
 
-                try new_objects.append(handle);
-
+                new_objects.appendAssumeCapacity(handle);
                 self.getObject(o).pass_indices.set(pass.pass_type, @intCast(i32, handle));
             }
 
             pass.unbatched_objects.clearRetainingCapacity();
         }
 
-        var new_batches = std.ArrayList(RenderBatch).init(self.gc.scratch);
+        var new_batches = try std.ArrayList(RenderBatch).initCapacity(self.gc.gpa, new_objects.items.len);
+        defer new_batches.deinit();
 
         // fill draw list
         if (new_objects.items.len > 0) for (new_objects.items) |obj_id| {
             const obj = pass.objects.items[obj_id];
 
-            const pip_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.shader_pass.pip));
-            const set_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.material_set));
+            // const pip_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.shader_pass.pip));
+            // const set_hash = std.hash.Wyhash.hash(0, std.mem.asBytes(&obj.material.material_set));
+            const pip_hash = @enumToInt(obj.material.shader_pass.pip);
+            const set_hash = @enumToInt(obj.material.material_set);
             const mathash = @truncate(u32, pip_hash ^ set_hash);
             const meshmat = @intCast(u64, mathash) ^ @intCast(u64, obj.mesh_id.handle);
 
             // pack mesh id and material into 64 bits
-            try new_batches.append(.{
+            new_batches.appendAssumeCapacity(.{
                 .object = Handle(PassObject).init(obj_id),
                 .sort_key = @intCast(u64, meshmat) | (@intCast(u64, obj.custom_key) << 32),
             });
         };
 
-        // draw sorted, merged batches. merge the new batches into the main batch array
+        // draw sort
         if (new_batches.items.len > 0) {
             std.sort.sort(RenderBatch, new_batches.items, {}, sortRenderBatches);
-            try pass.flat_batches.ensureUnusedCapacity(pass.flat_batches.items.len + new_batches.items.len);
 
-            for (new_batches.items) |b|
-                pass.flat_batches.appendAssumeCapacity(b);
+            // merge the new batches into the main batch array
+            try pass.flat_batches.ensureUnusedCapacity(new_batches.items.len);
+            pass.flat_batches.appendSliceAssumeCapacity(new_batches.items);
 
             std.sort.sort(RenderBatch, pass.flat_batches.items, {}, sortRenderBatches);
         }
