@@ -53,7 +53,7 @@ pub fn drawImGuiEditor(engine: *Engine) void {
         checkbox("culling.freeze (h)", "Locks culling", &freeze_cull);
         checkbox("culling.enable_occlusion", "Perform occlusion culling on GPU", &occlusion_cull);
         checkbox("camera.lock (c}", "Locks the camera mouse movement", &cam_lock);
-        checkbox("gpu.draw_distance", "Distance cull", &disable_cull);
+        slider("gpu.draw_distance", null, &draw_distance, 0, 1000);
 
         checkbox("gpu.freeze_shadows", "Stop the rendering of shadows", &freeze_shadows);
         checkbox("gpu.shadowcast", "Use Shadowcasting", &shadowcast);
