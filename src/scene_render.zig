@@ -339,7 +339,7 @@ fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, ob
 
     // HACK: just to get x64 functional for now since it gets confused with indirect drawing.
     if (@import("builtin").os.tag == .macos and @import("builtin").target.cpu.arch == std.Target.Cpu.Arch.x86_64) {
-        try executeDrawCommandsNonIndexed(self, cmd, pass, obj_data_set, dyn_offsets, global_set);
+        try executeDrawCommandsIndexedNonIndirect(self, cmd, pass, obj_data_set, dyn_offsets, global_set);
         return;
     }
 
@@ -623,6 +623,7 @@ fn executeDrawCommandsIndexedNonIndirect(self: *Engine, cmd: vk.CommandBuffer, p
             for (da_fook[multibatch.first .. multibatch.first + multibatch.count]) |indirect_batch| {
                 // std.debug.print("------- ----------------- pass.multibatches.items: {}, instance_count: {}\n", .{ pass.multibatches.items.len, indirect_batch.command.instance_count });
                 if (indirect_batch.command.instance_count == 0) continue;
+                if (indirect_batch.command.instance_count > 95630) continue;
                 // TODO: why all of a sudden do we get junk data here...
                 std.debug.print("------- indirect_batch. instance_count: {}, index_count: {}\n", .{ indirect_batch.command.instance_count, indirect_batch.command.index_count });
                 self.gc.vkd.cmdDrawIndexed(cmd, indirect_batch.command.index_count, indirect_batch.command.instance_count, indirect_batch.command.first_index, indirect_batch.command.vertex_offset, indirect_batch.command.first_instance);
