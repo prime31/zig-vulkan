@@ -108,10 +108,56 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
             self.gc.vkd.cmdCopyBuffer(frame.cmd_buffer, new_buffer.buffer, self.render_scene.object_data_buffer.buffer, 1, vkutil.ptrToMany(&indirect_copy));
         } else {
             // update only the changed elements
-            var copies = std.ArrayList(vk.BufferCopy).init(self.gc.scratch);
-            try copies.ensureTotalCapacity(self.render_scene.dirty_objects.items.len);
-            // TODO: fill this in
-            unreachable;
+            const buffer_size = self.render_scene.dirty_objects.items.len * @sizeOf(GpuObjectData);
+            // const vec4_size = @sizeOf(Vec4);
+            const u32_size = @sizeOf(u32);
+            const word_size = @sizeOf(GpuObjectData) / @sizeOf(u32);
+            const upload_size = self.render_scene.dirty_objects.items.len * word_size * u32_size;
+
+            const new_buffer = try self.gc.vma.createBuffer(GpuObjectData, buffer_size, .{ .transfer_src_bit = true, .storage_buffer_bit = true }, .auto_prefer_host, .{});
+            const target_buffer = try self.gc.vma.createBuffer(u32, upload_size, .{ .transfer_src_bit = true, .storage_buffer_bit = true }, .auto_prefer_host, .{});
+
+            frame.deletion_queue.append(new_buffer.asUntypedBuffer());
+            frame.deletion_queue.append(target_buffer.asUntypedBuffer());
+
+            const target_data = try target_buffer.mapMemory(self.gc.vma);
+            const objectSSBO = try new_buffer.mapMemory(self.gc.vma);
+            var launch_count = self.render_scene.dirty_objects.items.len * word_size;
+
+            // write dirty objects
+            var sidx: u32 = 0;
+            for (self.render_scene.dirty_objects.items) |dirty_obj, i| {
+                self.render_scene.writeObject(&objectSSBO[i], dirty_obj);
+                const dst_offset = word_size * dirty_obj.handle;
+
+                var b: usize = 0;
+                while (b < word_size) : (b += 1) {
+                    const tidx = dst_offset + b;
+                    target_data[sidx] = @intCast(u32, tidx);
+                    sidx += 1;
+                }
+            }
+            launch_count = sidx;
+
+            new_buffer.unmapMemory(self.gc.vma);
+            target_buffer.unmapMemory(self.gc.vma);
+
+            const index_data = target_buffer.getInfo(0);
+            const src_data = new_buffer.getInfo(0);
+            const target_info = self.render_scene.object_data_buffer.getInfo(0);
+
+            var comp_obj_data_set: vk.DescriptorSet = undefined;
+            var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &frame.dynamic_descriptor_allocator, &self.descriptor_layout_cache);
+            builder.bindBuffer(0, &index_data, .storage_buffer, .{ .compute_bit = true });
+            builder.bindBuffer(1, &src_data, .storage_buffer, .{ .compute_bit = true });
+            builder.bindBuffer(2, &target_info, .storage_buffer, .{ .compute_bit = true });
+            _ = try builder.build(&comp_obj_data_set);
+            builder.deinit();
+
+            self.gc.vkd.cmdBindPipeline(frame.cmd_buffer, .compute, self.sparse_upload_pip_lay.pipeline);
+            self.gc.vkd.cmdPushConstants(frame.cmd_buffer, self.sparse_upload_pip_lay.layout, .{ .compute_bit = true }, 0, @sizeOf(u32), &launch_count);
+            self.gc.vkd.cmdBindDescriptorSets(frame.cmd_buffer, .compute, self.sparse_upload_pip_lay.layout, 0, 1, vkutil.ptrToMany(&comp_obj_data_set), 0, undefined);
+            self.gc.vkd.cmdDispatch(frame.cmd_buffer, @intCast(u32, launch_count / 256) + 1, 1, 1);
         }
 
         var barrier = vkinit.bufferBarrier(self.render_scene.object_data_buffer.buffer, self.gc.graphics_queue.family);
@@ -141,7 +187,7 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
         }
     }
 
-    // TODO: multithread this
+    // TODO: multi-thread this and switch to a proper threadpool/job scheduler
     for (passes) |pass| {
         // if the pass has changed the batches, need to reupload them
         if (pass.needs_indirect_refresh and pass.batches.items.len > 0) {
@@ -580,7 +626,7 @@ fn executeDrawCommandsIndexedNonIndirect(self: *Engine, cmd: vk.CommandBuffer, p
         if (draw_mesh.indices.len == 0) {
             self.gc.vkd.cmdDrawIndexed(cmd, @intCast(u32, draw_mesh.indices.len), instance_draw.count, 0, 0, instance_draw.first);
         } else {
-            for (da_fook[multibatch.first..multibatch.first + multibatch.count]) |indirect_batch| {
+            for (da_fook[multibatch.first .. multibatch.first + multibatch.count]) |indirect_batch| {
                 if (indirect_batch.command.instance_count == 0) continue;
                 // std.debug.print("indirect_batch: {}\n", .{ indirect_batch });
                 self.gc.vkd.cmdDrawIndexed(cmd, indirect_batch.command.index_count, indirect_batch.command.instance_count, indirect_batch.command.first_index, indirect_batch.command.vertex_offset, indirect_batch.command.first_instance);

@@ -226,7 +226,7 @@ pub const Engine = struct {
     main_light: DirectionalLight = .{},
     cull_pip_lay: vkutil.PipelineAndPipelineLayout = .{},
     depth_reduce_pip_lay: vkutil.PipelineAndPipelineLayout = .{},
-    spares_upload_pip_lay: vkutil.PipelineAndPipelineLayout = .{},
+    sparse_upload_pip_lay: vkutil.PipelineAndPipelineLayout = .{},
     blit_pipeline: vk.Pipeline = undefined,
     blit_layout: vk.PipelineLayout = undefined,
     depth_blit_pipeline: vk.Pipeline = undefined,
@@ -654,12 +654,12 @@ pub const Engine = struct {
         // load the compute shaders
         self.cull_pip_lay = try self.loadComputeShader("indirect_cull_comp");
         self.depth_reduce_pip_lay = try self.loadComputeShader("depth_reduce_comp");
-        self.spares_upload_pip_lay = try self.loadComputeShader("sparse_upload_comp");
+        self.sparse_upload_pip_lay = try self.loadComputeShader("sparse_upload_comp");
 
         // TODO: who owns the ShaderModule/ShaderEffect? here we only kill the pip because ShaderEffect kills the layout...
         self.deletion_queue.append(self.cull_pip_lay.pipeline);
         self.deletion_queue.append(self.depth_reduce_pip_lay.pipeline);
-        self.deletion_queue.append(self.spares_upload_pip_lay.pipeline);
+        self.deletion_queue.append(self.sparse_upload_pip_lay.pipeline);
     }
 
     fn loadComputeShader(self: *Self, comptime res_path: []const u8) !vkutil.PipelineAndPipelineLayout {
@@ -925,7 +925,8 @@ pub const Engine = struct {
 
     fn draw(self: *Self, frame: *FrameData) !void {
         if (self.window.getKey(.b) == .press) {
-            for (objects.items) |*obj| {
+            const zig_slice_hack = objects.items;
+            for (zig_slice_hack) |*obj| {
                 obj.update();
                 self.render_scene.updateTransform(obj.handle, obj.getTransform());
             }

@@ -186,6 +186,7 @@ pub const RenderScene = struct {
     }
 
     pub fn buildBatches(self: *Self) !void {
+        // TODO: rather than create threads and throw them away switch to a proper threadpool/job scheduler
         if (true) {
             var t1 = try std.Thread.spawn(.{}, refreshPass, .{ self, &self.forward_pass });
             var t2 = try std.Thread.spawn(.{}, refreshPass, .{ self, &self.transparent_forward_pass });
