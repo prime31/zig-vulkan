@@ -146,13 +146,11 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
             const src_data = new_buffer.getInfo(0);
             const target_info = self.render_scene.object_data_buffer.getInfo(0);
 
-            var comp_obj_data_set: vk.DescriptorSet = undefined;
-            var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &frame.dynamic_descriptor_allocator, &self.descriptor_layout_cache);
+            var builder = vkutil.DescriptorBuilder.init(&frame.dynamic_descriptor_allocator, &self.descriptor_layout_cache);
             builder.bindBuffer(0, &index_data, .storage_buffer, .{ .compute_bit = true });
             builder.bindBuffer(1, &src_data, .storage_buffer, .{ .compute_bit = true });
             builder.bindBuffer(2, &target_info, .storage_buffer, .{ .compute_bit = true });
-            _ = try builder.build(&comp_obj_data_set);
-            builder.deinit();
+            const comp_obj_data_set = try builder.build(null);
 
             self.gc.vkd.cmdBindPipeline(frame.cmd_buffer, .compute, self.sparse_upload_pip_lay.pipeline);
             self.gc.vkd.cmdPushConstants(frame.cmd_buffer, self.sparse_upload_pip_lay.layout, .{ .compute_bit = true }, 0, @sizeOf(u32), &launch_count);
@@ -276,20 +274,16 @@ pub fn drawObjectsForward(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass)
         .image_layout = .shader_read_only_optimal,
     });
 
-    var global_set: vk.DescriptorSet = undefined;
-    var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &frame.dynamic_descriptor_allocator, &self.descriptor_layout_cache);
+    var builder = vkutil.DescriptorBuilder.init(&frame.dynamic_descriptor_allocator, &self.descriptor_layout_cache);
     builder.bindBuffer(0, &cam_info, .uniform_buffer_dynamic, .{ .vertex_bit = true });
     builder.bindBuffer(1, &scene_info, .uniform_buffer_dynamic, .{ .vertex_bit = true, .fragment_bit = true });
     builder.bindImage(2, &shadow_image, .combined_image_sampler, .{ .fragment_bit = true });
-    _ = try builder.build(&global_set);
-    builder.deinit();
+    const global_set = try builder.build(null);
 
-    var object_data_set: vk.DescriptorSet = undefined;
-    builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &frame.dynamic_descriptor_allocator, &self.descriptor_layout_cache);
+    builder = vkutil.DescriptorBuilder.init(&frame.dynamic_descriptor_allocator, &self.descriptor_layout_cache);
     builder.bindBuffer(0, &obj_buffer_data, .storage_buffer, .{ .vertex_bit = true });
     builder.bindBuffer(1, &instance_info, .storage_buffer, .{ .vertex_bit = true });
-    _ = try builder.build(&object_data_set);
-    builder.deinit();
+    const object_data_set = try builder.build(null);
 
     const dynamic_offsets = [2]u32{ camera_data_offset, scene_data_offset };
     try executeDrawCommands(self, cmd, pass, object_data_set, dynamic_offsets[0..], global_set);
@@ -318,17 +312,14 @@ pub fn drawObjectsShadow(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass) 
     const obj_buffer_data = self.render_scene.object_data_buffer.getInfo(0);
     const instance_info = pass.compacted_instance_buffer.getInfo(0);
 
-    var global_set: vk.DescriptorSet = undefined;
-    var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &frame.dynamic_descriptor_allocator, &self.descriptor_layout_cache);
+    var builder = vkutil.DescriptorBuilder.init(&frame.dynamic_descriptor_allocator, &self.descriptor_layout_cache);
     builder.bindBuffer(0, &cam_info, .uniform_buffer_dynamic, .{ .vertex_bit = true });
-    _ = try builder.build(&global_set);
+    const global_set = try builder.build(null);
 
-    var object_data_set: vk.DescriptorSet = undefined;
     builder.clear();
     builder.bindBuffer(0, &obj_buffer_data, .storage_buffer, .{ .vertex_bit = true });
     builder.bindBuffer(1, &instance_info, .storage_buffer, .{ .vertex_bit = true });
-    _ = try builder.build(&object_data_set);
-    builder.deinit();
+    const object_data_set = try builder.build(null);
 
     const dynamic_offsets = [1]u32{camera_data_offset};
     try executeDrawCommands(self, cmd, pass, object_data_set, dynamic_offsets[0..], global_set);
@@ -419,16 +410,14 @@ pub fn executeComputeCull(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass,
         .image_layout = .general,
     };
 
-    var comp_obj_data_set: vk.DescriptorSet = undefined;
-    var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.getCurrentFrameData().dynamic_descriptor_allocator, &self.descriptor_layout_cache);
+    var builder = vkutil.DescriptorBuilder.init(&self.getCurrentFrameData().dynamic_descriptor_allocator, &self.descriptor_layout_cache);
     builder.bindBuffer(0, &obj_buffer_info, .storage_buffer, .{ .compute_bit = true });
     builder.bindBuffer(1, &indirect_info, .storage_buffer, .{ .compute_bit = true });
     builder.bindBuffer(2, &instance_info, .storage_buffer, .{ .compute_bit = true });
     builder.bindBuffer(3, &final_info, .storage_buffer, .{ .compute_bit = true });
     builder.bindImage(4, &depth_pyramid, .combined_image_sampler, .{ .compute_bit = true });
     builder.bindBuffer(5, &dynamic_info, .uniform_buffer, .{ .compute_bit = true });
-    _ = try builder.build(&comp_obj_data_set);
-    builder.deinit();
+    const comp_obj_data_set = try builder.build(null);
 
     var cull_data = DrawCullData.init(params);
     cull_data.draw_count = @intCast(u32, pass.flat_batches.items.len);
@@ -479,12 +468,10 @@ pub fn reduceDepth(self: *Engine, cmd: vk.CommandBuffer) !void {
             .image_layout = if (i == 0) .shader_read_only_optimal else .general,
         };
 
-        var depth_set: vk.DescriptorSet = undefined;
-        var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.getCurrentFrameData().dynamic_descriptor_allocator, &self.descriptor_layout_cache);
+        var builder = vkutil.DescriptorBuilder.init(&self.getCurrentFrameData().dynamic_descriptor_allocator, &self.descriptor_layout_cache);
         builder.bindImage(0, &dst_target, .storage_image, .{ .compute_bit = true });
         builder.bindImage(1, &src_target, .combined_image_sampler, .{ .compute_bit = true });
-        _ = try builder.build(&depth_set);
-        builder.deinit();
+        const depth_set = try builder.build(null);
 
         self.gc.vkd.cmdBindDescriptorSets(cmd, .compute, self.depth_reduce_pip_lay.layout, 0, 1, vkutil.ptrToMany(&depth_set), 0, undefined);
 

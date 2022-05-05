@@ -205,9 +205,7 @@ pub const MaterialSystem = struct {
         // not handled yet
         material.pass_sets.set(.directional_shadow, .null_handle);
 
-        var db = vkutil.DescriptorBuilder.init(self.engine.gc.gpa, &self.engine.descriptor_allocator, &self.engine.descriptor_layout_cache);
-        defer db.deinit();
-
+        var db = vkutil.DescriptorBuilder.init(&self.engine.descriptor_allocator, &self.engine.descriptor_layout_cache);
         for (info.textures.items) |tex, i| {
             const image_buffer_info = vk.DescriptorImageInfo{
                 .sampler = tex.sampler,
@@ -218,8 +216,8 @@ pub const MaterialSystem = struct {
         }
 
         // TODO: why are we building the same descriptor set twice?
-        _ = try db.build(material.pass_sets.getPtr(.forward));
-        _ = try db.build(material.pass_sets.getPtr(.transparency));
+        material.pass_sets.set(.forward, try db.build(null));
+        material.pass_sets.set(.transparency, try db.build(null));
 
         // add material to cache
         try self.material_cache.put(info, material);

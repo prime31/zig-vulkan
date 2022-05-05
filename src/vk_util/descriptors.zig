@@ -173,26 +173,21 @@ pub const DescriptorBuilder = struct {
 
     alloc: *DescriptorAllocator,
     cache: *DescriptorLayoutCache,
-    writes: std.ArrayList(vk.WriteDescriptorSet),
-    bindings: std.ArrayList(vk.DescriptorSetLayoutBinding),
+    writes: std.BoundedArray(vk.WriteDescriptorSet, 8),
+    bindings: std.BoundedArray(vk.DescriptorSetLayoutBinding, 8),
 
-    pub fn init(gpa: std.mem.Allocator, alloc: *DescriptorAllocator, cache: *DescriptorLayoutCache) Self {
+    pub fn init(alloc: *DescriptorAllocator, cache: *DescriptorLayoutCache) Self {
         return .{
             .alloc = alloc,
             .cache = cache,
-            .writes = std.ArrayList(vk.WriteDescriptorSet).init(gpa),
-            .bindings = std.ArrayList(vk.DescriptorSetLayoutBinding).init(gpa),
+            .writes = std.BoundedArray(vk.WriteDescriptorSet, 8).init(0) catch unreachable,
+            .bindings = std.BoundedArray(vk.DescriptorSetLayoutBinding, 8).init(0) catch unreachable,
         };
     }
 
-    pub fn deinit(self: Self) void {
-        self.writes.deinit();
-        self.bindings.deinit();
-    }
-
     pub fn clear(self: *Self) void {
-        self.writes.clearRetainingCapacity();
-        self.bindings.clearRetainingCapacity();
+        self.writes.len = 0;
+        self.bindings.len = 0;
     }
 
     pub fn bindBuffer(self: *Self, binding: u32, buffer_info: *const vk.DescriptorBufferInfo, desc_type: vk.DescriptorType, stage_flags: vk.ShaderStageFlags) void {
@@ -241,27 +236,28 @@ pub const DescriptorBuilder = struct {
         }) catch unreachable;
     }
 
-    pub fn build(self: *Self, descriptor_set: *vk.DescriptorSet) !vk.DescriptorSetLayout {
-        if (self.bindings.items.len == 0) {
-            descriptor_set.* = .null_handle;
+    pub fn build(self: *Self, descriptor_set_layout: ?*vk.DescriptorSetLayout) !vk.DescriptorSet {
+        if (self.bindings.len == 0) {
+            if (descriptor_set_layout) |dsl| dsl.* = .null_handle;
             return .null_handle;
         }
 
         // build layout first
         const layout = try self.cache.createDescriptorSetLayout(&.{
             .flags = .{},
-            .binding_count = @intCast(u32, self.bindings.items.len),
-            .p_bindings = self.bindings.items.ptr,
+            .binding_count = @intCast(u32, self.bindings.len),
+            .p_bindings = &self.bindings.buffer,
         });
+        if (descriptor_set_layout) |dsl| dsl.* = layout;
 
         // allocate descriptor
-        descriptor_set.* = try self.alloc.allocate(layout);
+        const descriptor_set = try self.alloc.allocate(layout);
 
         // write descriptor
-        for (self.writes.items) |*write| write.dst_set = descriptor_set.*;
-        self.alloc.gc.vkd.updateDescriptorSets(self.alloc.gc.dev, @intCast(u32, self.writes.items.len), self.writes.items.ptr, 0, undefined);
+        for (self.writes.buffer) |*write| write.dst_set = descriptor_set;
+        self.alloc.gc.vkd.updateDescriptorSets(self.alloc.gc.dev, @intCast(u32, self.writes.len), &self.writes.buffer, 0, undefined);
 
-        return layout;
+        return descriptor_set;
     }
 };
 

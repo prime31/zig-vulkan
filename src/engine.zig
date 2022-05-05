@@ -805,6 +805,7 @@ pub const Engine = struct {
     fn initScene(self: *Self) !void {
         var textured_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
         try textured_data.addTexture(self.smooth_sampler, self.textures.get("background").?.view);
+        std.debug.print("---------------------------------------- initScene \n", .{});
         _ = try self.material_system.buildMaterial("textured", textured_data);
 
         var white_tex_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
@@ -1143,11 +1144,9 @@ pub const Engine = struct {
             .image_layout = .shader_read_only_optimal,
         };
 
-        var blit_set: vk.DescriptorSet = undefined;
-        var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.descriptor_allocator, &self.descriptor_layout_cache);
+        var builder = vkutil.DescriptorBuilder.init(&self.descriptor_allocator, &self.descriptor_layout_cache);
         builder.bindImage(0, &source_image, .combined_image_sampler, .{ .fragment_bit = true });
-        _ = try builder.build(&blit_set);
-        builder.deinit();
+        const blit_set = try builder.build(null);
 
         self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, self.blit_layout, 0, 1, vkutil.ptrToMany(&blit_set), 0, undefined);
         self.gc.vkd.cmdDraw(cmd, 3, 1, 0, 0);
@@ -1200,11 +1199,9 @@ pub const Engine = struct {
             .image_layout = .shader_read_only_optimal,
         };
 
-        var blit_set: vk.DescriptorSet = undefined;
-        var builder = vkutil.DescriptorBuilder.init(self.gc.gpa, &self.descriptor_allocator, &self.descriptor_layout_cache);
+        var builder = vkutil.DescriptorBuilder.init(&self.descriptor_allocator, &self.descriptor_layout_cache);
         builder.bindImage(0, &source_image, .combined_image_sampler, .{ .fragment_bit = true });
-        _ = try builder.build(&blit_set);
-        builder.deinit();
+        const blit_set = try builder.build(null);
 
         self.gc.vkd.cmdBindDescriptorSets(cmd, .graphics, self.depth_blit_layout, 0, 1, vkutil.ptrToMany(&blit_set), 0, undefined);
         self.gc.vkd.cmdDraw(cmd, 3, 1, 0, 0);
