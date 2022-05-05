@@ -339,7 +339,8 @@ fn executeDrawCommands(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass, ob
 
     // HACK: just to get x64 functional for now since it gets confused with indirect drawing.
     if (@import("builtin").os.tag == .macos and @import("builtin").target.cpu.arch == std.Target.Cpu.Arch.x86_64) {
-        try executeDrawCommandsIndexedNonIndirect(self, cmd, pass, obj_data_set, dyn_offsets, global_set);
+        // try executeDrawCommandsIndexedNonIndirect(self, cmd, pass, obj_data_set, dyn_offsets, global_set);
+        try executeDrawCommandsNonIndexed(self, cmd, pass, obj_data_set, dyn_offsets, global_set);
         return;
     }
 
