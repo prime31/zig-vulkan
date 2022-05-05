@@ -231,20 +231,6 @@ pub const MaterialSystem = struct {
     }
 };
 
-pub const VertexAttributeTemplate = enum {
-    default_vertex,
-    default_vertex_pos_only,
-};
-
-pub const EffectBuilder = struct {
-    vertex_attribute: VertexAttributeTemplate,
-    effect: ShaderEffect,
-    topology: vk.PrimitiveTopology,
-    rasterizer_info: vk.PipelineRasterizationStateCreateInfo,
-    color_blend_attachment_info: vk.PipelineColorBlendStateCreateInfo,
-    depth_stencil_info: vk.PipelineDepthStencilStateCreateInfo,
-};
-
 pub const ComputePipelineBuilder = struct {
     pip_layout: vk.PipelineLayout,
     shader_stage: vk.PipelineShaderStageCreateInfo,

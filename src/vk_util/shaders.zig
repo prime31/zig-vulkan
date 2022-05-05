@@ -70,22 +70,17 @@ pub const ShaderEffect = struct {
 
     bindings: std.StringHashMap(ReflectedBinding),
     set_layouts: [4]vk.DescriptorSetLayout = [_]vk.DescriptorSetLayout{.null_handle} ** 4,
-    set_hashes: [4]u64 = undefined,
-    stages: std.ArrayList(ShaderStage),
+    stages: std.BoundedArray(ShaderStage, 2) = .{},
     built_layout: vk.PipelineLayout = .null_handle,
 
     pub fn init(gpa: std.mem.Allocator) ShaderEffect {
-        return .{
-            .bindings = std.StringHashMap(ReflectedBinding).init(gpa),
-            .stages = std.ArrayList(ShaderStage).init(gpa),
-        };
+        return .{ .bindings = std.StringHashMap(ReflectedBinding).init(gpa) };
     }
 
     pub fn deinit(self: *ShaderEffect, gc: *const GraphicsContext) void {
         // ShaderStage.shader_module is owned by ShaderCache and will be deinitted there
         gc.destroy(self.built_layout);
         self.bindings.deinit();
-        self.stages.deinit();
 
         for (self.set_layouts) |sl|
             if (sl != .null_handle) gc.destroy(sl);
@@ -99,7 +94,7 @@ pub const ShaderEffect = struct {
         var set_layouts = std.ArrayList(DescriptorSetLayoutData).init(gc.scratch);
         var constant_ranges = std.BoundedArray(vk.PushConstantRange, 4){};
 
-        for (self.stages.items) |*s| {
+        for (self.stages.slice()) |*s| {
             var spvmodule: spv.SpvReflectShaderModule = undefined;
             var res = spv.spvReflectCreateShaderModule(s.shader_module.code.len * @sizeOf(u32), s.shader_module.code.ptr, &spvmodule);
             if (res != spv.SPV_REFLECT_RESULT_SUCCESS) return error.CreateFailed;
@@ -211,12 +206,8 @@ pub const ShaderEffect = struct {
                 .flags = .{},
             });
 
-            if (ly.create_info.binding_count > 0) {
-                self.set_hashes[i] = std.hash.Wyhash.hash(0, std.mem.asBytes(&ly.create_info));
+            if (ly.create_info.binding_count > 0)
                 self.set_layouts[i] = try gc.vkd.createDescriptorSetLayout(gc.dev, &ly.create_info, null);
-            } else {
-                self.set_hashes[i] = 0;
-            }
         }
 
         // we start from just the default empty pipeline layout info

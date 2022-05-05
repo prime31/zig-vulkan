@@ -32,7 +32,7 @@ pub const PipelineBuilder = struct {
     pub fn setShaders(self: *PipelineBuilder, effect: *const vkutil.ShaderEffect) !void {
         self.shader_stages.len = 0;
 
-        for (effect.stages.items) |s|
+        for (effect.stages.constSlice()) |s|
             try self.shader_stages.append(vkinit.pipelineShaderStageCreateInfo(s.shader_module.module, s.stage));
         self.pipeline_layout = effect.built_layout;
     }

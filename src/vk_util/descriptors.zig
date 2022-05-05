@@ -110,11 +110,7 @@ pub const DescriptorLayoutCache = struct {
     layout_cache: std.AutoHashMap(DescriptorLayoutInfo, vk.DescriptorSetLayout),
 
     const DescriptorLayoutInfo = struct {
-        bindings: std.BoundedArray(vk.DescriptorSetLayoutBinding, 8),
-
-        pub fn init() DescriptorLayoutInfo {
-            return .{ .bindings = std.BoundedArray(vk.DescriptorSetLayoutBinding, 8).init(0) catch unreachable };
-        }
+        bindings: std.BoundedArray(vk.DescriptorSetLayoutBinding, 8) = .{},
     };
 
     pub fn init(gc: *const GraphicsContext) Self {
@@ -133,7 +129,7 @@ pub const DescriptorLayoutCache = struct {
     }
 
     pub fn createDescriptorSetLayout(self: *Self, info: *const vk.DescriptorSetLayoutCreateInfo) !vk.DescriptorSetLayout {
-        var layout_info = DescriptorLayoutInfo.init();
+        var layout_info = DescriptorLayoutInfo{};
         var is_sorted = true;
         var last_binding: u32 = 0;
 
@@ -254,7 +250,7 @@ pub const DescriptorBuilder = struct {
         const descriptor_set = try self.alloc.allocate(layout);
 
         // write descriptor
-        for (self.writes.buffer) |*write| write.dst_set = descriptor_set;
+        for (self.writes.slice()) |*write| write.dst_set = descriptor_set;
         self.alloc.gc.vkd.updateDescriptorSets(self.alloc.gc.dev, @intCast(u32, self.writes.len), &self.writes.buffer, 0, undefined);
 
         return descriptor_set;
