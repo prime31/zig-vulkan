@@ -6,6 +6,7 @@
 - why doesnt znear/zfar clip anything?
 - occlusion culling is jacked up
 - x64 indirect draw calls dont work until the Metal debugger captures frames...
+- add debug renderer with line drawing (https://wwwtyro.net/2019/11/18/instanced-lines.html)
 
 
 - other math lib [cglm](https://github.com/recp/cglm)
