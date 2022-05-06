@@ -280,7 +280,6 @@ pub const SampledTexture = struct {
     view: vk.ImageView,
 };
 
-
 pub fn PerPassData(comptime T: type) type {
     return struct {
         const Self = @This();

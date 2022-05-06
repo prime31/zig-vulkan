@@ -489,6 +489,7 @@ pub const Engine = struct {
             .layers = 1,
         }, null);
 
+        // TODO: these need to be recreated if we resize the window so they cant go in the deletion queue
         self.deletion_queue.append(self.forward_framebuffer);
         self.deletion_queue.append(self.shadow_framebuffer);
     }
