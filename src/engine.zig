@@ -615,10 +615,7 @@ pub const Engine = struct {
         self.material_system = try vkutil.MaterialSystem.init(self);
 
         // fullscreen triangle pipeline for blits
-        var blit_effect = vkutil.ShaderEffect.init(gpa);
-        try blit_effect.addStage(self.shader_cache.getShader("fullscreen_vert"), .{ .vertex_bit = true });
-        try blit_effect.addStage(self.shader_cache.getShader("blit_frag"), .{ .fragment_bit = true });
-        try blit_effect.reflectLayout(self.gc, null);
+        var blit_effect = try self.material_system.buildShaderEffect("fullscreen_vert", "blit_frag");
 
         // defaults are triangle_list, polygon fill, no culling, no blending
         var pip_builder = vkutil.PipelineBuilder.init();
@@ -630,25 +627,20 @@ pub const Engine = struct {
         self.blit_pipeline = try pip_builder.build(self.gc, self.copy_pass);
         self.blit_layout = blit_effect.built_layout;
 
-        self.deletion_queue.append(blit_effect);
         self.deletion_queue.append(self.blit_pipeline);
 
         // fullscreen triangle pipeline for depth map blits
-        var depth_blit_effect = vkutil.ShaderEffect.init(gpa);
-        try depth_blit_effect.addStage(self.shader_cache.getShader("fullscreen_vert"), .{ .vertex_bit = true });
-        try depth_blit_effect.addStage(self.shader_cache.getShader("blit_depth_frag"), .{ .fragment_bit = true });
-        try depth_blit_effect.reflectLayout(self.gc, null);
+        const depth_blit_effect = try self.material_system.buildShaderEffect("fullscreen_vert", "blit_depth_frag");
 
         var depth_pip_builder = vkutil.PipelineBuilder.init();
         try depth_pip_builder.setShaders(&depth_blit_effect);
 
-        // blit pipeline uses hardcoded triangle so no need for vertex input
+        // depth blit pipeline uses hardcoded triangle so no need for vertex input
         depth_pip_builder.clearVertexInput();
         depth_pip_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(false, false, .always);
         self.depth_blit_pipeline = try depth_pip_builder.build(self.gc, self.copy_pass);
         self.depth_blit_layout = depth_blit_effect.built_layout;
 
-        self.deletion_queue.append(depth_blit_effect);
         self.deletion_queue.append(self.depth_blit_pipeline);
 
         // load the compute shaders
@@ -805,7 +797,6 @@ pub const Engine = struct {
     fn initScene(self: *Self) !void {
         var textured_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
         try textured_data.addTexture(self.smooth_sampler, self.textures.get("background").?.view);
-        std.debug.print("---------------------------------------- initScene \n", .{});
         _ = try self.material_system.buildMaterial("textured", textured_data);
 
         var white_tex_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");

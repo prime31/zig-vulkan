@@ -82,22 +82,22 @@ pub const MaterialSystem = struct {
         self.forward_builder.depth_stencil = vkinit.pipelineDepthStencilCreateInfo(true, true, .less);
         self.forward_builder.rasterizer = vkinit.pipelineRasterizationStateCreateInfo(.fill);
 
-        var textured_lit = try self.buildEffect("tri_mesh_ssbo_instanced_vert", "zig-cache/shaders/shaders/textured_lit.frag.spv");
-        var textured_lit_pass = try self.buildShader(self.engine.render_pass, &self.forward_builder, textured_lit);
+        var textured_lit = try self.buildShaderEffect("tri_mesh_ssbo_instanced_vert", "zig-cache/shaders/shaders/textured_lit.frag.spv");
+        var textured_lit_pass = try self.buildShaderPass(self.engine.render_pass, &self.forward_builder, textured_lit);
         try self.tmp_pass_cache.append(textured_lit_pass);
         self.template_cache.getPtr("texturedPBR_opaque").?.pass_shaders.set(.forward, textured_lit_pass);
     }
 
     fn buildDefaultTemplates(self: *MaterialSystem) !void {
         // default effects
-        var textured_lit = try self.buildEffect("tri_mesh_ssbo_instanced_vert", "textured_lit_frag");
-        var default_lit = try self.buildEffect("tri_mesh_ssbo_instanced_vert", "default_lit_frag");
-        var opaque_shadowcast = try self.buildEffect("tri_mesh_ssbo_instanced_shadowcast_vert", null);
+        var textured_lit = try self.buildShaderEffect("tri_mesh_ssbo_instanced_vert", "textured_lit_frag");
+        var default_lit = try self.buildShaderEffect("tri_mesh_ssbo_instanced_vert", "default_lit_frag");
+        var opaque_shadowcast = try self.buildShaderEffect("tri_mesh_ssbo_instanced_shadowcast_vert", null);
 
         // passes
-        var textured_lit_pass = try self.buildShader(self.engine.render_pass, &self.forward_builder, textured_lit);
-        var default_lit_pass = try self.buildShader(self.engine.render_pass, &self.forward_builder, default_lit);
-        var opaque_shadowcast_pass = try self.buildShader(self.engine.shadow_pass, &self.shadow_builder, opaque_shadowcast);
+        var textured_lit_pass = try self.buildShaderPass(self.engine.render_pass, &self.forward_builder, textured_lit);
+        var default_lit_pass = try self.buildShaderPass(self.engine.render_pass, &self.forward_builder, default_lit);
+        var opaque_shadowcast_pass = try self.buildShaderPass(self.engine.shadow_pass, &self.shadow_builder, opaque_shadowcast);
 
         try self.tmp_pass_cache.append(textured_lit_pass);
         try self.tmp_pass_cache.append(default_lit_pass);
@@ -121,7 +121,7 @@ pub const MaterialSystem = struct {
             self.forward_builder.rasterizer.cull_mode = .{ .front_bit = false, .back_bit = false };
 
             // passes
-            const transparent_lit_pass = try self.buildShader(self.engine.render_pass, &self.forward_builder, textured_lit);
+            const transparent_lit_pass = try self.buildShaderPass(self.engine.render_pass, &self.forward_builder, textured_lit);
             try self.tmp_pass_cache.append(transparent_lit_pass);
 
             var default_textured = EffectTemplate.init(.transparent);
@@ -137,8 +137,7 @@ pub const MaterialSystem = struct {
         }
     }
 
-    // TODO: rename to buildShaderEffect
-    fn buildEffect(self: *MaterialSystem, comptime vert_res_path: []const u8, comptime frag_res_path: ?[]const u8) !ShaderEffect {
+    pub fn buildShaderEffect(self: *MaterialSystem, comptime vert_res_path: []const u8, comptime frag_res_path: ?[]const u8) !ShaderEffect {
         const overrides = &[_]ShaderEffect.ReflectionOverrides{
             .{ .name = "sceneData", .overriden_type = .uniform_buffer_dynamic },
             .{ .name = "cameraData", .overriden_type = .uniform_buffer_dynamic },
@@ -154,8 +153,7 @@ pub const MaterialSystem = struct {
         return effect;
     }
 
-    // TODO: rename to buildShaderPass
-    fn buildShader(self: MaterialSystem, render_pass: vk.RenderPass, builder: *PipelineBuilder, effect: ShaderEffect) !ShaderPass {
+    fn buildShaderPass(self: MaterialSystem, render_pass: vk.RenderPass, builder: *PipelineBuilder, effect: ShaderEffect) !ShaderPass {
         try builder.setShaders(&effect);
         return ShaderPass.init(effect, try builder.build(self.engine.gc, render_pass));
     }
@@ -282,7 +280,6 @@ pub const SampledTexture = struct {
     view: vk.ImageView,
 };
 
-pub const ShaderParameters = struct {};
 
 pub fn PerPassData(comptime T: type) type {
     return struct {
@@ -319,7 +316,6 @@ pub fn PerPassData(comptime T: type) type {
 
 pub const EffectTemplate = struct {
     pass_shaders: PerPassData(ShaderPass) = .{},
-    default_parameters: *ShaderParameters = undefined,
     transparency: assets.TransparencyMode,
 
     pub fn init(transparency: assets.TransparencyMode) EffectTemplate {
@@ -338,7 +334,6 @@ pub const EffectTemplate = struct {
 
 pub const MaterialData = struct {
     textures: std.ArrayList(SampledTexture),
-    parameters: *ShaderParameters = undefined,
     base_template: []const u8,
 
     fn hash(self: MaterialData) u64 {
@@ -375,7 +370,6 @@ pub const Material = struct {
     original: *EffectTemplate,
     pass_sets: PerPassData(vk.DescriptorSet) = .{},
     textures: std.ArrayList(SampledTexture),
-    params: *ShaderParameters = undefined,
 
     pub fn init(gpa: std.mem.Allocator, base_template: *EffectTemplate) Material {
         var pass_sets = PerPassData(vk.DescriptorSet){};
