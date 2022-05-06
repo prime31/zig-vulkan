@@ -35,22 +35,6 @@ const Vec4 = @import("chapters/vec4.zig").Vec4;
 
 const FRAME_OVERLAP: usize = 2;
 
-const Texture = struct {
-    image: vma.AllocatedImage,
-    view: vk.ImageView,
-
-    pub fn init(image: vma.AllocatedImage) Texture {
-        return .{ .image = image, .view = image.default_view };
-    }
-
-    pub fn deinit(self: Texture, gc: *const GraphicsContext) void {
-        // only destroy the view if it isnt the default view from the AllocatedImage
-        if (self.view != self.image.default_view)
-            gc.destroy(self.view);
-        self.image.deinit(gc.vma);
-    }
-};
-
 const DirectionalLight = struct {
     light_pos: Vec3 = Vec3.new(0, 0, 0),
     light_dir: Vec3 = Vec3.new(0.3, -1, 0.3),
@@ -202,8 +186,8 @@ pub const Engine = struct {
     shadow_framebuffer: vk.Framebuffer = undefined,
 
     // depth resources
-    depth_image: Texture,
-    depth_pyramid: Texture = undefined,
+    depth_image: vma.AllocatedImage,
+    depth_pyramid: vma.AllocatedImage = undefined,
     shadow_sampler: vk.Sampler = undefined,
     shadow_image: vma.AllocatedImage = undefined,
     shadow_extent: vk.Extent2D = .{ .width = 1024 * 4, .height = 1024 * 4 },
@@ -243,7 +227,7 @@ pub const Engine = struct {
 
     shader_cache: vkutil.ShaderCache,
     meshes: std.StringHashMap(Mesh),
-    textures: std.StringHashMap(Texture),
+    textures: std.StringHashMap(vma.AllocatedImage),
 
     imgui_pool: vk.DescriptorPool = undefined,
 
@@ -274,7 +258,7 @@ pub const Engine = struct {
         deletion_queue.append(shadow_pass);
 
         // depth image and Swapchain framebuffers
-        const depth_image = try createDepthImage(gc, .d32_sfloat, swapchain);
+        const depth_image = try createDepthImage(gc, .d32_sfloat, swapchain.extent);
         const framebuffers = try createSwapchainFramebuffers(gc, copy_pass, swapchain);
 
         // create our FrameDatas
@@ -299,7 +283,7 @@ pub const Engine = struct {
             .render_scene = RenderScene.init(gc),
             .shader_cache = vkutil.ShaderCache.init(gc),
             .meshes = std.StringHashMap(Mesh).init(gpa),
-            .textures = std.StringHashMap(Texture).init(gpa),
+            .textures = std.StringHashMap(vma.AllocatedImage).init(gpa),
 
             .descriptor_allocator = vkutil.DescriptorAllocator.init(gc),
             .descriptor_layout_cache = vkutil.DescriptorLayoutCache.init(gc),
@@ -322,12 +306,12 @@ pub const Engine = struct {
         ig.igDestroyContext(null);
         self.gc.destroy(self.imgui_pool);
 
-        self.gc.destroy(self.depth_image.image.default_view);
-        self.depth_image.deinit(self.gc);
+        self.gc.destroy(self.depth_image.default_view);
+        self.depth_image.deinit(self.gc.vma);
 
         for (self.depth_pyramid_mips[0..self.depth_pyramid_levels]) |mip|
             self.gc.destroy(mip);
-        self.depth_pyramid.deinit(self.gc);
+        self.depth_pyramid.deinit(self.gc.vma);
 
         self.descriptor_allocator.deinit();
         self.descriptor_layout_cache.deinit();
@@ -341,7 +325,7 @@ pub const Engine = struct {
         self.meshes.deinit();
 
         var tex_iter = self.textures.valueIterator();
-        while (tex_iter.next()) |tex| tex.deinit(self.gc);
+        while (tex_iter.next()) |tex| tex.deinit(self.gc.vma);
         self.textures.deinit();
 
         self.upload_barriers.deinit();
@@ -423,9 +407,9 @@ pub const Engine = struct {
                 for (self.framebuffers) |fb| self.gc.destroy(fb);
                 self.gpa.free(self.framebuffers);
 
-                self.gc.destroy(self.depth_image.image.default_view);
-                self.depth_image.deinit(self.gc);
-                self.depth_image = try createDepthImage(self.gc, self.depth_format, self.swapchain);
+                self.gc.destroy(self.depth_image.default_view);
+                self.depth_image.deinit(self.gc.vma);
+                self.depth_image = try createDepthImage(self.gc, self.depth_format, self.swapchain.extent);
                 self.framebuffers = try createSwapchainFramebuffers(self.gc, self.copy_pass, self.swapchain);
 
                 // TODO: recreate all framebuffers. they shouldnt use the deletion queue because we need to deinit them on-the-fly
@@ -484,7 +468,7 @@ pub const Engine = struct {
             self.deletion_queue.append(self.shadow_image);
         }
 
-        var attachments = [2]vk.ImageView{ self.raw_render_image.default_view, self.depth_image.view };
+        var attachments = [2]vk.ImageView{ self.raw_render_image.default_view, self.depth_image.default_view };
         self.forward_framebuffer = try self.gc.vkd.createFramebuffer(self.gc.dev, &.{
             .flags = .{},
             .render_pass = self.render_pass,
@@ -548,19 +532,17 @@ pub const Engine = struct {
             .usage = .gpu_only,
             .requiredFlags = .{ .device_local_bit = true },
         });
-        var img = try self.gc.vma.createImage(&img_info, &alloc_info, null);
+        self.depth_pyramid = try self.gc.vma.createImage(&img_info, &alloc_info, null);
 
-        var iview_info = vkinit.imageViewCreateInfo(.r32_sfloat, img.image, .{ .color_bit = true });
+        var iview_info = vkinit.imageViewCreateInfo(.r32_sfloat, self.depth_pyramid.image, .{ .color_bit = true });
         iview_info.subresource_range.level_count = self.depth_pyramid_levels;
 
-        img.default_view = try self.gc.vkd.createImageView(self.gc.dev, &iview_info, null);
-        self.depth_pyramid = Texture{ .image = img, .view = img.default_view };
-
-        self.deletion_queue.append(img.default_view);
+        self.depth_pyramid.default_view = try self.gc.vkd.createImageView(self.gc.dev, &iview_info, null);
+        self.deletion_queue.append(self.depth_pyramid.default_view);
 
         var i: usize = 0;
         while (i < self.depth_pyramid_levels) : (i += 1) {
-            var level_info = vkinit.imageViewCreateInfo(.r32_sfloat, self.depth_pyramid.image.image, .{ .color_bit = true });
+            var level_info = vkinit.imageViewCreateInfo(.r32_sfloat, self.depth_pyramid.image, .{ .color_bit = true });
             level_info.subresource_range.level_count = 1;
             level_info.subresource_range.base_mip_level = @intCast(u32, i);
 
@@ -569,7 +551,7 @@ pub const Engine = struct {
 
         // transition depth pyramid to .general before first use
         const cmd = try self.gc.beginOneTimeCommandBuffer();
-        const transition_barrier = vkinit.imageBarrier(self.depth_pyramid.image.image, .{}, .{ .transfer_write_bit = true }, .@"undefined", .general, .{ .color_bit = true });
+        const transition_barrier = vkinit.imageBarrier(self.depth_pyramid.image, .{}, .{ .transfer_write_bit = true }, .@"undefined", .general, .{ .color_bit = true });
         self.gc.vkd.cmdPipelineBarrier(cmd, .{ .top_of_pipe_bit = true }, .{ .transfer_bit = true }, .{ .by_region_bit = true }, 0, undefined, 0, undefined, 1, vkutil.ptrToMany(&transition_barrier));
         try self.gc.endOneTimeCommandBuffer();
 
@@ -738,19 +720,19 @@ pub const Engine = struct {
     fn loadImages(self: *Self) !void {
         // const background = try loadTextureFromAsset(self.gc, "/Users/desaro/zig-vulkan/zig-cache/baked_assets/background.tx");
         const background = try loadTextureFromFile(self.gc, "src/chapters/background.png");
-        self.deletion_queue.append(background.image.default_view);
+        self.deletion_queue.append(background.default_view);
         try self.textures.put("background", background);
 
         const white_tex = try loadTextureFromFile(self.gc, "src/chapters/white.jpg");
-        self.deletion_queue.append(white_tex.image.default_view);
+        self.deletion_queue.append(white_tex.default_view);
         try self.textures.put("white", white_tex);
 
         const orange_tex = try loadTextureFromFile(self.gc, "src/chapters/proto_textures/orange_01.png");
-        self.deletion_queue.append(orange_tex.image.default_view);
+        self.deletion_queue.append(orange_tex.default_view);
         try self.textures.put("orange", orange_tex);
 
         const viking_tex = try loadTextureFromFile(self.gc, "src/chapters/viking_room.png");
-        self.deletion_queue.append(viking_tex.image.default_view);
+        self.deletion_queue.append(viking_tex.default_view);
         try self.textures.put("viking", viking_tex);
     }
 
@@ -796,19 +778,19 @@ pub const Engine = struct {
 
     fn initScene(self: *Self) !void {
         var textured_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
-        try textured_data.addTexture(self.smooth_sampler, self.textures.get("background").?.view);
+        try textured_data.addTexture(self.smooth_sampler, self.textures.get("background").?.default_view);
         _ = try self.material_system.buildMaterial("textured", textured_data);
 
         var white_tex_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
-        try white_tex_data.addTexture(self.smooth_sampler, self.textures.get("white").?.view);
+        try white_tex_data.addTexture(self.smooth_sampler, self.textures.get("white").?.default_view);
         _ = try self.material_system.buildMaterial("white_tex", white_tex_data);
 
         var orange_tex_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
-        try orange_tex_data.addTexture(self.smooth_sampler, self.textures.get("orange").?.view);
+        try orange_tex_data.addTexture(self.smooth_sampler, self.textures.get("orange").?.default_view);
         _ = try self.material_system.buildMaterial("orange_tex", orange_tex_data);
 
         var viking_tex_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
-        try viking_tex_data.addTexture(self.smooth_sampler, self.textures.get("viking").?.view);
+        try viking_tex_data.addTexture(self.smooth_sampler, self.textures.get("viking").?.default_view);
         _ = try self.material_system.buildMaterial("viking_tex", viking_tex_data);
 
         var mat_info = vkutil.MaterialData.init(self.gc.gpa, "colored_opaque");
@@ -930,7 +912,7 @@ pub const Engine = struct {
             try self.material_system.hotReloadTexturedLitShader();
 
             var white_tex_data = vkutil.MaterialData.init(self.gc.gpa, "texturedPBR_opaque");
-            try white_tex_data.addTexture(self.smooth_sampler, self.textures.get("white").?.view);
+            try white_tex_data.addTexture(self.smooth_sampler, self.textures.get("white").?.default_view);
             _ = try self.material_system.replaceMaterial("white_tex", white_tex_data);
         }
 
@@ -1386,8 +1368,8 @@ fn createShadowRenderPass(gc: *const GraphicsContext, depth_format: vk.Format) !
     }, null);
 }
 
-fn createDepthImage(gc: *const GraphicsContext, depth_format: vk.Format, swapchain: Swapchain) !Texture {
-    const depth_extent = vk.Extent3D{ .width = swapchain.extent.width, .height = swapchain.extent.height, .depth = 1 };
+fn createDepthImage(gc: *const GraphicsContext, depth_format: vk.Format, extent: vk.Extent2D) !vma.AllocatedImage {
+    const depth_extent = vk.Extent3D{ .width = extent.width, .height = extent.height, .depth = 1 };
     const dimg_info = vkinit.imageCreateInfo(depth_format, depth_extent, .{ .depth_stencil_attachment_bit = true, .sampled_bit = true });
 
     // we want to allocate it from GPU local memory
@@ -1401,7 +1383,7 @@ fn createDepthImage(gc: *const GraphicsContext, depth_format: vk.Format, swapcha
     const dview_info = vkinit.imageViewCreateInfo(depth_format, depth_image.image, .{ .depth_bit = true });
     depth_image.default_view = try gc.vkd.createImageView(gc.dev, &dview_info, null);
 
-    return Texture.init(depth_image);
+    return depth_image;
 }
 
 fn createSwapchainFramebuffers(gc: *const GraphicsContext, render_pass: vk.RenderPass, swapchain: Swapchain) ![]vk.Framebuffer {
@@ -1475,7 +1457,7 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
     }
 }
 
-fn loadTextureFromFile(gc: *const GraphicsContext, file: []const u8) !Texture {
+fn loadTextureFromFile(gc: *const GraphicsContext, file: []const u8) !vma.AllocatedImage {
     const img = try stb.loadFromFile(gc.gpa, file);
     defer img.deinit();
 
@@ -1489,23 +1471,21 @@ fn loadTextureFromFile(gc: *const GraphicsContext, file: []const u8) !Texture {
     const new_img = try uploadImage(gc, @intCast(u32, img.w), @intCast(u32, img.h), vk.Format.r8g8b8a8_srgb, staging_buffer);
 
     staging_buffer.deinit(gc.vma);
-    return Texture.init(new_img);
+    return new_img;
 }
 
-fn loadTextureFromAsset(gc: *const GraphicsContext, file: []const u8) !Texture {
+fn loadTextureFromAsset(gc: *const GraphicsContext, file: []const u8) !vma.AllocatedImage {
     const tex_asset = try assets.load(assets.TextureInfo, file);
+    defer tex_asset.deinit();
 
     const staging_buffer = try gc.vma.createUntypedBuffer(tex_asset.info.size, .{ .transfer_src_bit = true }, .cpu_only, .{});
+    defer staging_buffer.deinit(gc.vma);
+
     const data = try gc.vma.mapMemory(u8, staging_buffer.allocation);
     std.mem.copy(u8, data[0..tex_asset.blob.len], tex_asset.blob);
     gc.vma.unmapMemory(staging_buffer.allocation);
 
-    const new_img = try uploadImage(gc, tex_asset.info.width, tex_asset.info.height, vk.Format.r8g8b8a8_srgb, staging_buffer);
-
-    staging_buffer.deinit(gc.vma);
-    tex_asset.deinit();
-
-    return Texture.init(new_img);
+    return try uploadImage(gc, tex_asset.info.width, tex_asset.info.height, vk.Format.r8g8b8a8_srgb, staging_buffer);
 }
 
 fn uploadImage(gc: *const GraphicsContext, width: u32, height: u32, format: vk.Format, staging_buffer: vma.AllocatedBufferUntyped) !vma.AllocatedImage {

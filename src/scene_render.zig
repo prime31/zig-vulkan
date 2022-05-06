@@ -406,7 +406,7 @@ pub fn executeComputeCull(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass,
 
     const depth_pyramid = vk.DescriptorImageInfo{
         .sampler = self.depth_sampler,
-        .image_view = self.depth_pyramid.image.default_view,
+        .image_view = self.depth_pyramid.default_view,
         .image_layout = .general,
     };
 
@@ -445,7 +445,7 @@ pub fn executeComputeCull(self: *Engine, cmd: vk.CommandBuffer, pass: *MeshPass,
 }
 
 pub fn reduceDepth(self: *Engine, cmd: vk.CommandBuffer) !void {
-    const depth_read_barrier = vkinit.imageBarrier(self.depth_image.image.image, .{ .depth_stencil_attachment_write_bit = true }, .{ .shader_read_bit = true }, .depth_stencil_attachment_optimal, .shader_read_only_optimal, .{ .depth_bit = true });
+    const depth_read_barrier = vkinit.imageBarrier(self.depth_image.image, .{ .depth_stencil_attachment_write_bit = true }, .{ .shader_read_bit = true }, .depth_stencil_attachment_optimal, .shader_read_only_optimal, .{ .depth_bit = true });
 
     self.gc.vkd.cmdPipelineBarrier(cmd, .{ .late_fragment_tests_bit = true }, .{ .compute_shader_bit = true }, .{ .by_region_bit = true }, 0, undefined, 0, undefined, 1, vkutil.ptrToMany(&depth_read_barrier));
     self.gc.vkd.cmdBindPipeline(cmd, .compute, self.depth_reduce_pip_lay.pipeline);
@@ -464,7 +464,7 @@ pub fn reduceDepth(self: *Engine, cmd: vk.CommandBuffer) !void {
 
         const src_target = vk.DescriptorImageInfo{
             .sampler = self.depth_sampler,
-            .image_view = if (i == 0) self.depth_image.view else self.depth_pyramid_mips[i - 1],
+            .image_view = if (i == 0) self.depth_image.default_view else self.depth_pyramid_mips[i - 1],
             .image_layout = if (i == 0) .shader_read_only_optimal else .general,
         };
 
@@ -487,11 +487,11 @@ pub fn reduceDepth(self: *Engine, cmd: vk.CommandBuffer) !void {
         self.gc.vkd.cmdPushConstants(cmd, self.depth_reduce_pip_lay.layout, .{ .compute_bit = true }, 0, @sizeOf(DepthReduceData), &reduce_data);
         self.gc.vkd.cmdDispatch(cmd, getGroupCount(level_width, 32), getGroupCount(level_height, 32), 1);
 
-        const reduce_barrier = vkinit.imageBarrier(self.depth_pyramid.image.image, .{ .shader_write_bit = true }, .{ .shader_read_bit = true }, .general, .general, .{ .color_bit = true });
+        const reduce_barrier = vkinit.imageBarrier(self.depth_pyramid.image, .{ .shader_write_bit = true }, .{ .shader_read_bit = true }, .general, .general, .{ .color_bit = true });
         self.gc.vkd.cmdPipelineBarrier(cmd, .{ .compute_shader_bit = true }, .{ .compute_shader_bit = true }, .{ .by_region_bit = true }, 0, undefined, 0, undefined, 1, vkutil.ptrToMany(&reduce_barrier));
     }
 
-    const depth_write_barrier = vkinit.imageBarrier(self.depth_image.image.image, .{ .shader_read_bit = true }, .{ .depth_stencil_attachment_read_bit = true, .depth_stencil_attachment_write_bit = true }, .shader_read_only_optimal, .depth_stencil_attachment_optimal, .{ .depth_bit = true });
+    const depth_write_barrier = vkinit.imageBarrier(self.depth_image.image, .{ .shader_read_bit = true }, .{ .depth_stencil_attachment_read_bit = true, .depth_stencil_attachment_write_bit = true }, .shader_read_only_optimal, .depth_stencil_attachment_optimal, .{ .depth_bit = true });
     self.gc.vkd.cmdPipelineBarrier(cmd, .{ .compute_shader_bit = true }, .{ .early_fragment_tests_bit = true }, .{ .by_region_bit = true }, 0, undefined, 0, undefined, 1, vkutil.ptrToMany(&depth_write_barrier));
 }
 
