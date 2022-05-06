@@ -552,7 +552,7 @@ pub const Engine = struct {
         // transition depth pyramid to .general before first use
         const cmd = try self.gc.beginOneTimeCommandBuffer();
         const transition_barrier = vkinit.imageBarrier(self.depth_pyramid.image, .{}, .{ .transfer_write_bit = true }, .@"undefined", .general, .{ .color_bit = true });
-        self.gc.vkd.cmdPipelineBarrier(cmd, .{ .top_of_pipe_bit = true }, .{ .transfer_bit = true }, .{ .by_region_bit = true }, 0, undefined, 0, undefined, 1, vkutil.ptrToMany(&transition_barrier));
+        cmd.pipelineBarrier(.{ .top_of_pipe_bit = true }, .{ .transfer_bit = true }, .{ .by_region_bit = true }, 0, undefined, 0, undefined, 1, vkutil.ptrToMany(&transition_barrier));
         try self.gc.endOneTimeCommandBuffer();
 
         const reduction_mode: vk.SamplerReductionMode = .min;
@@ -710,7 +710,7 @@ pub const Engine = struct {
 
         // execute a gpu command to upload imgui font textures
         const cmd_buf = try self.gc.beginOneTimeCommandBuffer();
-        _ = igvk.ImGui_ImplVulkan_CreateFontsTexture(cmd_buf);
+        _ = igvk.ImGui_ImplVulkan_CreateFontsTexture(cmd_buf.cmdbuf);
         try self.gc.endOneTimeCommandBuffer();
 
         // clear font textures from cpu data
@@ -1426,7 +1426,7 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
             .dst_offset = 0,
             .size = buffer_size,
         };
-        gc.vkd.cmdCopyBuffer(cmd_buf, staging_buffer.buffer, mesh.vert_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &copy_region));
+        cmd_buf.copyBuffer(staging_buffer.buffer, mesh.vert_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &copy_region));
         try gc.endOneTimeCommandBuffer();
     }
 
@@ -1452,7 +1452,7 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
             .dst_offset = 0,
             .size = buffer_size,
         };
-        gc.vkd.cmdCopyBuffer(cmd_buf, staging_buffer.buffer, mesh.index_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &copy_region));
+        cmd_buf.copyBuffer(staging_buffer.buffer, mesh.index_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &copy_region));
         try gc.endOneTimeCommandBuffer();
     }
 }
@@ -1518,7 +1518,7 @@ fn uploadImage(gc: *const GraphicsContext, width: u32, height: u32, format: vk.F
             .subresource_range = range,
         });
 
-        gc.vkd.cmdPipelineBarrier(cmd_buf, .{ .top_of_pipe_bit = true }, .{ .transfer_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &img_barrier_to_transfer));
+        cmd_buf.pipelineBarrier(.{ .top_of_pipe_bit = true }, .{ .transfer_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &img_barrier_to_transfer));
 
         const copy_region = vk.BufferImageCopy{
             .buffer_offset = 0,
@@ -1533,7 +1533,7 @@ fn uploadImage(gc: *const GraphicsContext, width: u32, height: u32, format: vk.F
             .image_offset = std.mem.zeroes(vk.Offset3D),
             .image_extent = img_extent,
         };
-        gc.vkd.cmdCopyBufferToImage(cmd_buf, staging_buffer.buffer, new_img.image, .transfer_dst_optimal, 1, @ptrCast([*]const vk.BufferImageCopy, &copy_region));
+        cmd_buf.copyBufferToImage(staging_buffer.buffer, new_img.image, .transfer_dst_optimal, 1, @ptrCast([*]const vk.BufferImageCopy, &copy_region));
 
         // barrier the image into the shader readable layout
         const img_barrier_to_readable = std.mem.zeroInit(vk.ImageMemoryBarrier, .{
@@ -1544,7 +1544,7 @@ fn uploadImage(gc: *const GraphicsContext, width: u32, height: u32, format: vk.F
             .image = new_img.image,
             .subresource_range = range,
         });
-        gc.vkd.cmdPipelineBarrier(cmd_buf, .{ .transfer_bit = true }, .{ .fragment_shader_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &img_barrier_to_readable));
+        cmd_buf.pipelineBarrier(.{ .transfer_bit = true }, .{ .fragment_shader_bit = true }, .{}, 0, undefined, 0, undefined, 1, @ptrCast([*]const vk.ImageMemoryBarrier, &img_barrier_to_readable));
         try gc.endOneTimeCommandBuffer();
     }
 

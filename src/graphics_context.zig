@@ -4,13 +4,14 @@ const vma = @import("vma");
 const vkinit = @import("vkinit.zig");
 const glfw = @import("glfw");
 const dispatch = @import("vulkan_dispatch.zig");
+const enableValidationLayers = dispatch.enableValidationLayers;
 
 const Allocator = std.mem.Allocator;
 const ScratchAllocator = @import("utils/scratch_allocator.zig").ScratchAllocator;
 const BaseDispatch = dispatch.BaseDispatch;
 const InstanceDispatch = dispatch.InstanceDispatch;
 const DeviceDispatch = dispatch.DeviceDispatch;
-const enableValidationLayers = dispatch.enableValidationLayers;
+const CommandBuffer = @import("vk_objs/CommandBuffer.zig");
 
 // we want this but MoltenVK 1.3 doesnt seem to support it. vk.extension_info.ext_sampler_filter_minmax.name
 const required_device_extensions = [_][*:0]const u8{vk.extension_info.khr_swapchain.name} ++ if (@import("builtin").os.tag == .macos) [_][*:0]const u8{vk.extension_info.khr_portability_subset.name} else [_][*:0]const u8{};
@@ -178,8 +179,8 @@ pub const GraphicsContext = struct {
         }, null);
     }
 
-    pub fn beginOneTimeCommandBuffer(self: *const GraphicsContext) !vk.CommandBuffer {
-        return try self.upload_context.beginOneTimeCommandBuffer(self);
+    pub fn beginOneTimeCommandBuffer(self: *const GraphicsContext) !CommandBuffer {
+        return CommandBuffer.init(try self.upload_context.beginOneTimeCommandBuffer(self), self);
     }
 
     pub fn endOneTimeCommandBuffer(self: *const GraphicsContext) !void {

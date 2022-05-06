@@ -226,14 +226,14 @@ pub const RenderScene = struct {
                 .dst_offset = m.first_vert * @sizeOf(Vertex),
                 .size = m.vert_count * @sizeOf(Vertex),
             };
-            self.gc.vkd.cmdCopyBuffer(cmd_buf, m.original.vert_buffer.buffer, self.merged_vert_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &vertex_copy));
+            cmd_buf.copyBuffer(m.original.vert_buffer.buffer, self.merged_vert_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &vertex_copy));
 
             const index_copy = vk.BufferCopy{
                 .src_offset = 0,
                 .dst_offset = m.first_index * @sizeOf(u32),
                 .size = m.index_count * @sizeOf(u32),
             };
-            self.gc.vkd.cmdCopyBuffer(cmd_buf, m.original.index_buffer.buffer, self.merged_index_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &index_copy));
+            cmd_buf.copyBuffer(m.original.index_buffer.buffer, self.merged_index_buffer.buffer, 1, @ptrCast([*]const vk.BufferCopy, &index_copy));
         }
         try self.gc.endOneTimeCommandBuffer();
     }
