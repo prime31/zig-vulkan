@@ -83,10 +83,10 @@ pub const DeletionQueue = struct {
                 .sampler => |s| self.gc.destroy(s),
                 .shader_effect => obj.shader_effect.deinit(self.gc), // we need mutable object for this one
                 .shader_module => |sm| sm.deinit(self.gc),
-                .allocated_buffer => |buf| buf.deinit(self.gc.vma),
+                .allocated_buffer => |buf| buf.deinit(),
                 .allocated_image => |img| {
                     self.gc.destroy(img.default_view);
-                    img.deinit(self.gc.vma);
+                    img.deinit();
                 },
             }
         }

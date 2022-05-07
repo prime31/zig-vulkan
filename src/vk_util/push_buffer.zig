@@ -31,7 +31,7 @@ pub const PushBuffer = struct {
 
     pub fn deinit(self: PushBuffer, allocator: vma.Allocator) void {
         allocator.unmapMemory(self.source.allocation);
-        self.source.deinit(allocator);
+        self.source.deinit();
     }
 
     pub fn push(self: *PushBuffer, comptime T: type, data: T) u32 {

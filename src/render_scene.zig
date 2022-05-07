@@ -57,15 +57,15 @@ pub const RenderScene = struct {
         self.meshes.deinit();
         self.materials.deinit();
         self.dirty_objects.deinit();
-        self.forward_pass.deinit(self.gc);
-        self.transparent_forward_pass.deinit(self.gc);
-        self.shadow_pass.deinit(self.gc);
+        self.forward_pass.deinit();
+        self.transparent_forward_pass.deinit();
+        self.shadow_pass.deinit();
         self.material_convert.deinit();
         self.mesh_convert.deinit();
 
-        self.merged_vert_buffer.deinit(self.gc.vma);
-        self.merged_index_buffer.deinit(self.gc.vma);
-        self.object_data_buffer.deinit(self.gc.vma);
+        self.merged_vert_buffer.deinit();
+        self.merged_index_buffer.deinit();
+        self.object_data_buffer.deinit();
     }
 
     pub fn registerObject(self: *Self, object: MeshObject) !Handle(RenderObject) {
@@ -679,7 +679,7 @@ pub const MeshPass = struct {
         };
     }
 
-    pub fn deinit(self: MeshPass, gc: *const GraphicsContext) void {
+    pub fn deinit(self: MeshPass) void {
         self.multibatches.deinit();
         self.batches.deinit();
         self.flat_batches.deinit();
@@ -688,10 +688,10 @@ pub const MeshPass = struct {
         self.reusable_objects.deinit();
         self.objects_to_delete.deinit();
 
-        self.compacted_instance_buffer.deinit(gc.vma);
-        self.pass_objects_buffer.deinit(gc.vma);
-        self.draw_indirect_buffer.deinit(gc.vma);
-        self.clear_indirect_buffer.deinit(gc.vma);
+        self.compacted_instance_buffer.deinit();
+        self.pass_objects_buffer.deinit();
+        self.draw_indirect_buffer.deinit();
+        self.clear_indirect_buffer.deinit();
     }
 
     pub fn get(self: MeshPass, handle: Handle(PassObject)) *PassObject {

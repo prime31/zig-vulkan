@@ -86,16 +86,17 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
     if (self.render_scene.dirty_objects.items.len > 0) {
         const copy_size = self.render_scene.renderables.items.len * @sizeOf(GpuObjectData);
         if (self.render_scene.object_data_buffer.size < copy_size) {
-            frame.deletion_queue.append(self.render_scene.object_data_buffer.asUntypedBuffer());
+            if (self.render_scene.object_data_buffer.buffer != .null_handle)
+                frame.deletion_queue.append(self.render_scene.object_data_buffer.asUntypedBuffer());
             self.render_scene.object_data_buffer = try self.gc.vma.createBuffer(GpuObjectData, copy_size, .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .auto_prefer_host, .{});
         }
 
         // if 80% of the objects are dirty, then just reupload the whole thing
         if (@intToFloat(f32, self.render_scene.dirty_objects.items.len) >= @intToFloat(f32, self.render_scene.renderables.items.len) * 0.8) {
             const new_buffer = try self.gc.vma.createBuffer(GpuObjectData, copy_size, .{ .transfer_src_bit = true, .storage_buffer_bit = true }, .auto_prefer_host, .{});
-            const objectSSBO = try new_buffer.mapMemory(self.gc.vma);
+            const objectSSBO = try new_buffer.mapMemory();
             self.render_scene.fillObjectData(objectSSBO[0..self.render_scene.renderables.items.len]);
-            new_buffer.unmapMemory(self.gc.vma);
+            new_buffer.unmapMemory();
 
             frame.deletion_queue.append(new_buffer.asUntypedBuffer());
 
@@ -120,8 +121,8 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
             frame.deletion_queue.append(new_buffer.asUntypedBuffer());
             frame.deletion_queue.append(target_buffer.asUntypedBuffer());
 
-            const target_data = try target_buffer.mapMemory(self.gc.vma);
-            const objectSSBO = try new_buffer.mapMemory(self.gc.vma);
+            const target_data = try target_buffer.mapMemory();
+            const objectSSBO = try new_buffer.mapMemory();
             var launch_count = self.render_scene.dirty_objects.items.len * word_size;
 
             // write dirty objects
@@ -139,8 +140,8 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
             }
             launch_count = sidx;
 
-            new_buffer.unmapMemory(self.gc.vma);
-            target_buffer.unmapMemory(self.gc.vma);
+            new_buffer.unmapMemory();
+            target_buffer.unmapMemory();
 
             const index_data = target_buffer.getInfo(0);
             const src_data = new_buffer.getInfo(0);
@@ -170,17 +171,19 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
     for (passes) |pass| {
         // reallocate the gpu side buffers if needed
         if (pass.draw_indirect_buffer.size < pass.batches.items.len * @sizeOf(GpuIndirectObject)) {
-            frame.deletion_queue.append(pass.draw_indirect_buffer.asUntypedBuffer());
+            if (pass.draw_indirect_buffer.buffer != .null_handle)
+                frame.deletion_queue.append(pass.draw_indirect_buffer.asUntypedBuffer());
             pass.draw_indirect_buffer = try self.gc.vma.createBuffer(GpuIndirectObject, pass.batches.items.len * @sizeOf(GpuIndirectObject), .{ .transfer_dst_bit = true, .storage_buffer_bit = true, .indirect_buffer_bit = true }, .auto_prefer_device, .{});
         }
 
         if (pass.compacted_instance_buffer.size < pass.flat_batches.items.len * @sizeOf(u32)) {
-            frame.deletion_queue.append(pass.compacted_instance_buffer.asUntypedBuffer());
+            if (pass.compacted_instance_buffer.buffer != .null_handle)
+                frame.deletion_queue.append(pass.compacted_instance_buffer.asUntypedBuffer());
             pass.compacted_instance_buffer = try self.gc.vma.createBuffer(u32, pass.flat_batches.items.len * @sizeOf(u32), .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .auto_prefer_device, .{});
         }
 
         if (pass.pass_objects_buffer.size < pass.flat_batches.items.len * @sizeOf(GpuInstance)) {
-            frame.deletion_queue.append(pass.pass_objects_buffer.asUntypedBuffer());
+            if (pass.pass_objects_buffer.buffer != .null_handle) frame.deletion_queue.append(pass.pass_objects_buffer.asUntypedBuffer());
             pass.pass_objects_buffer = try self.gc.vma.createBuffer(GpuInstance, pass.flat_batches.items.len * @sizeOf(GpuInstance), .{ .transfer_dst_bit = true, .storage_buffer_bit = true }, .auto_prefer_device, .{});
         }
     }
@@ -190,9 +193,9 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
         // if the pass has changed the batches, need to reupload them
         if (pass.needs_indirect_refresh and pass.batches.items.len > 0) {
             const new_buffer = try self.gc.vma.createBuffer(GpuIndirectObject, pass.batches.items.len * @sizeOf(GpuIndirectObject), .{ .transfer_src_bit = true, .storage_buffer_bit = true, .indirect_buffer_bit = true }, .auto_prefer_host, .{});
-            const indirect = try new_buffer.mapMemory(self.gc.vma);
+            const indirect = try new_buffer.mapMemory();
             self.render_scene.fillIndirectArray(indirect[0..pass.batches.items.len], pass);
-            new_buffer.unmapMemory(self.gc.vma);
+            new_buffer.unmapMemory();
 
             if (pass.clear_indirect_buffer.buffer != .null_handle) {
                 // add buffer to deletion queue of this frame
@@ -205,9 +208,9 @@ pub fn readyMeshDraw(self: *Engine, frame: *FrameData) !void {
 
         if (pass.needs_instance_refresh and pass.flat_batches.items.len > 0) {
             const new_buffer = try self.gc.vma.createBuffer(GpuInstance, pass.flat_batches.items.len * @sizeOf(GpuInstance), .{ .transfer_src_bit = true, .storage_buffer_bit = true }, .auto_prefer_host, .{});
-            const instance_data = try new_buffer.mapMemory(self.gc.vma);
+            const instance_data = try new_buffer.mapMemory();
             self.render_scene.fillInstancesArray(instance_data[0..pass.flat_batches.items.len], pass);
-            new_buffer.unmapMemory(self.gc.vma);
+            new_buffer.unmapMemory();
 
             frame.deletion_queue.append(new_buffer.asUntypedBuffer());
 

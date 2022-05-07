@@ -252,9 +252,9 @@ pub const Mesh = struct {
         };
     }
 
-    pub fn deinit(self: Mesh, allocator: vma.Allocator) void {
-        self.vert_buffer.deinit(allocator);
-        self.index_buffer.deinit(allocator);
+    pub fn deinit(self: Mesh) void {
+        self.vert_buffer.deinit();
+        self.index_buffer.deinit();
         self.vertices.deinit();
         self.vertices.allocator.free(self.indices);
     }

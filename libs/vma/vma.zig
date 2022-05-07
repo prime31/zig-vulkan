@@ -5,12 +5,14 @@ const vk = @import("vulkan");
 // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/index.html
 
 pub const AllocatedBufferUntyped = struct {
+    vma: Allocator,
     buffer: vk.Buffer = .null_handle,
     allocation: VmaAllocation,
     size: vk.DeviceSize = 0,
 
-    pub fn deinit(self: AllocatedBufferUntyped, allocator: Allocator) void {
-        vmaDestroyBuffer(allocator.allocator, self.buffer, self.allocation);
+    pub fn deinit(self: AllocatedBufferUntyped) void {
+        if (self.buffer == .null_handle) return;
+        vmaDestroyBuffer(self.vma.allocator, self.buffer, self.allocation);
     }
 
     pub fn getInfo(self: AllocatedBufferUntyped, offset: vk.DeviceSize) vk.DescriptorBufferInfo {
@@ -27,13 +29,14 @@ pub fn AllocatedBuffer(comptime T: type) type {
     return struct {
         const Self = @This();
 
+        vma: Allocator = undefined,
         buffer: vk.Buffer = .null_handle,
         allocation: VmaAllocation = undefined,
         size: vk.DeviceSize = 0,
 
-        pub fn deinit(self: Self, allocator: Allocator) void {
+        pub fn deinit(self: Self) void {
             if (self.buffer == .null_handle) return;
-            vmaDestroyBuffer(allocator.allocator, self.buffer, self.allocation);
+            vmaDestroyBuffer(self.vma.allocator, self.buffer, self.allocation);
         }
 
         pub fn getInfo(self: Self, offset: vk.DeviceSize) vk.DescriptorBufferInfo {
@@ -45,16 +48,16 @@ pub fn AllocatedBuffer(comptime T: type) type {
             };
         }
 
-        pub fn mapMemory(self: Self, allocator: Allocator) ![*]T {
-            return allocator.mapMemory(T, self.allocation);
+        pub fn mapMemory(self: Self) ![*]T {
+            return self.vma.mapMemory(T, self.allocation);
         }
 
-        pub fn unmapMemory(self: Self, allocator: Allocator) void {
-            allocator.unmapMemory(self.allocation);
+        pub fn unmapMemory(self: Self) void {
+            self.vma.unmapMemory(self.allocation);
         }
 
-        pub fn flushAllocation(self: Self, allocator: Allocator) !void {
-            const res = vmaFlushAllocation(allocator.allocator, self.allocation, 0, self.size);
+        pub fn flushAllocation(self: Self) !void {
+            const res = vmaFlushAllocation(self.vma, self.allocation, 0, self.size);
             switch (res) {
                 .success => {},
                 .error_out_of_host_memory => return error.OutOfHostMemory,
@@ -63,8 +66,8 @@ pub fn AllocatedBuffer(comptime T: type) type {
             }
         }
 
-        pub fn flushAllocationSlice(self: Self, allocator: Allocator, offset: vk.DeviceSize, size: vk.DeviceSize) !void {
-            const res = vmaFlushAllocation(allocator.allocator, self.allocation, offset, size);
+        pub fn flushAllocationSlice(self: Self, offset: vk.DeviceSize, size: vk.DeviceSize) !void {
+            const res = vmaFlushAllocation(self.vma, self.allocation, offset, size);
             switch (res) {
                 .success => {},
                 .error_out_of_host_memory => return error.OutOfHostMemory,
@@ -75,6 +78,7 @@ pub fn AllocatedBuffer(comptime T: type) type {
 
         pub fn asUntypedBuffer(self: Self) AllocatedBufferUntyped {
             return .{
+                .vma = self.vma,
                 .buffer = self.buffer,
                 .allocation = self.allocation,
                 .size = self.size,
@@ -84,13 +88,14 @@ pub fn AllocatedBuffer(comptime T: type) type {
 }
 
 pub const AllocatedImage = struct {
+    vma: Allocator,
     image: vk.Image,
     allocation: VmaAllocation,
     default_view: vk.ImageView = .null_handle,
     mip_levels: u8 = 1,
 
-    pub fn deinit(self: AllocatedImage, allocator: Allocator) void {
-        vmaDestroyImage(allocator.allocator, self.image, self.allocation);
+    pub fn deinit(self: AllocatedImage) void {
+        vmaDestroyImage(self.vma.allocator, self.image, self.allocation);
     }
 };
 
@@ -130,6 +135,7 @@ pub const Allocator = struct {
         });
 
         var buffer: AllocatedBufferUntyped = undefined;
+        buffer.vma = self;
         buffer.size = alloc_size;
 
         const res = vmaCreateBuffer(
@@ -157,18 +163,16 @@ pub const Allocator = struct {
     pub fn createBuffer(self: Allocator, comptime T: type, alloc_size: vk.DeviceSize, usage: vk.BufferUsageFlags, memory_usage: VmaMemoryUsage, required_flags: vk.MemoryPropertyFlags) !AllocatedBuffer(T) {
         const buffer = try self.createUntypedBuffer(alloc_size, usage, memory_usage, required_flags);
         return AllocatedBuffer(T) {
+            .vma = self,
             .buffer = buffer.buffer,
             .allocation = buffer.allocation,
             .size = buffer.size,
         };
     }
 
-    pub fn destroyBuffer(self: Allocator, buffer: vk.Buffer, allocation: VmaAllocation) void {
-        vmaDestroyBuffer(self.allocator, buffer, allocation);
-    }
-
     pub fn createImage(self: Allocator, img_create_info: *const vk.ImageCreateInfo, vma_malloc_info: *const VmaAllocationCreateInfo, allocation_info: ?*VmaAllocationInfo) !AllocatedImage {
         var image: AllocatedImage = undefined;
+        image.vma = self;
 
         const a_info = if (allocation_info) |ai| ai else null;
         const res = vmaCreateImage(self.allocator, img_create_info, vma_malloc_info, &image.image, &image.allocation, a_info);
@@ -186,9 +190,9 @@ pub const Allocator = struct {
         };
     }
 
-    pub fn destroyImage(self: Allocator, image: vk.Image, allocation: VmaAllocation) void {
-        vmaDestroyImage(self.allocator, image, allocation);
-    }
+    // pub fn destroyImage(self: Allocator, image: vk.Image, allocation: VmaAllocation) void {
+    //     vmaDestroyImage(self.allocator, image, allocation);
+    // }
 
     pub fn mapMemory(self: Allocator, comptime T: type, allocation: VmaAllocation) ![*]T {
         var pp_data: ?*anyopaque = undefined;

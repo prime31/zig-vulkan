@@ -307,11 +307,11 @@ pub const Engine = struct {
         self.gc.destroy(self.imgui_pool);
 
         self.gc.destroy(self.depth_image.default_view);
-        self.depth_image.deinit(self.gc.vma);
+        self.depth_image.deinit();
 
         for (self.depth_pyramid_mips[0..self.depth_pyramid_levels]) |mip|
             self.gc.destroy(mip);
-        self.depth_pyramid.deinit(self.gc.vma);
+        self.depth_pyramid.deinit();
 
         self.descriptor_allocator.deinit();
         self.descriptor_layout_cache.deinit();
@@ -321,11 +321,11 @@ pub const Engine = struct {
         self.shader_cache.deinit();
 
         var iter = self.meshes.valueIterator();
-        while (iter.next()) |mesh| mesh.deinit(self.gc.vma);
+        while (iter.next()) |mesh| mesh.deinit();
         self.meshes.deinit();
 
         var tex_iter = self.textures.valueIterator();
-        while (tex_iter.next()) |tex| tex.deinit(self.gc.vma);
+        while (tex_iter.next()) |tex| tex.deinit();
         self.textures.deinit();
 
         self.upload_barriers.deinit();
@@ -408,7 +408,7 @@ pub const Engine = struct {
                 self.gpa.free(self.framebuffers);
 
                 self.gc.destroy(self.depth_image.default_view);
-                self.depth_image.deinit(self.gc.vma);
+                self.depth_image.deinit();
                 self.depth_image = try createDepthImage(self.gc, self.depth_format, self.swapchain.extent);
                 self.framebuffers = try createSwapchainFramebuffers(self.gc, self.copy_pass, self.swapchain);
 
@@ -1410,7 +1410,7 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
         const buffer_size = mesh.vertices.items.len * @sizeOf(Vertex);
 
         const staging_buffer = try gc.vma.createUntypedBuffer(buffer_size, .{ .transfer_src_bit = true }, .cpu_only, .{});
-        defer staging_buffer.deinit(gc.vma);
+        defer staging_buffer.deinit();
 
         // copy vertex data
         const verts = try gc.vma.mapMemory(Vertex, staging_buffer.allocation);
@@ -1436,7 +1436,7 @@ fn uploadMesh(gc: *const GraphicsContext, mesh: *Mesh) !void {
         const buffer_size = mesh.indices.len * @sizeOf(u32);
 
         const staging_buffer = try gc.vma.createUntypedBuffer(buffer_size, .{ .transfer_src_bit = true }, .cpu_only, .{});
-        defer staging_buffer.deinit(gc.vma);
+        defer staging_buffer.deinit();
 
         // copy index data
         const dst_indices = try gc.vma.mapMemory(u32, staging_buffer.allocation);
@@ -1471,7 +1471,7 @@ fn loadTextureFromFile(gc: *const GraphicsContext, file: []const u8) !vma.Alloca
 
     const new_img = try uploadImage(gc, @intCast(u32, img.w), @intCast(u32, img.h), vk.Format.r8g8b8a8_srgb, staging_buffer);
 
-    staging_buffer.deinit(gc.vma);
+    staging_buffer.deinit();
     return new_img;
 }
 
