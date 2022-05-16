@@ -138,6 +138,148 @@ pub const FrameData = struct {
     }
 };
 
+pub const DepthPyramid = struct {
+    gc: *const GraphicsContext,
+    depth_image: vma.AllocatedImage = .{},
+    depth_pyramid: vma.AllocatedImage = .{},
+    depth_pyramid_width: u32 = 0,
+    depth_pyramid_height: u32 = 0,
+    depth_pyramid_levels: u32 = 0,
+    depth_format: vk.Format = .d32_sfloat,
+    depth_sampler: vk.Sampler = .null_handle,
+    depth_pyramid_mips: [16]vk.ImageView = [_]vk.ImageView{.null_handle} ** 16,
+
+    pub fn init(depth_format: vk.Format, gc: *const GraphicsContext, window_extent: vk.Extent2D) !DepthPyramid {
+        var dp: DepthPyramid = .{
+            .gc = gc,
+            .depth_format = depth_format,
+        };
+
+        var create_info = std.mem.zeroInit(vk.SamplerCreateInfo, .{
+            .mag_filter = .nearest,
+            .min_filter = .nearest,
+            .mipmap_mode = .nearest,
+            .address_mode_u = .clamp_to_edge,
+            .address_mode_v = .clamp_to_edge,
+            .address_mode_w = .clamp_to_edge,
+            .min_lod = 0,
+            .max_lod = 16,
+        });
+
+        // TODO: cant use this on macos due to no VK_EXT_sampler_filter_minmax
+        const reduction_mode: vk.SamplerReductionMode = .min;
+        if (reduction_mode != .min) {
+            const create_info_reduction = vk.SamplerReductionModeCreateInfoEXT{ .reduction_mode = vk.SamplerReductionMode.weighted_average };
+            create_info.p_next = &create_info_reduction;
+        }
+
+        dp.depth_sampler = try gc.vkd.createSampler(gc.dev, &create_info, null);
+
+        try dp.createDepthImage(window_extent);
+        try dp.createDepthPyramid(window_extent);
+        return dp;
+    }
+
+    // TODO: can we deinit everything when we need to resize things?
+    pub fn deinit(self: DepthPyramid) void {
+        self.depth_image.deinit();
+        self.gc.destroy(self.depth_image.default_view);
+        self.gc.destroy(self.depth_sampler);
+
+        for (self.depth_pyramid_mips[0..self.depth_pyramid_levels]) |mip|
+            self.gc.destroy(mip);
+        self.depth_pyramid.deinit();
+        self.gc.destroy(self.depth_pyramid.default_view);
+    }
+
+    fn previousPow2(v: u32) u32 {
+        var r: u32 = 1;
+        while (r * 2 < v)
+            r *= 2;
+        return r;
+    }
+
+    fn getImageMipLevels(width: u32, height: u32) u32 {
+        var w = width;
+        var h = height;
+
+        var result: u32 = 1;
+        while (w > 1 or h > 1) {
+            result += 1;
+            w /= 2;
+            h /= 2;
+        }
+        return result;
+    }
+
+    fn createDepthImage(self: *DepthPyramid, window_extent: vk.Extent2D) !void {
+        if (self.depth_image.default_view != .null_handle) {
+            self.gc.destroy(self.depth_image.default_view);
+            self.depth_image.deinit();
+        }
+
+        const depth_extent = vk.Extent3D{ .width = window_extent.width, .height = window_extent.height, .depth = 1 };
+        const dimg_info = vkinit.imageCreateInfo(self.depth_format, depth_extent, .{ .depth_stencil_attachment_bit = true, .sampled_bit = true });
+
+        // we want to allocate it from GPU local memory
+        var malloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
+            .flags = .{},
+            .usage = .gpu_only,
+            .requiredFlags = .{ .device_local_bit = true },
+        });
+        self.depth_image = try self.gc.vma.createImage(&dimg_info, &malloc_info, null);
+
+        const dview_info = vkinit.imageViewCreateInfo(self.depth_format, self.depth_image.image, .{ .depth_bit = true });
+        self.depth_image.default_view = try self.gc.vkd.createImageView(self.gc.dev, &dview_info, null);
+    }
+
+    fn createDepthPyramid(self: *DepthPyramid, window_extent: vk.Extent2D) !void {
+        if (self.depth_pyramid.default_view != .null_handle) {
+
+        }
+
+        // Note: previousPow2 makes sure all reductions are at most by 2x2 which makes sure they are conservative
+        self.depth_pyramid_width = previousPow2(window_extent.width);
+        self.depth_pyramid_height = previousPow2(window_extent.height);
+        self.depth_pyramid_levels = getImageMipLevels(self.depth_pyramid_width, self.depth_pyramid_height);
+
+        const extent = vk.Extent3D{
+            .width = self.depth_pyramid_width,
+            .height = self.depth_pyramid_height,
+            .depth = 1,
+        };
+        var img_info = vkinit.imageCreateInfo(.r32_sfloat, extent, .{ .sampled_bit = true, .storage_bit = true, .transfer_src_bit = true });
+        img_info.mip_levels = self.depth_pyramid_levels;
+
+        const alloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
+            .flags = .{},
+            .usage = .gpu_only,
+            .requiredFlags = .{ .device_local_bit = true },
+        });
+        self.depth_pyramid = try self.gc.vma.createImage(&img_info, &alloc_info, null);
+
+        var iview_info = vkinit.imageViewCreateInfo(.r32_sfloat, self.depth_pyramid.image, .{ .color_bit = true });
+        iview_info.subresource_range.level_count = self.depth_pyramid_levels;
+
+        self.depth_pyramid.default_view = try self.gc.vkd.createImageView(self.gc.dev, &iview_info, null);
+
+        var i: usize = 0;
+        while (i < self.depth_pyramid_levels) : (i += 1) {
+            var level_info = vkinit.imageViewCreateInfo(.r32_sfloat, self.depth_pyramid.image, .{ .color_bit = true });
+            level_info.subresource_range.level_count = 1;
+            level_info.subresource_range.base_mip_level = @intCast(u32, i);
+
+            self.depth_pyramid_mips[i] = try self.gc.vkd.createImageView(self.gc.dev, &level_info, null);
+        }
+
+        // transition depth pyramid to .general before first use
+        const cmd = try self.gc.beginOneTimeCommandBuffer();
+        const transition_barrier = vkinit.imageBarrier(self.depth_pyramid.image, .{}, .{ .transfer_write_bit = true }, .@"undefined", .general, .{ .color_bit = true });
+        cmd.pipelineBarrier(.{ .top_of_pipe_bit = true }, .{ .transfer_bit = true }, .{ .by_region_bit = true }, 0, undefined, 0, undefined, 1, vkutil.ptrToMany(&transition_barrier));
+        try self.gc.endOneTimeCommandBuffer();
+    }
+};
+
 var general_purpose_allocator = std.heap.GeneralPurposeAllocator(.{}){};
 const gpa = general_purpose_allocator.allocator();
 
@@ -186,15 +328,11 @@ pub const Engine = struct {
     shadow_framebuffer: vk.Framebuffer = undefined,
 
     // depth resources
-    depth_image: vma.AllocatedImage,
-    depth_pyramid: vma.AllocatedImage = undefined,
+    depth: DepthPyramid,
+
     shadow_sampler: vk.Sampler = undefined,
     shadow_image: vma.AllocatedImage = undefined,
     shadow_extent: vk.Extent2D = .{ .width = 1024 * 4, .height = 1024 * 4 },
-    depth_pyramid_width: u32 = 0,
-    depth_pyramid_height: u32 = 0,
-    depth_pyramid_levels: u32 = 0,
-    depth_format: vk.Format = .d32_sfloat,
 
     descriptor_allocator: vkutil.DescriptorAllocator,
     descriptor_layout_cache: vkutil.DescriptorLayoutCache,
@@ -215,9 +353,6 @@ pub const Engine = struct {
     blit_layout: vk.PipelineLayout = undefined,
     depth_blit_pipeline: vk.Pipeline = undefined,
     depth_blit_layout: vk.PipelineLayout = undefined,
-
-    depth_sampler: vk.Sampler = undefined,
-    depth_pyramid_mips: [16]vk.ImageView = undefined,
 
     render_scene: RenderScene = undefined,
 
@@ -257,8 +392,7 @@ pub const Engine = struct {
         deletion_queue.append(copy_pass);
         deletion_queue.append(shadow_pass);
 
-        // depth image and Swapchain framebuffers
-        const depth_image = try createDepthImage(gc, .d32_sfloat, swapchain.extent);
+        // Swapchain framebuffers
         const framebuffers = try createSwapchainFramebuffers(gc, copy_pass, swapchain);
 
         // create our FrameDatas
@@ -278,7 +412,8 @@ pub const Engine = struct {
             .deletion_queue = deletion_queue,
             .framebuffers = framebuffers,
             .frames = frames,
-            .depth_image = depth_image,
+
+            .depth = try DepthPyramid.init(.d32_sfloat, gc, swapchain.extent),
 
             .render_scene = RenderScene.init(gc),
             .shader_cache = vkutil.ShaderCache.init(gc),
@@ -306,12 +441,7 @@ pub const Engine = struct {
         ig.igDestroyContext(null);
         self.gc.destroy(self.imgui_pool);
 
-        self.gc.destroy(self.depth_image.default_view);
-        self.depth_image.deinit();
-
-        for (self.depth_pyramid_mips[0..self.depth_pyramid_levels]) |mip|
-            self.gc.destroy(mip);
-        self.depth_pyramid.deinit();
+        self.depth.deinit();
 
         self.descriptor_allocator.deinit();
         self.descriptor_layout_cache.deinit();
@@ -407,9 +537,6 @@ pub const Engine = struct {
                 for (self.framebuffers) |fb| self.gc.destroy(fb);
                 self.gpa.free(self.framebuffers);
 
-                self.gc.destroy(self.depth_image.default_view);
-                self.depth_image.deinit();
-                self.depth_image = try createDepthImage(self.gc, self.depth_format, self.swapchain.extent);
                 self.framebuffers = try createSwapchainFramebuffers(self.gc, self.copy_pass, self.swapchain);
 
                 // TODO: recreate all framebuffers. they shouldnt use the deletion queue because we need to deinit them on-the-fly
@@ -468,7 +595,7 @@ pub const Engine = struct {
             self.deletion_queue.append(self.shadow_image);
         }
 
-        var attachments = [2]vk.ImageView{ self.raw_render_image.default_view, self.depth_image.default_view };
+        var attachments = [2]vk.ImageView{ self.raw_render_image.default_view, self.depth.depth_image.default_view };
         self.forward_framebuffer = try self.gc.vkd.createFramebuffer(self.gc.dev, &.{
             .flags = .{},
             .render_pass = self.render_pass,
@@ -515,68 +642,6 @@ pub const Engine = struct {
     }
 
     fn createDepthSetup(self: *Self) !void {
-        // Note: previousPow2 makes sure all reductions are at most by 2x2 which makes sure they are conservative
-        self.depth_pyramid_width = previousPow2(self.swapchain.extent.width);
-        self.depth_pyramid_height = previousPow2(self.swapchain.extent.height);
-        self.depth_pyramid_levels = getImageMipLevels(self.depth_pyramid_width, self.depth_pyramid_height);
-
-        const extent = vk.Extent3D{
-            .width = self.depth_pyramid_width,
-            .height = self.depth_pyramid_height,
-            .depth = 1,
-        };
-        var img_info = vkinit.imageCreateInfo(.r32_sfloat, extent, .{ .sampled_bit = true, .storage_bit = true, .transfer_src_bit = true });
-        img_info.mip_levels = self.depth_pyramid_levels;
-
-        const alloc_info = std.mem.zeroInit(vma.VmaAllocationCreateInfo, .{
-            .flags = .{},
-            .usage = .gpu_only,
-            .requiredFlags = .{ .device_local_bit = true },
-        });
-        self.depth_pyramid = try self.gc.vma.createImage(&img_info, &alloc_info, null);
-
-        var iview_info = vkinit.imageViewCreateInfo(.r32_sfloat, self.depth_pyramid.image, .{ .color_bit = true });
-        iview_info.subresource_range.level_count = self.depth_pyramid_levels;
-
-        self.depth_pyramid.default_view = try self.gc.vkd.createImageView(self.gc.dev, &iview_info, null);
-        self.deletion_queue.append(self.depth_pyramid.default_view);
-
-        var i: usize = 0;
-        while (i < self.depth_pyramid_levels) : (i += 1) {
-            var level_info = vkinit.imageViewCreateInfo(.r32_sfloat, self.depth_pyramid.image, .{ .color_bit = true });
-            level_info.subresource_range.level_count = 1;
-            level_info.subresource_range.base_mip_level = @intCast(u32, i);
-
-            self.depth_pyramid_mips[i] = try self.gc.vkd.createImageView(self.gc.dev, &level_info, null);
-        }
-
-        // transition depth pyramid to .general before first use
-        const cmd = try self.gc.beginOneTimeCommandBuffer();
-        const transition_barrier = vkinit.imageBarrier(self.depth_pyramid.image, .{}, .{ .transfer_write_bit = true }, .@"undefined", .general, .{ .color_bit = true });
-        cmd.pipelineBarrier(.{ .top_of_pipe_bit = true }, .{ .transfer_bit = true }, .{ .by_region_bit = true }, 0, undefined, 0, undefined, 1, vkutil.ptrToMany(&transition_barrier));
-        try self.gc.endOneTimeCommandBuffer();
-
-        const reduction_mode: vk.SamplerReductionMode = .min;
-        var create_info = std.mem.zeroInit(vk.SamplerCreateInfo, .{
-            .mag_filter = .nearest,
-            .min_filter = .nearest,
-            .mipmap_mode = .nearest,
-            .address_mode_u = .clamp_to_edge,
-            .address_mode_v = .clamp_to_edge,
-            .address_mode_w = .clamp_to_edge,
-            .min_lod = 0,
-            .max_lod = 16,
-        });
-
-        // TODO: cant use this on macos due to no VK_EXT_sampler_filter_minmax
-        if (reduction_mode != .min) {
-            const create_info_reduction = vk.SamplerReductionModeCreateInfoEXT{ .reduction_mode = vk.SamplerReductionMode.weighted_average };
-            create_info.p_next = &create_info_reduction;
-        }
-
-        self.depth_sampler = try self.gc.vkd.createSampler(self.gc.dev, &create_info, null);
-        self.deletion_queue.append(self.depth_sampler);
-
         var sampler_info = vkinit.samplerCreateInfo(.linear, .repeat);
         sampler_info.mipmap_mode = .linear;
         self.smooth_sampler = try self.gc.vkd.createSampler(self.gc.dev, &sampler_info, null);
@@ -985,11 +1050,11 @@ pub const Engine = struct {
         if (config.freeze_cull) return;
         if (pass.clear_indirect_buffer.buffer == .null_handle) return;
 
-        // copy from the cleared indirect buffer into the one we will use on rendering
+        // copy from the cleared indirect buffer into the one we will use for rendering
         const indirect_copy = vk.BufferCopy{
             .src_offset = 0,
             .dst_offset = 0,
-            .size = pass.batches.items.len * @sizeOf(GpuIndirectObject),
+            .size = pass.clear_indirect_buffer.size,
         };
         self.gc.vkd.cmdCopyBuffer(cmd, pass.clear_indirect_buffer.buffer, pass.draw_indirect_buffer.buffer, 1, vkutil.ptrToMany(&indirect_copy));
 

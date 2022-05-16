@@ -5,7 +5,7 @@ const vk = @import("vulkan");
 // https://gpuopen-librariesandsdks.github.io/VulkanMemoryAllocator/html/index.html
 
 pub const AllocatedBufferUntyped = struct {
-    vma: Allocator,
+    vma: Allocator = undefined,
     buffer: vk.Buffer = .null_handle,
     allocation: VmaAllocation,
     size: vk.DeviceSize = 0,
@@ -88,13 +88,14 @@ pub fn AllocatedBuffer(comptime T: type) type {
 }
 
 pub const AllocatedImage = struct {
-    vma: Allocator,
-    image: vk.Image,
-    allocation: VmaAllocation,
-    default_view: vk.ImageView = .null_handle,
+    vma: Allocator = undefined,
+    image: vk.Image = .null_handle,
+    allocation: VmaAllocation = null,
+    default_view: vk.ImageView = .null_handle, // TODO: manage deinit of this in here...
     mip_levels: u8 = 1,
 
     pub fn deinit(self: AllocatedImage) void {
+        if (self.image == .null_handle) return;
         vmaDestroyImage(self.vma.allocator, self.image, self.allocation);
     }
 };

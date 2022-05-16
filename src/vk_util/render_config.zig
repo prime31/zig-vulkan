@@ -28,7 +28,7 @@ pub const MaterialVariant = struct {
 	name: []const u8,
 	template: []const u8,
 	textures: []SampledTexture,
-	// buffers: []Buffer, // TODO: material variants can have a buffer of per-object data associated with them
+	// buffers: []Buffer, // TODO: material variants will need a buffer of per-object data associated with them
 };
 
 pub const RenderTexture = struct {
@@ -77,6 +77,7 @@ pub const FullscreenPassModifier = struct {
 
 
 // http://bitsquid.blogspot.com/2017/03/stingray-renderer-walkthrough-7-data.html
+// layer_configs = {
 // simple_layer_config = [
 	// Populate gbuffers
 	// { name = "gbuffer" render_targets="gbuffer0 gbuffer1" depth_stencil_target="ds_buffer" sort="FRONT_BACK" }
@@ -118,17 +119,13 @@ pub const FullscreenPassModifier = struct {
 
 // auto_exposure = {
 //     modifiers = [
-//         { type="dynamic_branch" render_settings={ auto_exposure_enabled=true } profiling_scope="auto_exposure"
-//             pass = [
-//                 { type="fullscreen_pass" shader="quantize_luma" inputs=["hdr0"] 
-//                     outputs=["quantized_luma"]  profiling_scope="quantize_luma" }
+        // { type="fullscreen_pass" shader="quantize_luma" inputs=["hdr0"] 
+        //     outputs=["quantized_luma"]  profiling_scope="quantize_luma" }
 
-//                 { type="compute_kernel" shader="compute_histogram" thread_count=[40 1 1] inputs=["quantized_luma"] 
-//                     uavs=["histogram"] profiling_scope="compute_histogram" }
+        // { type="compute_kernel" shader="compute_histogram" thread_count=[40 1 1] inputs=["quantized_luma"] 
+        //     uavs=["histogram"] profiling_scope="compute_histogram" }
 
-//                 { type="compute_kernel" shader="adapt_exposure" thread_count=[1 1 1] inputs=["quantized_luma"] 
-//                     uavs=["current_exposure" "current_exposure_pos" "target_exposure_pos"] profiling_scope="adapt_exposure" }
-//             ]
-//         }
-//     ]   
+        // { type="compute_kernel" shader="adapt_exposure" thread_count=[1 1 1] inputs=["quantized_luma"] 
+        //     uavs=["current_exposure" "current_exposure_pos" "target_exposure_pos"] profiling_scope="adapt_exposure" }
+     // ]
 // }
