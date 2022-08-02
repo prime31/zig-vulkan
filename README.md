@@ -2,6 +2,21 @@
 
 <p align="center"><img height="300" src="https://developer.nvidia.com/sites/default/files/akamai/Vulcan-1-3.png" /></p>
 
+
+## Repo is frozen
+This was a learning experience for me and wasnt meant to be a long term project. Leaving it here as a reference. The `main` branch goes through all the VKguide chapters and the `engine` branch has a GPU driven renderer with compute frustum and occlusion culling, an asset system skeleton and some other goodies.
+
+
+
+# Anything below this point here for posterity only
+
+
+
+
+
+
+
+
 ## TODO
 - why doesnt znear/zfar clip anything?
 - occlusion culling is jacked up
